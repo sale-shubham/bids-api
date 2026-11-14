@@ -20,7 +20,8 @@
     "prisma:studio": "prisma studio",
     "test": "vitest run",
     "check": "npm run typecheck && npm test",
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "test:coverage": "vitest run --coverage"
   },
   "engines": {
     "node": "24.x"
@@ -60,11 +61,14 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.5",
     "@types/sanitize-html": "^2.16.2",
+    "@types/supertest": "^7.2.1",
     "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.2",
+    "@vitest/coverage-v8": "^5.1.0",
     "esbuild": "^0.28.2",
     "husky": "^9.1.7",
     "pino-pretty": "^13.2.0",
+    "supertest": "^7.3.2",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
   }

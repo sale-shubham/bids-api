@@ -16,6 +16,7 @@ bids-api/
 ├── src/
 │   ├── app.ts                # helmet, cors, cookies, raw body for webhook, routes, error handlers
 │   ├── routes.ts             # route mounting
+│   ├── __tests__/http/       # supertest HTTP tests against createApp() (guards, validation, envelope, CORS); see readme/methods/testing.md
 │   ├── core/                 # config (env, constants), errors, http (cookies, pagination, params, response),
 │   │                         #   logger, middleware (auth, rateLimit, validate, errorHandler), prisma client
 │   ├── providers/            # email (SES + stub, render.ts), payment (Razorpay + stub), storage (S3)
