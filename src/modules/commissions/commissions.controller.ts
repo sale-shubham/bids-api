@@ -20,3 +20,9 @@ export async function checkout(req: Request, res: Response) {
   const svc = await import('./commissions.service');
   return ok(res, await svc.checkout(req.user!.sub, param(req, 'id')));
 }
+
+export async function getOne(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const svc = await import('./commissions.service');
+  return ok(res, await svc.getMine(req.user!.sub, param(req, 'id')));
+}
