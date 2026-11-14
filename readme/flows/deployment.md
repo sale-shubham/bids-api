@@ -35,11 +35,14 @@ CloudFront distributions.
   `avatars/*` publicly readable (the only folders uploads can write to, and those images are public anyway).
   Public ACLs stay blocked; everything else stays private.
 - `ENABLE_CDN=true` (GitHub variable; `ENABLE_CDN_PROD` for prod): creates OAC + CloudFront, the bucket goes
-  fully private and the public policy is removed. After switching, update the app's
+  fully private and the same bucket policy switches to CloudFront-only access. After switching, update the app's
   `NEXT_PUBLIC_IMAGE_ORIGINS` / `NEXT_PUBLIC_UPLOADS_BASE_URL` to the new `MediaBaseUrl` output.
   Image URLs are stored in full (`Auction.images`, `Member.avatarUrl`), so images uploaded before the switch keep
   their S3 URL and stop loading once the bucket goes private. Rewrite them in the same release:
   `UPDATE ... SET ... = replace(..., '<old S3 base>', '<new CloudFront base>')` (additive data fix, no schema change).
+- The bucket policy is ONE resource (`AppBucketPublicMediaPolicy`) whose statement changes with the mode. Do not
+  split it in two or rename it: CloudFormation would create the new policy, then delete the old resource, and that
+  delete removes the bucket's whole policy.
 
 Stack outputs (printed in the job summary after each deploy): `HttpApiUrl`, `WebSocketUrl`,
 `MediaBaseUrl`, `CloudFrontDomainName` (only with the CDN), `NotifyQueueUrl`, and `CustomDomainTarget` (only with a

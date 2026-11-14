@@ -34,6 +34,7 @@ export const STAGE_VARIABLES = [
   'API_DOMAIN_NAME',
   'API_CERTIFICATE_ARN',
   'DISABLE_DEFAULT_ENDPOINT',
+  'ENABLE_CDN', // true = CloudFront in front of the uploads bucket
 ];
 
 // Shared by both stages: the workflow reads these WITHOUT a _PROD twin.
