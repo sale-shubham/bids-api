@@ -48,7 +48,8 @@
     "prisma": "^7.10.1",
     "sanitize-html": "^2.18.2",
     "tsx": "^4.23.15",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
@@ -59,6 +60,7 @@
     "@types/node": "^26.6.5",
     "@types/sanitize-html": "^2.16.2",
     "@types/web-push": "^3.6.4",
+    "@types/ws": "^8.18.2",
     "esbuild": "^0.28.2",
     "husky": "^9.1.7",
     "pino-pretty": "^13.2.0",

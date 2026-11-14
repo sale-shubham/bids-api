@@ -269,8 +269,8 @@ model WsConnection {
 // WebSocket handshake (`POST /ws/ticket`, then `wss://...?ticket=...`).
 model WsTicket {
   id        String    @id @default(cuid())
-  member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  memberId  String
+  member    Member?   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId  String?
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())

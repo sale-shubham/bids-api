@@ -69,6 +69,14 @@ if (env.nodeEnv !== 'production') {
     logger.info(`NobleBid API listening on http://localhost:${env.port} (${env.nodeEnv})`);
   });
 
+  // Local live updates without AWS: WebSocket server on the same HTTP server at
+  // /ws, routed to the same handlers as Lambda (src/modules/ws/ws.local.ts).
+  // Skipped when a real API Gateway endpoint is configured.
+  if (!env.ws.apiEndpoint) {
+    const { attachLocalWsServer } = await import('./src/modules/ws/ws.local.ts');
+    attachLocalWsServer(server);
+  }
+
   // No EventBridge locally: run the auction close job every 60 s.
   let closing = false;
   const closeTimer = setInterval(async () => {
