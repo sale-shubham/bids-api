@@ -1,19 +1,27 @@
 import { Router } from 'express';
-import Joi from 'joi';
 import { asyncHandler } from '@/core/middleware/asyncHandler';
 import { validate } from '@/core/middleware/validate';
 import { LEGAL_PAGE_SLUGS, type LegalPageSlug } from './legal-pages.constants';
+import { legalSlugParamSchema } from './settings.validation';
 import { param } from '@/core/http/params';
 
-// Public, read-only settings the frontend needs pre-login (marketing pages).
+// Public, read-only settings the frontend needs pre-login.
 // Admin-side read/write lives at /admin/settings (SUPER_ADMIN only).
 const router = Router();
 
-// GET /settings/pages → { pages: [{ slug, name, content, updatedAt }] }
-// Legal/content pages (Privacy Policy, Terms & Conditions, Refund Policy) — public because
-// the signup flow links straight to them.
+// GET /settings/public -> { commissionRateBps, minIncrementPaise, antiSnipingMinutes, categories }
 router.get(
-  '/pages',
+  '/public',
+  asyncHandler(async (_req, res) => {
+    const { ok } = await import('@/core/http/response');
+    const { getPlatformSettings } = await import('./settings.service');
+    return ok(res, await getPlatformSettings());
+  }),
+);
+
+// GET /settings/legal -> { pages: [{ slug, title, content, updatedAt }] }
+router.get(
+  '/legal',
   asyncHandler(async (_req, res) => {
     const { ok } = await import('@/core/http/response');
     const { getLegalPages } = await import('./legal-pages.service');
@@ -21,20 +29,14 @@ router.get(
   }),
 );
 
-const pageSlugParamSchema = Joi.object({
-  slug: Joi.string()
-    .valid(...LEGAL_PAGE_SLUGS)
-    .required(),
-});
-
-// GET /settings/pages/:slug → { page }
+// GET /settings/legal/:slug -> { slug, title, content (HTML), updatedAt }
 router.get(
-  '/pages/:slug',
-  validate(pageSlugParamSchema, 'params'),
+  '/legal/:slug',
+  validate(legalSlugParamSchema(LEGAL_PAGE_SLUGS), 'params'),
   asyncHandler(async (req, res) => {
     const { ok } = await import('@/core/http/response');
     const { getLegalPage } = await import('./legal-pages.service');
-    return ok(res, { page: await getLegalPage(param(req, 'slug') as LegalPageSlug) });
+    return ok(res, await getLegalPage(param(req, 'slug') as LegalPageSlug));
   }),
 );
 

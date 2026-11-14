@@ -4,17 +4,80 @@ import { REFRESH_COOKIE } from '@/core/middleware/auth';
 import { Unauthorized } from '@/core/errors/AppError';
 import { verifyRefreshToken } from './token.service';
 import { param } from '@/core/http/params';
+import type { Role } from '@prisma/client';
 
 // Handlers lazy-load their service + response helpers via dynamic import() so
 // these modules are only initialized on first use — keeps Lambda cold start
 // tight. Routes stay statically registered (see routes.ts).
 
-// TODO(Phase 1): signup / verify-email / login / forgot-password / reset-password handlers.
-// A login handler sets cookies the way a login handler should:
-//   const deviceId = getOrCreateDeviceId(req, res);
-//   const meta = buildDeviceMeta(req, req.body.deviceInfo);
-//   const r = await authService.issueSession(member, deviceId, meta);
-//   setAuthCookies(res, r.accessToken, r.refreshToken, r.refreshExpiresAt);
+// Starts a session for a verified member and sets the auth cookies.
+async function startSession(
+  req: Request,
+  res: Response,
+  member: { id: string; role: Role },
+) {
+  const authService = await import('./auth.service');
+  const { getOrCreateDeviceId, buildDeviceMeta } = await import('./device.service');
+  const deviceId = getOrCreateDeviceId(req, res);
+  const meta = buildDeviceMeta(req, req.body?.deviceInfo);
+  const r = await authService.issueSession(member, deviceId, meta);
+  setAuthCookies(res, r.accessToken, r.refreshToken, r.refreshExpiresAt);
+}
+
+async function memberDto(id: string) {
+  const { getMemberDto } = await import('@/modules/members/members.service');
+  return getMemberDto(id);
+}
+
+export async function signup(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const authService = await import('./auth.service');
+  const { resendAfterSec } = await authService.signup(req.body);
+  return ok(res, { email: req.body.email, resendAfterSec }, 201);
+}
+
+export async function verifySignup(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const authService = await import('./auth.service');
+  const verified = await authService.verifySignup(req.body.email, req.body.code);
+  await startSession(req, res, verified);
+  return ok(res, { member: await memberDto(verified.id) });
+}
+
+export async function resendSignup(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const authService = await import('./auth.service');
+  return ok(res, await authService.resendSignup(req.body.email));
+}
+
+export async function login(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const authService = await import('./auth.service');
+  const member = await authService.login(req.body.email, req.body.password);
+  await startSession(req, res, member);
+  return ok(res, { member: await memberDto(member.id) });
+}
+
+export async function forgotPassword(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const authService = await import('./auth.service');
+  return ok(res, await authService.forgotPassword(req.body.email));
+}
+
+export async function resetPassword(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const authService = await import('./auth.service');
+  await authService.resetPassword(req.body.email, req.body.code, req.body.password);
+  clearAuthCookies(res);
+  return ok(res, { message: 'Password updated. Please log in.' });
+}
+
+export async function changePassword(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const authService = await import('./auth.service');
+  await authService.changePassword(req.user!.sub, req.user!.sid, req.body.currentPassword, req.body.newPassword);
+  return ok(res, { message: 'Password changed.' });
+}
 
 export async function refresh(req: Request, res: Response) {
   const { ok } = await import('@/core/http/response');

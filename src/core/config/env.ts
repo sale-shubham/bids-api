@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { parseCookieDomain, parseSameSite } from '@/core/http/cookie-options';
 
 function required(key: string, fallback?: string): string {
   const v = process.env[key] ?? fallback;
@@ -107,7 +108,10 @@ export const env = {
     accessSecret,
     refreshSecret,
   },
-  cookieDomain: process.env.COOKIE_DOMAIN ?? 'localhost',
+  // Empty COOKIE_DOMAIN in prod = host-only cookie (no-domain deploy mode).
+  cookieDomain: parseCookieDomain(process.env.COOKIE_DOMAIN, isProd),
+  // 'lax' (default) | 'none' (cross-site; forces Secure).
+  cookieSameSite: parseSameSite(process.env.COOKIE_SAMESITE),
 
   storage: {
     // S3-only. cdnBaseUrl (CloudFront) is the public read base; falls back to the
@@ -176,9 +180,12 @@ export const env = {
   // alongside the REST httpApi. Auto-injected (`!Sub` referencing the
   // auto-created WebsocketsApi resource), not a manually-set var — never set
   // locally, so an empty value here means "not on Lambda" and
-  // ws.service.ts's pushToMember() just no-ops (local-dev no-op fallback).
+  // ws.transport.ts falls back to the local dev WebSocket server (index.js).
   ws: {
     apiEndpoint: process.env.WS_API_ENDPOINT ?? '',
+    // Optional override of the ws:// URL handed to clients when the LOCAL dev
+    // WebSocket server is running (default ws://localhost:<PORT>/ws).
+    publicUrl: process.env.WS_PUBLIC_URL ?? '',
   },
 
   // Web Push for the app-icon badge on new notifications.

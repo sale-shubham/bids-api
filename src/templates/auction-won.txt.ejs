@@ -1,0 +1,13 @@
+<%= fromName %> - You won the auction
+
+Congratulations <%= name %>!
+
+You won "<%= auctionTitle %>" with a winning bid of <%= finalBid %>.
+<% if (seller) { -%>
+Contact the seller to arrange payment and delivery:
+<%- include('_contact.txt.ejs', { label: 'Seller', person: seller }) -%>
+<% } -%>
+
+View auction: <%= auctionUrl %>
+
+Support: <%= frontendUrl %>/contact

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '@/core/middleware/asyncHandler';
 import { authenticate, requireRole } from '@/core/middleware/auth';
 import { validate } from '@/core/middleware/validate';
-import { listMembersQuery, changeRoleBody } from './admin-members.validation';
+import { listMembersQuery, updateMemberBody } from './admin-members.validation';
 import * as ctrl from './admin-members.controller';
 
 const router = Router();
@@ -11,8 +11,6 @@ const router = Router();
 router.use(authenticate, requireRole('SUPER_ADMIN'));
 
 router.get('/', validate(listMembersQuery, 'query'), asyncHandler(ctrl.list));
-router.post('/:id/activate', asyncHandler(ctrl.activate));
-router.post('/:id/deactivate', asyncHandler(ctrl.deactivate));
-router.patch('/:id/role', validate(changeRoleBody), asyncHandler(ctrl.changeRole));
+router.patch('/:id', validate(updateMemberBody), asyncHandler(ctrl.update));
 
 export default router;

@@ -17,6 +17,10 @@ import { env } from '@/core/config/env';
 // over several warm containers would get the limit times that many. A DB error
 // fails open (passOnStoreError) rather than 500ing a login. apiLimiter is a
 // cheap anti-hammering guard on ordinary writes and stays in-memory.
+// Lower-cased + trimmed email from the body (same normalisation as the
+// validation layer), so case variants can't dodge a per-email limit.
+const bodyEmail = (req: { body?: { email?: unknown } }) => String(req.body?.email ?? '').trim().toLowerCase();
+
 export const authLimiter = rateLimit({
   store: new PgRateLimitStore('rl:auth:'),
   passOnStoreError: true,
@@ -36,7 +40,7 @@ export const otpLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? 'unknown')}:${req.body?.email ?? ''}`,
+  keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? 'unknown')}:${bodyEmail(req)}`,
   message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many OTP requests, try later' } },
 });
 
@@ -53,6 +57,18 @@ export const otpIpLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => ipKeyGenerator(req.ip ?? 'unknown'),
   message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many OTP requests, try later' } },
+});
+
+// Login brute-force guard, per email (all IPs). Stacked with authLimiter (per IP).
+export const loginEmailLimiter = rateLimit({
+  store: new PgRateLimitStore('rl:login-email:'),
+  passOnStoreError: true,
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => bodyEmail(req) || 'none',
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many login attempts, try later' } },
 });
 
 export const sensitiveLimiter = rateLimit({
@@ -76,4 +92,67 @@ export const apiLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => req.user?.sub ?? ipKeyGenerator(req.ip ?? 'unknown'),
   message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many requests, try later' } },
+});
+
+// Light per-member cap on auction create / patch / republish (authenticated,
+// so keyed by member id). In-memory like apiLimiter — a spam guard, not money.
+export const auctionWriteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.sub ?? ipKeyGenerator(req.ip ?? 'unknown'),
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many requests, try later' } },
+});
+
+// Bidding (money-adjacent, authenticated). Two stacked caps, both keyed by the
+// member and shared across Lambda containers via the Pg store: ~10 bids per
+// 10 s per member per auction (stops a script hammering one auction), and 60
+// per minute per member overall. Mounted after authenticate, so req.user is set.
+export const bidAuctionLimiter = rateLimit({
+  store: new PgRateLimitStore('rl:bid-auction:'),
+  passOnStoreError: true,
+  windowMs: 10 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) =>
+    `${req.user?.sub ?? ipKeyGenerator(req.ip ?? 'unknown')}:${typeof req.params?.id === 'string' ? req.params.id : ''}`,
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'You are bidding too fast, slow down' } },
+});
+
+export const bidMemberLimiter = rateLimit({
+  store: new PgRateLimitStore('rl:bid-member:'),
+  passOnStoreError: true,
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.sub ?? ipKeyGenerator(req.ip ?? 'unknown'),
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many bids, try again shortly' } },
+});
+
+// Public guest WebSocket tickets: per-IP, 30/min (a reconnect loop must not
+// be able to mint unlimited rows).
+export const wsGuestLimiter = rateLimit({
+  store: new PgRateLimitStore('rl:ws-guest:'),
+  passOnStoreError: true,
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? 'unknown'),
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many requests, try later' } },
+});
+
+// Public contact form: 5 messages per hour per IP (each one sends an email).
+export const contactLimiter = rateLimit({
+  store: new PgRateLimitStore('rl:contact:'),
+  passOnStoreError: true,
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? 'unknown'),
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many messages, try again later' } },
 });

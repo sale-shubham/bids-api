@@ -1,0 +1,8 @@
+<%- include('_head', { heading: 'You have been outbid', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  Someone placed a higher bid of <strong><%= newBid %></strong> on <strong><%= auctionTitle %></strong>.
+                  Your bid was <%= yourBid %>.
+                </p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Place a new bid to get back in the lead before the auction ends.</p>
+<%- include('_foot', { ctaUrl: auctionUrl, ctaLabel: 'Bid again', frontendUrl }) %>

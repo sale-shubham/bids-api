@@ -18,6 +18,10 @@ export function createApp() {
     cors({
       origin: env.corsOrigins,
       credentials: true,
+      // 2h preflight cache. CORS lives here (not API Gateway): CORS_ORIGINS is a
+      // comma list that Serverless variables cannot split.
+      exposedHeaders: ['content-disposition'],
+      maxAge: 7200,
     })
   );
   // Capture the raw body buffer so the Razorpay webhook route can verify the

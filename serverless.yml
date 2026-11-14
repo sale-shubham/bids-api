@@ -28,42 +28,17 @@ provider:
     lambda: true
   httpApi:
     name: ${self:service}${sls:stage}
-    # Only the custom domain (api.example.com) serves
-    # the API; the raw https://<id>.execute-api.<region>.amazonaws.com URL is
-    # switched off, so there is one public entry point to protect.
-    disableDefaultEndpoint: true
-    cors:
-      allowedOrigins:
-        - https://app.example.com
-        - https://dev-app.example.com
-        - http://localhost:3002
-      allowedMethods:
-        - GET
-        - POST
-        - PUT
-        - PATCH
-        - DELETE
-        - OPTIONS
-      allowedHeaders:
-        - content-type
-        - authorization
-        - x-amz-date
-        - x-api-key
-        - x-amz-security-token
-        - x-amz-user-agent
-        - x-amzn-trace-id
-        - x-requested-with
-        - accept
-      # '*' is invalid with allowCredentials per the CORS spec — list explicitly.
-      exposedResponseHeaders:
-        - content-disposition
-        - content-length
-      allowCredentials: true
-      # Browsers call this API directly from the app (NEXT_PUBLIC_API_URL),
-      # so JSON/credentialed calls preflight. Cache the OPTIONS answer for 2h (Chrome's
-      # cap) instead of re-asking before every request. API Gateway answers preflights
-      # itself — no Lambda invoke either way.
-      maxAge: 7200
+    # true = only the custom domain serves the API (raw execute-api URL off).
+    # Default false so the execute-api URL works until the domain exists; set
+    # DISABLE_DEFAULT_ENDPOINT=true only AFTER API_DOMAIN_NAME +
+    # API_CERTIFICATE_ARN are deployed. strToBool is the boolean-safe resolver:
+    # a bare ${env:...} would yield the STRING 'false', not a CFN boolean.
+    disableDefaultEndpoint: ${strToBool(${env:DISABLE_DEFAULT_ENDPOINT, 'false'})}
+    # No API Gateway-level CORS on purpose. CORS_ORIGINS is a comma-separated
+    # string and Serverless v4 variables cannot split it into a list, so CORS is
+    # handled by the Express cors() middleware (src/app.ts: origin list from
+    # CORS_ORIGINS, credentials, 2h preflight cache). The catch-all route
+    # (/{proxy+}, method '*') forwards OPTIONS to the Lambda.
     payload: '2.0'
   environment:
     NODE_ENV: ${env:NODE_ENV, 'production'}
@@ -72,14 +47,20 @@ provider:
     DATABASE_URL: ${env:DATABASE_URL}
 
     # CORS / frontend
-    CORS_ORIGINS: ${env:CORS_ORIGINS}
+    # Comma list, no trailing slash. Falls back to APP_URL, then localhost.
+    CORS_ORIGINS: ${env:CORS_ORIGINS, env:APP_URL, 'http://localhost:3002'}
 
     # JWT
     JWT_SECRET: ${env:JWT_SECRET}
     REFRESH_TOKEN_SECRET: ${env:REFRESH_TOKEN_SECRET}
 
-    # Cookie (refresh token)
-    COOKIE_DOMAIN: ${env:COOKIE_DOMAIN}
+    ACCESS_TOKEN_EXPIRES_IN: ${env:ACCESS_TOKEN_EXPIRES_IN, ''}
+    REFRESH_TOKEN_EXPIRES_IN: ${env:REFRESH_TOKEN_EXPIRES_IN, ''}
+
+    # Auth cookies. COOKIE_DOMAIN empty = host-only cookie (no-domain mode);
+    # '.example.com' for the custom-domain mode. COOKIE_SAMESITE: lax | none.
+    COOKIE_DOMAIN: ${env:COOKIE_DOMAIN, ''}
+    COOKIE_SAMESITE: ${env:COOKIE_SAMESITE, 'lax'}
 
     # App
     APP_URL: ${env:APP_URL, 'https://app.example.com'}
@@ -87,7 +68,9 @@ provider:
     COMMISSION_RATE_BPS: ${env:COMMISSION_RATE_BPS, '500'}
 
     # Storage — S3 only
-    AWS_CLOUDFRONT_URL: ${env:AWS_CLOUDFRONT_URL, ''}
+    # Resolved by CloudFormation from the distribution this stack creates - no
+    # GitHub variable needed (works on the very first deploy too).
+    AWS_CLOUDFRONT_URL: !Join ['', ['https://', !GetAtt AppBucketDistribution.DomainName]]
     AWS_BUCKET_NAME: ${env:AWS_BUCKET_NAME, ''}
 
     # Payments — Razorpay
@@ -99,12 +82,13 @@ provider:
     # Email (OTP for signup verification + forgot-password). driver value itself
     # decides behavior — 'stub' logs the fixed code server-side, 'ses' sends for real.
     EMAIL_DRIVER: ${env:EMAIL_DRIVER, 'stub'}
+    OTP_DRIVER: ${env:OTP_DRIVER, 'stub'}
     OTP_STUB_CODE: ${env:OTP_STUB_CODE, '123456'}
     # Per-IP OTP verify/send caps; empty = the code's production defaults (20).
     # Only the dev stage sets them (see deploy_serverless.yml).
     RATE_LIMIT_AUTH_MAX: ${env:RATE_LIMIT_AUTH_MAX, ''}
     RATE_LIMIT_OTP_IP_MAX: ${env:RATE_LIMIT_OTP_IP_MAX, ''}
-    EMAIL_FROM: ${env:EMAIL_FROM, 'noreply@yourdomain.com'}
+    EMAIL_FROM: ${env:EMAIL_FROM, 'noreply@example.com'}
     EMAIL_FROM_NAME: ${env:EMAIL_FROM_NAME, 'NobleBid'}
     LOGO_URL: ${env:LOGO_URL, ''}
 
@@ -201,11 +185,46 @@ functions:
     timeout: 120
     events:
       - schedule: rate(1 day)
-  # TODO(Phase 5+): closeAuctions / endingSoon / commissionReminder / notifyWorker functions.
+  closeAuctions:
+    name: ${self:service}${sls:stage}-close-auctions
+    handler: dist/index.closeAuctionsHandler
+    description: Every minute - start due auctions, close ended ones (winner, commission, notifications).
+    timeout: 60
+    events:
+      - schedule: rate(1 minute)
+  endingSoon:
+    name: ${self:service}${sls:stage}-ending-soon
+    handler: dist/index.endingSoonHandler
+    description: Every 15 min - notify watchers of auctions ending within the hour (once per watcher per auction).
+    timeout: 60
+    events:
+      - schedule: rate(15 minutes)
+  notifyWorker:
+    name: ${self:service}${sls:stage}-notify-worker
+    handler: dist/index.notifyWorkerHandler
+    description: SQS NotifyQueue worker - in-app notification row, email, Web Push.
+    timeout: 30
+    reservedConcurrency: 5
+    events:
+      - sqs:
+          arn: !GetAtt NotifyQueue.Arn
+          batchSize: 10
+          functionResponseType: ReportBatchItemFailures
+  commissionReminder:
+    name: ${self:service}${sls:stage}-commission-reminder
+    handler: dist/index.commissionReminderHandler
+    description: Daily - remind sellers of overdue / 3-day-old DUE commissions (one reminder per commission per day).
+    timeout: 60
+    events:
+      - schedule: rate(1 day)
 
 resources:
   Conditions:
     HasAlertEmail: !Not [!Equals ["${env:ALERT_EMAIL, ''}", ""]]
+    # Custom API domain only when BOTH are set (ACM cert must be in the stack region).
+    HasCustomDomain: !And
+      - !Not [!Equals ["${env:API_DOMAIN_NAME, ''}", ""]]
+      - !Not [!Equals ["${env:API_CERTIFICATE_ARN, ''}", ""]]
 
   # Whole-API throttle at API Gateway (HttpApiStage is the stage Serverless
   # generates for provider.httpApi). Requests past it get a 429 from API
@@ -326,9 +345,8 @@ resources:
           SigningBehavior: always
           SigningProtocol: sigv4
 
-    # CDN in front of AppBucket. Domain name is picked up automatically by the
-    # deploy workflow (CloudFormation output below) and fed back in as
-    # AWS_CLOUDFRONT_URL — no manual GitHub variable to maintain.
+    # CDN in front of AppBucket. Its domain feeds AWS_CLOUDFRONT_URL directly
+    # (provider.environment) and the CloudFrontDomainName output.
     AppBucketDistribution:
       Type: AWS::CloudFront::Distribution
       Properties:
@@ -363,6 +381,42 @@ resources:
               Condition:
                 StringEquals:
                   AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${AppBucketDistribution.Id}'
+
+    # Optional custom domain (api.<domain>). Created only when API_DOMAIN_NAME and
+    # API_CERTIFICATE_ARN are set. After deploy, create a DNS CNAME
+    # API_DOMAIN_NAME -> output CustomDomainTarget.
+    ApiDomainName:
+      Type: AWS::ApiGatewayV2::DomainName
+      Condition: HasCustomDomain
+      Properties:
+        DomainName: ${env:API_DOMAIN_NAME, ''}
+        DomainNameConfigurations:
+          - EndpointType: REGIONAL
+            SecurityPolicy: TLS_1_2
+            CertificateArn: ${env:API_CERTIFICATE_ARN, ''}
+    ApiDomainMapping:
+      Type: AWS::ApiGatewayV2::ApiMapping
+      Condition: HasCustomDomain
+      DependsOn: [ApiDomainName, HttpApiStage]
+      Properties:
+        DomainName: !Ref ApiDomainName
+        ApiId: !Ref HttpApi
+        Stage: !Ref HttpApiStage
+
   Outputs:
+    HttpApiUrl:
+      Description: HTTP API (execute-api) base URL
+      Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com'
+    WebSocketUrl:
+      Description: WebSocket API URL (wss)
+      Value: !Sub 'wss://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${sls:stage}'
     CloudFrontDomainName:
+      Description: CloudFront domain for the uploads bucket
       Value: !GetAtt AppBucketDistribution.DomainName
+    NotifyQueueUrl:
+      Description: SQS NotifyQueue URL
+      Value: !GetAtt NotifyQueue.QueueUrl
+    CustomDomainTarget:
+      Description: Create a DNS CNAME API_DOMAIN_NAME -> this value
+      Condition: HasCustomDomain
+      Value: !GetAtt ApiDomainName.RegionalDomainName
