@@ -210,11 +210,14 @@ functions:
     handler: dist/index.notifyWorkerHandler
     description: SQS NotifyQueue worker - in-app notification row, email, Web Push.
     timeout: 30
-    reservedConcurrency: 5
+    # Cap parallel workers on the SQS event source, not with reservedConcurrency:
+    # reserving takes slots from the account pool, and new accounts start with a
+    # 10-slot quota that must keep 10 unreserved (deploy fails otherwise).
     events:
       - sqs:
           arn: !GetAtt NotifyQueue.Arn
           batchSize: 10
+          maximumConcurrency: 5
           functionResponseType: ReportBatchItemFailures
   commissionReminder:
     name: ${self:service}${sls:stage}-commission-reminder
