@@ -8,6 +8,7 @@
     "dev": "tsx watch index.js",
     "start": "tsx index.js",
     "build:lambda": "node scripts/build-lambda.mjs",
+    "env:sync": "node scripts/github-env-sync.mjs",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",

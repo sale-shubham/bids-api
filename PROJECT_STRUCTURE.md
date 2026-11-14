@@ -10,6 +10,9 @@ bids-api/
 ├── prisma.config.ts          # Prisma CLI config (DIRECT_URL)
 ├── scripts/build-lambda.mjs  # esbuild bundle (CI only)
 ├── scripts/run-close.ts      # npm run job:close, one-off auction close run
+├── scripts/github-env-sync.mjs  # npm run env:sync: dotenv -> GitHub secrets/variables (+ .lib.mjs, .test.ts)
+├── deploy/*.env.example      # per-stage env templates (real deploy/*.env is gitignored)
+├── docs/GO-LIVE.md           # go-live checklist; readme/flows/deployment.md = deploy guide
 ├── src/
 │   ├── app.ts                # helmet, cors, cookies, raw body for webhook, routes, error handlers
 │   ├── routes.ts             # route mounting

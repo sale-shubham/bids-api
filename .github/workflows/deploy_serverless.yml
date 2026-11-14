@@ -1,5 +1,9 @@
 name: Deploy to AWS Lambda (Serverless Framework)
 
+# push to `dev`  -> stage dev  (plain secret/variable names)
+# push to `main` -> stage prod (names suffixed _PROD)
+# workflow_dispatch: run it from the dev or main branch in the Actions tab.
+# Full secret/variable list: readme/flows/deployment.md and deploy/*.env.example.
 on:
   push:
     branches:
@@ -7,16 +11,21 @@ on:
       - main
   workflow_dispatch:
 
+# One deploy per branch at a time. Never cancel a running deploy mid-CloudFormation.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
-    # Run only if it's a push to main or dev
     if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'
 
     defaults:
       run:
-        # Explicit bash so all run steps behave identically everywhere.
         shell: bash
 
     steps:
@@ -31,19 +40,17 @@ jobs:
       - name: Install Dependencies
         # Dev deps included: esbuild (devDependency) builds the Lambda bundle below.
         # Only dist/** is packaged, so dev deps never reach the Lambda zip.
-        # --ignore-scripts: skips the "prepare" (husky) script in CI. No dependency
-        # needs install scripts here — Prisma 7 is engine-free and
-        # `npx prisma generate` runs explicitly below.
-        run: npm install --ignore-scripts
+        # --ignore-scripts skips the husky "prepare" script; `npx prisma generate`
+        # runs explicitly below.
+        run: npm ci --ignore-scripts
 
-      - name: Install Serverless Framework
-        run: npm install -g serverless
+      - name: Install Serverless Framework v4
+        run: npm install -g serverless@4
 
       - name: Set environment variables
-        id: vars
         # Every per-stage value has a plain (dev) and a _PROD (main) GitHub
-        # secret/var, and each stage reads only its own. Secrets (JWT, DB,
-        # Razorpay, VAPID private key) come from `secrets.*`, never `vars.*`.
+        # secret/variable; each stage reads ONLY its own (no cross-stage fallback).
+        # Secrets come from `secrets.*`, never `vars.*`. Optional ones may be empty.
         run: |
           if [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
             echo "STAGE=prod" >> $GITHUB_ENV
@@ -54,21 +61,27 @@ jobs:
             echo "DIRECT_URL=${{ secrets.DIRECT_URL_PROD }}" >> $GITHUB_ENV
             echo "JWT_SECRET=${{ secrets.JWT_SECRET_PROD }}" >> $GITHUB_ENV
             echo "REFRESH_TOKEN_SECRET=${{ secrets.REFRESH_TOKEN_SECRET_PROD }}" >> $GITHUB_ENV
-            echo "AWS_REGION=${{ vars.AWS_REGION_PROD }}" >> $GITHUB_ENV
-            echo "CORS_ORIGINS=${{ vars.CORS_ORIGINS_PROD }}" >> $GITHUB_ENV
-            echo "COOKIE_DOMAIN=${{ vars.COOKIE_DOMAIN_PROD }}" >> $GITHUB_ENV
-            echo "AWS_BUCKET_NAME=${{ vars.AWS_BUCKET_NAME_PROD }}" >> $GITHUB_ENV
-            echo "APP_URL=${{ vars.APP_URL_PROD }}" >> $GITHUB_ENV
-            echo "ADMIN_EMAIL=${{ vars.ADMIN_EMAIL_PROD }}" >> $GITHUB_ENV
-            echo "COMMISSION_RATE_BPS=${{ vars.COMMISSION_RATE_BPS_PROD }}" >> $GITHUB_ENV
-            echo "PAYMENT_DRIVER=${{ vars.PAYMENT_DRIVER_PROD }}" >> $GITHUB_ENV
             echo "RAZORPAY_KEY_ID=${{ secrets.RAZORPAY_KEY_ID_PROD }}" >> $GITHUB_ENV
             echo "RAZORPAY_KEY_SECRET=${{ secrets.RAZORPAY_KEY_SECRET_PROD }}" >> $GITHUB_ENV
             echo "RAZORPAY_WEBHOOK_SECRET=${{ secrets.RAZORPAY_WEBHOOK_SECRET_PROD }}" >> $GITHUB_ENV
-            echo "EMAIL_DRIVER=${{ vars.EMAIL_DRIVER_PROD || 'ses' }}" >> $GITHUB_ENV
-            echo "OTP_STUB_CODE=${{ vars.OTP_STUB_CODE_PROD }}" >> $GITHUB_ENV
+            echo "AWS_REGION=${{ vars.AWS_REGION_PROD }}" >> $GITHUB_ENV
+            echo "AWS_BUCKET_NAME=${{ vars.AWS_BUCKET_NAME_PROD }}" >> $GITHUB_ENV
+            echo "CORS_ORIGINS=${{ vars.CORS_ORIGINS_PROD }}" >> $GITHUB_ENV
+            echo "COOKIE_DOMAIN=${{ vars.COOKIE_DOMAIN_PROD }}" >> $GITHUB_ENV
+            echo "COOKIE_SAMESITE=${{ vars.COOKIE_SAMESITE_PROD }}" >> $GITHUB_ENV
+            echo "APP_URL=${{ vars.APP_URL_PROD }}" >> $GITHUB_ENV
+            echo "ADMIN_EMAIL=${{ vars.ADMIN_EMAIL_PROD }}" >> $GITHUB_ENV
             echo "ALERT_EMAIL=${{ vars.ALERT_EMAIL_PROD }}" >> $GITHUB_ENV
-
+            echo "COMMISSION_RATE_BPS=${{ vars.COMMISSION_RATE_BPS_PROD }}" >> $GITHUB_ENV
+            echo "PAYMENT_DRIVER=${{ vars.PAYMENT_DRIVER_PROD }}" >> $GITHUB_ENV
+            echo "EMAIL_DRIVER=${{ vars.EMAIL_DRIVER_PROD || 'ses' }}" >> $GITHUB_ENV
+            echo "EMAIL_FROM=${{ vars.EMAIL_FROM_PROD }}" >> $GITHUB_ENV
+            echo "EMAIL_FROM_NAME=${{ vars.EMAIL_FROM_NAME_PROD }}" >> $GITHUB_ENV
+            echo "LOGO_URL=${{ vars.LOGO_URL_PROD }}" >> $GITHUB_ENV
+            echo "OTP_STUB_CODE=${{ vars.OTP_STUB_CODE_PROD }}" >> $GITHUB_ENV
+            echo "API_DOMAIN_NAME=${{ vars.API_DOMAIN_NAME_PROD }}" >> $GITHUB_ENV
+            echo "API_CERTIFICATE_ARN=${{ vars.API_CERTIFICATE_ARN_PROD }}" >> $GITHUB_ENV
+            echo "DISABLE_DEFAULT_ENDPOINT=${{ vars.DISABLE_DEFAULT_ENDPOINT_PROD }}" >> $GITHUB_ENV
           else
             echo "STAGE=dev" >> $GITHUB_ENV
             echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
@@ -78,36 +91,62 @@ jobs:
             echo "DIRECT_URL=${{ secrets.DIRECT_URL }}" >> $GITHUB_ENV
             echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> $GITHUB_ENV
             echo "REFRESH_TOKEN_SECRET=${{ secrets.REFRESH_TOKEN_SECRET }}" >> $GITHUB_ENV
-            echo "AWS_REGION=${{ vars.AWS_REGION }}" >> $GITHUB_ENV
-            echo "CORS_ORIGINS=${{ vars.CORS_ORIGINS }}" >> $GITHUB_ENV
-            echo "COOKIE_DOMAIN=${{ vars.COOKIE_DOMAIN }}" >> $GITHUB_ENV
-            echo "AWS_BUCKET_NAME=${{ vars.AWS_BUCKET_NAME }}" >> $GITHUB_ENV
-            echo "APP_URL=${{ vars.APP_URL }}" >> $GITHUB_ENV
-            echo "ADMIN_EMAIL=${{ vars.ADMIN_EMAIL }}" >> $GITHUB_ENV
-            echo "COMMISSION_RATE_BPS=${{ vars.COMMISSION_RATE_BPS }}" >> $GITHUB_ENV
-            echo "PAYMENT_DRIVER=${{ vars.PAYMENT_DRIVER }}" >> $GITHUB_ENV
             echo "RAZORPAY_KEY_ID=${{ secrets.RAZORPAY_KEY_ID }}" >> $GITHUB_ENV
             echo "RAZORPAY_KEY_SECRET=${{ secrets.RAZORPAY_KEY_SECRET }}" >> $GITHUB_ENV
             echo "RAZORPAY_WEBHOOK_SECRET=${{ secrets.RAZORPAY_WEBHOOK_SECRET }}" >> $GITHUB_ENV
+            echo "AWS_REGION=${{ vars.AWS_REGION }}" >> $GITHUB_ENV
+            echo "AWS_BUCKET_NAME=${{ vars.AWS_BUCKET_NAME }}" >> $GITHUB_ENV
+            echo "CORS_ORIGINS=${{ vars.CORS_ORIGINS }}" >> $GITHUB_ENV
+            echo "COOKIE_DOMAIN=${{ vars.COOKIE_DOMAIN }}" >> $GITHUB_ENV
+            echo "COOKIE_SAMESITE=${{ vars.COOKIE_SAMESITE }}" >> $GITHUB_ENV
+            echo "APP_URL=${{ vars.APP_URL }}" >> $GITHUB_ENV
+            echo "ADMIN_EMAIL=${{ vars.ADMIN_EMAIL }}" >> $GITHUB_ENV
+            echo "ALERT_EMAIL=${{ vars.ALERT_EMAIL }}" >> $GITHUB_ENV
+            echo "COMMISSION_RATE_BPS=${{ vars.COMMISSION_RATE_BPS }}" >> $GITHUB_ENV
+            echo "PAYMENT_DRIVER=${{ vars.PAYMENT_DRIVER }}" >> $GITHUB_ENV
             echo "EMAIL_DRIVER=${{ vars.EMAIL_DRIVER || 'stub' }}" >> $GITHUB_ENV
+            echo "EMAIL_FROM=${{ vars.EMAIL_FROM }}" >> $GITHUB_ENV
+            echo "EMAIL_FROM_NAME=${{ vars.EMAIL_FROM_NAME }}" >> $GITHUB_ENV
+            echo "LOGO_URL=${{ vars.LOGO_URL }}" >> $GITHUB_ENV
             echo "OTP_STUB_CODE=${{ vars.OTP_STUB_CODE }}" >> $GITHUB_ENV
-            # Dev only: raised per-IP OTP caps for repeated automated signups
-            # from one CI IP. Prod keeps the code's defaults (20).
+            echo "API_DOMAIN_NAME=${{ vars.API_DOMAIN_NAME }}" >> $GITHUB_ENV
+            echo "API_CERTIFICATE_ARN=${{ vars.API_CERTIFICATE_ARN }}" >> $GITHUB_ENV
+            echo "DISABLE_DEFAULT_ENDPOINT=${{ vars.DISABLE_DEFAULT_ENDPOINT }}" >> $GITHUB_ENV
+            # Dev only: raised per-IP OTP caps for repeated automated signups from
+            # one CI IP. Prod keeps the code's defaults (20).
             echo "RATE_LIMIT_AUTH_MAX=${{ vars.RATE_LIMIT_AUTH_MAX || '300' }}" >> $GITHUB_ENV
             echo "RATE_LIMIT_OTP_IP_MAX=${{ vars.RATE_LIMIT_OTP_IP_MAX || '300' }}" >> $GITHUB_ENV
-            echo "ALERT_EMAIL=${{ vars.ALERT_EMAIL }}" >> $GITHUB_ENV
-
           fi
-          # Shared by both stages (no _PROD variant).
+          # Shared by both stages (no _PROD variant). VAPID: one pair, never rotate.
           echo "NODE_ENV=production" >> $GITHUB_ENV
-          # Web Push VAPID pair. One pair for both stages; never rotate it —
-          # that orphans every browser's subscription.
           echo "VAPID_PUBLIC_KEY=${{ vars.VAPID_PUBLIC_KEY }}" >> $GITHUB_ENV
           echo "VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }}" >> $GITHUB_ENV
           echo "VAPID_SUBJECT=${{ vars.VAPID_SUBJECT }}" >> $GITHUB_ENV
-          echo "EMAIL_FROM=${{ vars.EMAIL_FROM }}" >> $GITHUB_ENV
-          echo "EMAIL_FROM_NAME=${{ vars.EMAIL_FROM_NAME }}" >> $GITHUB_ENV
-          echo "LOGO_URL=${{ vars.LOGO_URL }}" >> $GITHUB_ENV
+          # Drop empty values so serverless.yml ${env:X, default} fallbacks apply
+          # (an exported empty string would count as a set value).
+          sed -i "/^[A-Za-z_]*=$/d" "$GITHUB_ENV"
+
+      - name: Check required settings
+        # Fail early with the NAME of what is missing (never the value).
+        run: |
+          sfx=""; [[ "$STAGE" == "prod" ]] && sfx="_PROD"
+          missing=0
+          for k in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY SERVERLESS_ACCESS_KEY DATABASE_URL DIRECT_URL \
+                   JWT_SECRET REFRESH_TOKEN_SECRET AWS_REGION AWS_BUCKET_NAME; do
+            if [[ -z "${!k}" ]]; then echo "::error::Missing required setting for stage ${STAGE}: ${k}${sfx}"; missing=1; fi
+          done
+          if [[ "${PAYMENT_DRIVER}" == "razorpay" ]]; then
+            for k in RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET RAZORPAY_WEBHOOK_SECRET; do
+              if [[ -z "${!k}" ]]; then echo "::error::PAYMENT_DRIVER=razorpay needs ${k}${sfx}"; missing=1; fi
+            done
+          fi
+          if [[ "${EMAIL_DRIVER}" == "ses" && ( -z "${EMAIL_FROM}" || "${EMAIL_FROM}" == "noreply@example.com" ) ]]; then
+            echo "::error::EMAIL_DRIVER=ses needs a real EMAIL_FROM${sfx}"; missing=1
+          fi
+          if [[ "${DISABLE_DEFAULT_ENDPOINT}" == "true" && ( -z "${API_DOMAIN_NAME}" || -z "${API_CERTIFICATE_ARN}" ) ]]; then
+            echo "::error::DISABLE_DEFAULT_ENDPOINT=true needs API_DOMAIN_NAME and API_CERTIFICATE_ARN"; missing=1
+          fi
+          exit $missing
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -116,81 +155,53 @@ jobs:
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Fetch CloudFront URL from stack
-        # Distribution is created by serverless.yml (AppBucketDistribution) on first
-        # deploy of a stage. Once it exists, pull its domain from the CFN stack output
-        # and overwrite AWS_CLOUDFRONT_URL — no GitHub variable to maintain by hand.
-        run: |
-          DOMAIN=$(aws cloudformation describe-stacks \
-            --stack-name bids-api-${{ env.STAGE }} \
-            --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDomainName'].OutputValue" \
-            --output text 2>/dev/null || true)
-          if [[ -n "$DOMAIN" && "$DOMAIN" != "None" ]]; then
-            echo "AWS_CLOUDFRONT_URL=https://${DOMAIN}" >> $GITHUB_ENV
-          fi
-
       - name: Generate Prisma Client
         run: npx prisma generate
 
       - name: Run Database Migrations
+        # prisma.config.ts reads DIRECT_URL (non-pooled) for migrations.
         run: npx prisma migrate deploy
 
       - name: Build Lambda bundle
-        # Must run after prisma generate — bundles src/generated/prisma into dist/index.mjs.
+        # Must run after prisma generate - bundles src/generated/prisma into dist/index.mjs.
         run: npm run build:lambda
 
       - name: Clear stale Serverless cache
-        # Guards against a corrupted ~/.serverless release cache breaking the deploy.
         run: rm -rf ~/.serverless/releases
 
       - name: Deploy with Serverless
-        # --force: sls decides whether to deploy by comparing a hash of the packaged
-        # template/code against the last hash it attempted, not actual live CFN state.
-        # After a failed deploy rolls back, an unchanged repo keeps producing the same
-        # hash, so every rerun says "No changes to deploy" and skips UpdateStack
-        # entirely (job exits 0, stack never moves). --force always calls UpdateStack.
-        run: sls deploy --stage ${{ env.STAGE }} --force
+        # --force: sls compares a hash of the packaged template/code against the last
+        # attempted hash, not live CFN state. After a rolled-back deploy an unchanged
+        # repo keeps saying "No changes to deploy"; --force always calls UpdateStack.
+        # AWS_CLOUDFRONT_URL is resolved by CloudFormation (serverless.yml), not here.
+        run: serverless deploy --stage "$STAGE" --force
 
-      - name: Self-heal AWS_CLOUDFRONT_URL on Lambda
-        # First deploy of a stage creates AppBucketDistribution — the "Fetch CloudFront
-        # URL from stack" step above ran BEFORE that, so this run's Lambda env still got
-        # the empty default. Now that the distribution exists, re-check the stack output
-        # and patch the function's env directly (no full redeploy) if it's out of date.
+      - name: Print stack outputs
         run: |
-          STACK=bids-api-${{ env.STAGE }}
-          FUNCTION=${{ env.STAGE == 'prod' && 'bids-apiprod' || 'bids-apidev' }}
-
-          DOMAIN=$(aws cloudformation describe-stacks \
-            --stack-name "$STACK" \
-            --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDomainName'].OutputValue" \
-            --output text 2>/dev/null || true)
-          if [[ -z "$DOMAIN" || "$DOMAIN" == "None" ]]; then
-            echo "No CloudFrontDomainName output yet — nothing to heal."
-            exit 0
-          fi
-
-          URL="https://${DOMAIN}"
-          CURRENT=$(aws lambda get-function-configuration --function-name "$FUNCTION" \
-            --query "Environment.Variables.AWS_CLOUDFRONT_URL" --output text 2>/dev/null || true)
-          if [[ "$CURRENT" == "$URL" ]]; then
-            echo "Lambda already has the correct AWS_CLOUDFRONT_URL."
-            exit 0
-          fi
-
-          echo "Patching $FUNCTION: AWS_CLOUDFRONT_URL was '$CURRENT', setting to '$URL'"
-          # RUNNER_TEMP for scratch files; node instead of jq.
-          TMP="${RUNNER_TEMP//\\//}"
-          aws lambda get-function-configuration --function-name "$FUNCTION" \
-            --query "Environment.Variables" --output json > "$TMP/lambda-env.json"
-          # --environment needs the full {"Variables": {...}} shape as JSON via file://
-          # — passing it inline as Variables=<json> mixes CLI shorthand syntax with raw
-          # JSON and aws-cli's shorthand parser chokes on the embedded quotes/braces.
-          node -e '
-            const fs = require("fs");
-            const [src, url, dest] = process.argv.slice(1);
-            const vars = JSON.parse(fs.readFileSync(src, "utf8")) || {};
-            vars.AWS_CLOUDFRONT_URL = url;
-            fs.writeFileSync(dest, JSON.stringify({ Variables: vars }));
-          ' "$TMP/lambda-env.json" "$URL" "$TMP/lambda-env-wrapped.json"
-          aws lambda update-function-configuration --function-name "$FUNCTION" \
-            --environment "file://$TMP/lambda-env-wrapped.json"
+          STACK="bids-api-${STAGE}"
+          out() {
+            aws cloudformation describe-stacks --stack-name "$STACK" \
+              --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text 2>/dev/null || true
+          }
+          API=$(out HttpApiUrl)
+          WS=$(out WebSocketUrl)
+          CF=$(out CloudFrontDomainName)
+          Q=$(out NotifyQueueUrl)
+          DOM=$(out CustomDomainTarget)
+          {
+            echo "## Deployed ${STACK} (stage ${STAGE})"
+            echo ""
+            echo "| Output | Value |"
+            echo "|---|---|"
+            echo "| HTTP API | ${API} |"
+            echo "| WebSocket | ${WS} |"
+            echo "| CloudFront | https://${CF} |"
+            echo "| NotifyQueue | ${Q} |"
+            if [[ -n "$DOM" && "$DOM" != "None" ]]; then
+              echo "| Custom domain | https://${API_DOMAIN_NAME} |"
+              echo "| DNS CNAME | ${API_DOMAIN_NAME} -> ${DOM} |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "HTTP API: ${API}"
+          echo "WebSocket: ${WS}"
+          echo "CloudFront: https://${CF}"

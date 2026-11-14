@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { parseCookieDomain, parseSameSite } from '@/core/http/cookie-options';
 
 function required(key: string, fallback?: string): string {
   const v = process.env[key] ?? fallback;
@@ -107,7 +108,10 @@ export const env = {
     accessSecret,
     refreshSecret,
   },
-  cookieDomain: process.env.COOKIE_DOMAIN ?? 'localhost',
+  // Empty COOKIE_DOMAIN in prod = host-only cookie (no-domain deploy mode).
+  cookieDomain: parseCookieDomain(process.env.COOKIE_DOMAIN, isProd),
+  // 'lax' (default) | 'none' (cross-site; forces Secure).
+  cookieSameSite: parseSameSite(process.env.COOKIE_SAMESITE),
 
   storage: {
     // S3-only. cdnBaseUrl (CloudFront) is the public read base; falls back to the

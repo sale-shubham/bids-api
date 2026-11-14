@@ -16,9 +16,7 @@ From 2026-09-24 the web app called this API through a same-origin `/api` proxy r
 
 ## CORS
 
-`cors({ origin: env.corsOrigins, credentials: true })` — `CORS_ORIGINS` env var, comma-separated list. Express owns CORS at the app layer; `serverless.yml httpApi.cors` lists explicit `exposedResponseHeaders` (never `'*'` — invalid with `allowCredentials: true`).
-
-The app's browser calls this API directly (cross-origin, credentialed — the web app's `NEXT_PUBLIC_API_URL`), so every JSON or authenticated request preflights. `httpApi.cors.maxAge: 7200` lets the browser cache the API Gateway–answered `OPTIONS` for 2h (Chrome's cap) instead of an extra ~85ms round trip per call. Every deployed app origin must be in `httpApi.cors.allowedOrigins`; `COOKIE_DOMAIN` must be the registrable domain the app and API hosts share.
+`cors({ origin: env.corsOrigins, credentials: true, exposedHeaders: ['content-disposition'], maxAge: 7200 })` — `CORS_ORIGINS` env var, comma-separated list (falls back to `APP_URL`). Express owns CORS entirely: `serverless.yml` has no `httpApi.cors` because Serverless v4 variables cannot split the comma string into a list; the catch-all route forwards `OPTIONS` to the Lambda. Every deployed app origin must be in `CORS_ORIGINS`. Cookies: `COOKIE_DOMAIN` empty = host-only cookie, `.<domain>` for a shared parent domain; `COOKIE_SAMESITE` = `lax` (default) | `none` (forces Secure). See `readme/flows/deployment.md`.
 
 ## Rate limiting
 
@@ -67,6 +65,7 @@ The app's browser calls this API directly (cross-origin, credentialed — the we
 | `ACCESS_TOKEN_EXPIRES_IN`  | Access token TTL                                                                                                                                    |
 | `REFRESH_TOKEN_EXPIRES_IN` | Refresh token TTL                                                                                                                                   |
 | `CORS_ORIGINS`             | Allowed origins                                                                                                                                     |
+| `COOKIE_SAMESITE`             | Cookie SameSite: lax (default) or none |
 | `RAZORPAY_WEBHOOK_SECRET`  | Webhook signature verification                                                                                                                      |
 | `OTP_DRIVER`               | OTP delivery driver — `stub` (dev/test, fixed `OTP_STUB_CODE`) or `whatsapp` (real send via Meta WhatsApp Cloud API). No boot guard — the driver value alone decides behavior, in prod or dev |
 | `OTP_STUB_CODE`            | Fixed code the stub driver always issues (default `123456`) — dev/test only                                                                         |
