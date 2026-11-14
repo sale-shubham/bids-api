@@ -95,6 +95,23 @@ export async function summary(sellerId: string, now = new Date()) {
   return { unpaidPaise: agg._sum.amountPaise ?? 0, dueCount: agg._count._all, overdueCount };
 }
 
+/** Admin: all commissions, each with its seller. */
+export async function listAll(q: { status: CommissionStatusFilter; page: number; pageSize: number }, now = new Date()) {
+  const where = q.status === 'all' ? {} : { status: q.status.toUpperCase() as 'DUE' | 'PAID' | 'WAIVED' };
+  const orderBy = q.status === 'due' ? [{ dueAt: 'asc' as const }] : [{ createdAt: 'desc' as const }];
+  const [rows, total] = await Promise.all([
+    prisma.commission.findMany({
+      where,
+      orderBy,
+      select: { ...commissionSelect, seller: { select: { id: true, name: true, email: true } } },
+      ...offsetArgs(q),
+    }),
+    prisma.commission.count({ where }),
+  ]);
+  const items = rows.map((r) => ({ ...toCommissionDTO(r as unknown as CommissionRow, now), seller: r.seller }));
+  return { items, meta: pageMeta(total, q) };
+}
+
 // ---------------------------------------------------------------- checkout
 
 /**
@@ -226,7 +243,7 @@ export async function markCommissionPaid(
   return { applied: result.applied, commissionId: result.commissionId };
 }
 
-/** Admin waive (route arrives in Phase 6): DUE -> WAIVED, decrement unpaid (clamped). */
+/** Admin waive (POST /admin/commissions/:id/waive): DUE -> WAIVED, decrement unpaid (clamped). */
 export async function waiveCommission(commissionId: string, adminId: string, now = new Date()): Promise<CommissionDTO> {
   await prisma.$transaction(async (tx) => {
     const commission = await tx.commission.findUnique({

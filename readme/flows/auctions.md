@@ -16,7 +16,7 @@ List filters (`auctions.query.ts` `statusWhere`) mirror this in SQL: live = `sta
 ## Shapes
 
 `AuctionCard` = `{ id, title, category, condition: NEW|USED, coverImage|null, startingBidPaise, currentBidPaise, bidCount, startTime, endTime, status, seller: { id, name, avatarUrl } }`.
-`AuctionDetail` = card + `{ description, images[], minIncrementPaise, highestBidderId|null, winnerId|null, endedAt|null, createdAt, updatedAt, recentBids: BidDTO[], myHighestBidPaise: number|null, contact: { role: 'SELLER'|'WINNER', name, email, phone }|null }`. The last three are filled for `GET /auctions/:id` and the bid response (latest 5 bids newest first; the requester's highest bid; post-auction contact card for the winner / seller only) and are `[]` / `null` / `null` on create, patch and republish. See `bidding.md`.
+`AuctionDetail` = card + `{ description, images[], minIncrementPaise, highestBidderId|null, winnerId|null, endedAt|null, createdAt, updatedAt, recentBids: BidDTO[], myHighestBidPaise: number|null, contact: { role: 'SELLER'|'WINNER', name, email, phone }|null, isWatching: boolean, watcherCount: number }`. `isWatching` (false for guests) and `watcherCount` come from the Watchlist table (`watchlist.md`) and are `false` / `0` on create, patch and republish. The three extras before them are filled for `GET /auctions/:id` and the bid response (latest 5 bids newest first; the requester's highest bid; post-auction contact card for the winner / seller only) and are `[]` / `null` / `null` on create, patch and republish. See `bidding.md`.
 
 ## Endpoints
 
@@ -25,19 +25,20 @@ List filters (`auctions.query.ts` `statusWhere`) mirror this in SQL: live = `sta
 | GET | `/auctions` | public | query below -> `paginated(AuctionCard[])` |
 | GET | `/auctions/home` | public | `{ featured[8], endingSoon[8], upcoming[8], serverTime }` (featured = live, most bids; endingSoon = live, soonest end; upcoming = soonest start) |
 | GET | `/auctions/categories` | public | `{ categories: [{ name, liveCount }] }`, names + order from AppSetting `auction.categories` |
+| GET | `/auctions/sitemap` | public | `{ items: [{ id, updatedAt }] }`: live + upcoming + ended in the last 90 days, never cancelled, max 5000, newest update first |
 | GET | `/auctions/mine` | AUCTIONEER / SUPER_ADMIN | `status=upcoming\|live\|ended\|cancelled` (default live) + paging -> `paginated(AuctionCard[])` |
 | GET | `/auctions/:id` | public, optional auth | `{ auction: AuctionDetail, serverTime }`; 404 `AUCTION_NOT_FOUND` if missing, or cancelled/deleted unless requester is the seller or SUPER_ADMIN |
 | POST | `/auctions` | AUCTIONEER / SUPER_ADMIN | 201 `{ auction }` |
 | PATCH | `/auctions/:id` | seller | all fields optional -> `{ auction }` |
-| DELETE | `/auctions/:id` | seller / SUPER_ADMIN | soft delete -> `{ id }` |
+| DELETE | `/auctions/:id` | seller / SUPER_ADMIN | soft delete -> `{ id }`. A SUPER_ADMIN may cancel any auction, including ones with bids (no refund or notification; it is logged). This is the admin cancel action. |
 | POST | `/auctions/:id/republish` | seller | `{ startTime, endTime }` -> `{ auction }` |
 | POST / GET | `/auctions/:id/bids` | BIDDER / public | place a bid / list bids; see `bidding.md` |
 
-Fixed paths (`home`, `categories`, `mine`) are declared before `/:id`.
+Fixed paths (`home`, `categories`, `sitemap`, `mine`) are declared before `/:id`.
 
 ### GET /auctions query
 
-`status=live|upcoming|ended` (default `live`), `category`, `condition=NEW|USED`, `q` (case-insensitive title contains, max 100), `minPrice`, `maxPrice` (paise, `minPrice <= maxPrice`), `sort=endingSoon|newest|priceAsc|priceDesc|mostBids`, `page` (default 1), `pageSize` (default 20, max 100).
+`status=live|upcoming|ended` (default `live`), `category`, `sellerId` (seller page), `condition=NEW|USED`, `q` (case-insensitive title contains, max 100), `minPrice`, `maxPrice` (paise, `minPrice <= maxPrice`), `sort=endingSoon|newest|priceAsc|priceDesc|mostBids`, `page` (default 1), `pageSize` (default 20, max 100).
 
 Default sort: `endingSoon` (endTime asc) for live/upcoming; for ended, most recently ended first (endTime desc). `newest` = createdAt desc; `mostBids` = bidCount desc then endTime asc.
 
@@ -99,3 +100,7 @@ Rate limit: `auctionWriteLimiter` (10 / min per member) on create, patch, republ
 ## Demo data
 
 `npm run seed:demo` (run manually) creates `demo.seller@noblebid.local` (AUCTIONEER, random password printed once) and 12 auctions (6 live, 3 upcoming, 3 ended) with `https://picsum.photos/seed/noblebid-<n>/800/600` images. Idempotent on that email. These picsum URLs are not under our media base, so a PATCH that sends `images` for a demo auction fails the image check (other fields are fine).
+
+## Ending-soon reset
+
+`updateAuction` (when times change) and `republishAuction` call `resetEndingSoon(auctionId)` so watchers can be reminded again. See `watchlist.md`.

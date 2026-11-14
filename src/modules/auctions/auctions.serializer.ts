@@ -60,5 +60,7 @@ export function toDetail(a: AuctionRow, now: Date = new Date()) {
     recentBids: [] as BidDTO[],
     myHighestBidPaise: null as number | null,
     contact: null as AuctionContact | null,
+    isWatching: false,
+    watcherCount: 0,
   };
 }

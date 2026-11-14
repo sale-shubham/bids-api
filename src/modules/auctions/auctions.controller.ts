@@ -25,6 +25,12 @@ export async function categories(_req: Request, res: Response) {
   return ok(res, { categories: await svc.categoriesWithCounts() });
 }
 
+export async function sitemap(_req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const svc = await import('./auctions.service');
+  return ok(res, await svc.sitemapItems());
+}
+
 export async function mine(req: Request, res: Response) {
   const { paginated } = await import('@/core/http/response');
   const svc = await import('./auctions.service');

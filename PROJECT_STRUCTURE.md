@@ -3,7 +3,7 @@
 ```
 bids-api/
 ├── index.js                  # Lambda handlers (api + WS + retention purge + closeAuctions + commissionReminder + notifyWorker) and local dev server
-├── serverless.yml            # service bids-api: HTTP API, WebSocket API, S3+CloudFront, NotifyQueue/NotifyDLQ, closeAuctions (1 min) + commissionReminder (1 day) + notifyWorker (SQS), alarms
+├── serverless.yml            # service bids-api: HTTP API, WebSocket API, S3+CloudFront, NotifyQueue/NotifyDLQ, closeAuctions (1 min) + endingSoon (15 min) + commissionReminder (1 day) + notifyWorker (SQS), alarms
 ├── prisma/schema.prisma      # Member, Session, OtpChallenge, Auction, Bid, Watchlist, Commission,
 │                             #   WsConnection, WsTicket, PushSubscription, RateLimitBucket, PaymentOrder,
 │                             #   WebhookEvent, Notification, AppSetting (+ migrations/, seed.ts, seed-demo.ts)
@@ -33,8 +33,11 @@ bids-api/
 │       ├── settings/         # app settings, legal pages, device limit
 │       ├── commissions/      # GET /commissions/mine + /summary, POST /commissions/:id/checkout; markCommissionPaid, waiveCommission, runCommissionReminders
 │       ├── payments/         # POST /payments/verify, POST /payments/webhook (Razorpay, HMAC + WebhookEvent dedupe)
-│       └── admin/            # members, dashboard, retention, settings
-├── readme/                   # ARCHITECTURE.md, methods/, flows/auth.md, flows/auctions.md, flows/bidding.md, flows/notifications.md, flows/payments.md, flows/websocket.md
+│       ├── watchlist/        # GET /watchlist, /watchlist/ids, POST|DELETE /watchlist/:auctionId, runEndingSoon job
+│       ├── leaderboard/      # GET /leaderboard (spent|won)
+│       ├── contact/          # POST /contact (rate limited, emails ADMIN_EMAIL with reply-to)
+│       └── admin/            # dashboard, members (PATCH), auctions, commissions (+waive), payments, settings (+legal), retention
+├── readme/                   # ARCHITECTURE.md, methods/, flows/auth.md, flows/auctions.md, flows/bidding.md, flows/notifications.md, flows/payments.md, flows/websocket.md, flows/watchlist.md, flows/leaderboard.md, flows/admin.md, flows/legal-pages.md
 ├── docs/DOC_SYNC.md
 └── .claude/ .husky/ .github/workflows/
 ```

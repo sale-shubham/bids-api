@@ -4,6 +4,7 @@ import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client.js';
+import { LEGAL_SEED } from './legal-seed-content';
 
 const url = process.env.DIRECT_URL || process.env.DATABASE_URL;
 if (!url) throw new Error('DIRECT_URL or DATABASE_URL is required');
@@ -44,6 +45,21 @@ async function main() {
     await prisma.appSetting.upsert({ where: { key }, create: { key, value }, update: {} });
   }
   console.log(`[seed] app settings ensured (${Object.keys(SETTINGS).length})`);
+
+  // Legal pages: only create when missing, so admin-edited content/titles survive a re-seed.
+  for (const page of LEGAL_SEED) {
+    await prisma.appSetting.upsert({
+      where: { key: `page:${page.slug}` },
+      create: { key: `page:${page.slug}`, value: page.content },
+      update: {},
+    });
+    await prisma.appSetting.upsert({
+      where: { key: `page-title:${page.slug}` },
+      create: { key: `page-title:${page.slug}`, value: page.title },
+      update: {},
+    });
+  }
+  console.log(`[seed] legal pages ensured (${LEGAL_SEED.length})`);
 
   const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.SEED_ADMIN_PASSWORD;
