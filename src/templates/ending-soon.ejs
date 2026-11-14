@@ -1,0 +1,7 @@
+<%- include('_head', { heading: 'Auction ending soon', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  <strong><%= auctionTitle %></strong>, an auction on your watchlist, ends within the hour<% if (endsAt) { %> (<%= endsAt %>)<% } %>.
+                </p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Place your bid now so you do not miss out.</p>
+<%- include('_foot', { ctaUrl: auctionUrl, ctaLabel: 'View auction', frontendUrl }) %>

@@ -40,13 +40,19 @@ export async function purgeStaleSessions(retentionDays = SESSION_INACTIVE_RETENT
 //     pushToMember on a GoneException. This is the safety net for a
 //     connection that dropped without either ever firing (network cut, tab
 //     killed) and was never pushed to again to trigger the lazy cleanup —
-//     24h is far longer than any real session, so anything that old is
-//     unambiguously stale.
+//     API Gateway caps a connection at 2 h, so anything
+//     older than that is unambiguously stale. Expired tickets are purged too.
+const WS_MAX_CONNECTION_MS = 2 * 60 * 60 * 1000;
+
 export async function purgeStaleWsRows() {
   const ticketCutoff = new Date(Date.now() - 86_400_000);
-  const connectionCutoff = new Date(Date.now() - 86_400_000);
+  const now = new Date();
+  // API Gateway hard-caps a connection at 2 h, so older rows are always stale.
+  const connectionCutoff = new Date(Date.now() - WS_MAX_CONNECTION_MS);
   const [{ count: ticketsDeleted }, { count: connectionsDeleted }] = await Promise.all([
-    prisma.wsTicket.deleteMany({ where: { createdAt: { lt: ticketCutoff } } }),
+    prisma.wsTicket.deleteMany({
+      where: { OR: [{ createdAt: { lt: ticketCutoff } }, { expiresAt: { lt: now } }] },
+    }),
     prisma.wsConnection.deleteMany({ where: { connectedAt: { lt: connectionCutoff } } }),
   ]);
   return { ticketsDeleted, connectionsDeleted };

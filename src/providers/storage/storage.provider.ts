@@ -11,9 +11,10 @@ export interface StorageProvider {
 
   // Presigned direct-upload support. keyFor builds a deterministic object key
   // under `folder`; presignPut returns a short-lived PUT URL the browser uploads
-  // the raw bytes to directly (Content-Type must match `type`).
+  // the raw bytes to directly (Content-Type must match `type`, body must be exactly
+  // `size` bytes — both are signed into the URL).
   keyFor(folder: string, ext: string): string;
-  presignPut(key: string, type: string, expiresIn?: number): Promise<string>;
+  presignPut(key: string, type: string, size: number, expiresIn?: number): Promise<string>;
 
   // Short-lived READ URL (default 15 min) for objects that must NOT be publicly
   // reachable â€” private documents (security

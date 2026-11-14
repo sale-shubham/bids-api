@@ -1,0 +1,10 @@
+<%= fromName %> - Commission due
+
+Hi <%= name %>,
+
+A commission of <%= commission %> is due for your sale of "<%= auctionTitle %>"<% if (dueDate) { %>, payable by <%= dueDate %><% } %>.
+Unpaid commission blocks you from listing new auctions, so please pay it promptly.
+
+Pay commission: <%= commissionUrl %>
+
+Support: <%= frontendUrl %>/contact

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome</title>
+  </head>
+  <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; color: #333; background: #f5f5f5">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; background: #f5f5f5">
+      <tr>
+        <td align="center" style="padding: 20px 12px">
+          <table role="presentation" align="center" width="600" cellpadding="0" cellspacing="0" border="0"
+            style="width: 100%; max-width: 600px; background: #ffffff; border-radius: 8px; overflow: hidden">
+            <tr>
+              <td style="padding: 16px 24px; background: #2463eb; color: #ffffff; font-size: 20px; font-weight: bold">
+                <% if (logoUrl) { %>
+                  <img src="<%= logoUrl %>" alt="<%= fromName %>" style="max-height: 40px; width: auto; display: block; border: 0" />
+                <% } else { %>
+                  <%= fromName %>
+                <% } %>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 30px; text-align: left">
+                <h2 style="font-size: 1.5em; margin: 0 0 10px 0; color: #2463eb">Welcome to <%= fromName %>, <%= name %>!</h2>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  Your email is verified and your account is ready.
+                  <% if (role === 'AUCTIONEER') { %>
+                    You can now list items and start selling.
+                  <% } else { %>
+                    You can now browse live auctions and place bids.
+                  <% } %>
+                </p>
+                <p style="margin: 20px 0">
+                  <a href="<%= frontendUrl %>" style="background: #2463eb; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-size: 14px; font-weight: bold; display: inline-block">
+                    Go to <%= fromName %>
+                  </a>
+                </p>
+                <div style="border-top: 1px solid #eee; padding-top: 16px; margin-top: 30px; font-size: 13px; color: #666">
+                  Questions? <a href="<%= frontendUrl %>/contact" style="color: #2463eb">Contact our support team</a>.
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

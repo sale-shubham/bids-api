@@ -1,18 +1,7 @@
-import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import ejs from 'ejs';
 import { env } from '@/core/config/env';
-import { OTP_TTL_SECONDS } from '@/core/config/constants';
 import { logger } from '@/core/logger/logger';
-import type { EmailProvider } from './email.provider';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-// Source run (tsx): src/providers/email → src/templates. Lambda bundle:
-// dist/index.mjs → dist/templates (copied by scripts/build-lambda.mjs).
-const templatesDir = existsSync(join(__dirname, 'templates'))
-  ? join(__dirname, 'templates')
-  : join(__dirname, '../../templates');
+import type { EmailProvider, SendEmailInput } from './email.provider';
+import { renderEmail } from './render';
 
 // No explicit credentials — on Lambda, the function's execution role grants
 // ses:SendEmail/ses:SendRawEmail (see serverless.yml) and the SDK's default
@@ -33,18 +22,12 @@ const getSes = () =>
     SendEmailCommand,
   })));
 
-// Real driver — wired when EMAIL_DRIVER=ses. Renders the local otp-code.ejs
-// template to an HTML string and sends it via SES SendEmailCommand (no SES-native
-// templates, no attachments — OTP emails never need either).
+// Real driver — wired when EMAIL_DRIVER=ses. Renders the local EJS template pair
+// (HTML + plain text) and sends it via SES SendEmailCommand (no SES-native
+// templates, no attachments).
 export class SesEmail implements EmailProvider {
-  async send(to: string, code: string): Promise<void> {
-    const html = await ejs.renderFile(join(templatesDir, 'otp-code.ejs'), {
-      code,
-      expiryMinutes: Math.round(OTP_TTL_SECONDS / 60),
-      fromName: env.email.fromName,
-      logoUrl: env.email.logoUrl,
-      frontendUrl: env.app.url,
-    });
+  async send({ to, subject, template, data, replyTo }: SendEmailInput): Promise<void> {
+    const { html, text } = await renderEmail(template, data);
 
     try {
       const { client: sesClient, SendEmailCommand } = await getSes();
@@ -52,19 +35,18 @@ export class SesEmail implements EmailProvider {
         new SendEmailCommand({
           Source: `${env.email.fromName} <${env.email.fromAddress}>`,
           Destination: { ToAddresses: [to] },
+          ...(replyTo ? { ReplyToAddresses: [replyTo] } : {}),
           Message: {
-            Subject: { Data: 'Your NobleBid verification code' },
-            Body: { Html: { Data: html as string } },
+            Subject: { Data: subject, Charset: 'UTF-8' },
+            Body: { Html: { Data: html, Charset: 'UTF-8' }, Text: { Data: text, Charset: 'UTF-8' } },
           },
         })
       );
-      logger.info({ to, messageId: result.MessageId }, 'SES OTP email sent');
+      logger.info({ to, template, messageId: result.MessageId }, 'SES email sent');
     } catch (err) {
-      // The global error handler already logs unhandled errors, but without
-      // "to"/driver context — log it here so a failed send is traceable to
-      // which address/SES error (unverified sender, sandbox-mode recipient,
-      // throttling, etc) without having to correlate stack traces.
-      logger.error({ err, to }, 'SES OTP email send failed');
+      // Log with address/template context so a failed send is traceable
+      // (unverified sender, sandbox-mode recipient, throttling, etc).
+      logger.error({ err, to, template }, 'SES email send failed');
       throw err;
     }
   }

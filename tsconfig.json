@@ -19,5 +19,5 @@
     }
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "prisma/seed.ts", "prisma/seed-real-members.ts"]
+  "exclude": ["node_modules", "dist", "prisma/seed.ts", "prisma/seed-demo.ts", "prisma/seed-real-members.ts"]
 }

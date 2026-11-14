@@ -16,8 +16,8 @@ describe('env.rateLimit', () => {
     delete process.env.RATE_LIMIT_OTP_IP_MAX;
   });
 
-  it('keeps the production caps when unset or empty (prod never sets them)', async () => {
-    expect(await loadRateLimitEnv({ RATE_LIMIT_AUTH_MAX: undefined, RATE_LIMIT_OTP_IP_MAX: '' })).toEqual({ authMax: 20, otpIpMax: 20 });
+  it('keeps the production caps when empty (empty also shields the case from .env dev overrides) (prod never sets them)', async () => {
+    expect(await loadRateLimitEnv({ RATE_LIMIT_AUTH_MAX: '', RATE_LIMIT_OTP_IP_MAX: '' })).toEqual({ authMax: 20, otpIpMax: 20 });
   });
 
   it('takes the dev override', async () => {

@@ -1,15 +1,14 @@
 import type { Response } from 'express';
 import { env } from '@/core/config/env';
+import { buildCookieBase } from '@/core/http/cookie-options';
 import { ACCESS_COOKIE, REFRESH_COOKIE } from '@/core/middleware/auth';
 import { ACCESS_TTL_MS } from '@/modules/auth/token.service';
 
-const base = {
-  httpOnly: true,
-  secure: env.isProd,
-  sameSite: 'lax' as const,
+const base = buildCookieBase({
+  isProd: env.isProd,
   domain: env.cookieDomain,
-  path: '/',
-};
+  sameSite: env.cookieSameSite,
+});
 
 export function setAuthCookies(
   res: Response,

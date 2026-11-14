@@ -82,10 +82,12 @@ export class S3Storage implements StorageProvider {
     return `${safeFolder}/${crypto.randomUUID()}-${Date.now()}${safeExt}`;
   }
 
-  async presignPut(key: string, type: string, expiresIn = 60): Promise<string> {
+  // ContentLength is signed into the URL, so S3 rejects a PUT whose body size
+  // differs from the size the client declared at presign time.
+  async presignPut(key: string, type: string, size: number, expiresIn = 60): Promise<string> {
     const { sdk } = await this.sdk();
     return this.presign(
-      new sdk.PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: type }),
+      new sdk.PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: type, ContentLength: size }),
       expiresIn
     );
   }

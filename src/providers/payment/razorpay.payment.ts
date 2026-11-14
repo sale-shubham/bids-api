@@ -51,11 +51,11 @@ export class RazorpayPayment implements PaymentProvider {
     return safeEqualHex(expected, signature);
   }
 
-  async createOrder(params: { amountPaise: number; receipt: string }): Promise<CreatedGatewayOrder> {
+  async createOrder(params: { amountPaise: number; receipt: string; notes?: Record<string, string> }): Promise<CreatedGatewayOrder> {
     const res = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
       headers: { Authorization: `Basic ${this.auth}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount: params.amountPaise, currency: 'INR', receipt: params.receipt }),
+      body: JSON.stringify({ amount: params.amountPaise, currency: 'INR', receipt: params.receipt, notes: params.notes ?? {} }),
     });
     if (!res.ok) throw new Error(`Razorpay order create failed: ${await describeError(res)}`);
     const order = (await res.json()) as { id: string };
