@@ -68,6 +68,13 @@ export async function getCommissionDTO(id: string, now = new Date()): Promise<Co
 
 // ---------------------------------------------------------------- reads
 
+/** One commission, only if it belongs to the seller (404 otherwise, so ids do not leak). */
+export async function getMine(sellerId: string, id: string, now = new Date()): Promise<CommissionDTO> {
+  const row = await prisma.commission.findFirst({ where: { id, sellerId }, select: commissionSelect });
+  if (!row) throw notFound();
+  return toCommissionDTO(row as CommissionRow, now);
+}
+
 export async function listMine(
   sellerId: string,
   q: { status: CommissionStatusFilter; page: number; pageSize: number },

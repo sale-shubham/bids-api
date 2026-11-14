@@ -10,6 +10,7 @@ const seller = [authenticate, requireRole('AUCTIONEER', 'SUPER_ADMIN'), requireA
 
 router.get('/mine', ...seller, validate(mineQuerySchema, 'query'), asyncHandler(ctrl.mine));
 router.get('/summary', ...seller, asyncHandler(ctrl.summary));
+router.get('/:id', ...seller, asyncHandler(ctrl.getOne));
 router.post('/:id/checkout', ...seller, asyncHandler(ctrl.checkout));
 
 export default router;
