@@ -165,5 +165,5 @@ Never run `migrate reset` against a deployed DB.
 ## Costs (rough, low traffic)
 
 Lambda/API Gateway/SQS/EventBridge within or near free tier; the 1-minute `closeAuctions` run is ~43k invocations/month.
-CloudFront PriceClass_100 + S3 small. Logs 7 days. Main fixed costs: managed Postgres and (later) SES sending.
+CloudFront PriceClass_200 (includes India edges) + S3 small. Logs 7 days. Main fixed costs: managed Postgres and (later) SES sending.
 Set an AWS Budget alert. API Gateway throttle is 50 rps / burst 100 account-stage wide.
