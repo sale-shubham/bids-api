@@ -70,7 +70,13 @@ provider:
     # Storage — S3 only
     # Resolved by CloudFormation from the distribution this stack creates - no
     # GitHub variable needed (works on the very first deploy too).
-    AWS_CLOUDFRONT_URL: !Join ['', ['https://', !GetAtt AppBucketDistribution.DomainName]]
+    # Public media base. CloudFront when ENABLE_CDN=true, otherwise the bucket's
+    # own S3 URL (the account needs AWS Support verification before it may create
+    # CloudFront distributions).
+    AWS_CLOUDFRONT_URL: !If
+      - HasCdn
+      - !Join ['', ['https://', !GetAtt AppBucketDistribution.DomainName]]
+      - !Sub 'https://${AppBucket}.s3.${AWS::Region}.amazonaws.com'
     AWS_BUCKET_NAME: ${env:AWS_BUCKET_NAME, ''}
 
     # Payments — Razorpay
@@ -221,6 +227,9 @@ functions:
 resources:
   Conditions:
     HasAlertEmail: !Not [!Equals ["${env:ALERT_EMAIL, ''}", ""]]
+    # CloudFront image CDN only when ENABLE_CDN=true (GitHub variable).
+    HasCdn: !Equals ["${env:ENABLE_CDN, 'false'}", "true"]
+    NoCdn: !Not [!Condition HasCdn]
     # Custom API domain only when BOTH are set (ACM cert must be in the stack region).
     HasCustomDomain: !And
       - !Not [!Equals ["${env:API_DOMAIN_NAME, ''}", ""]]
@@ -329,15 +338,18 @@ resources:
               AllowedHeaders: ['*']
               ExposedHeaders: [ETag]
               MaxAge: 3000
+        # ACLs stay blocked in every mode. Without the CDN, a bucket policy (below)
+        # makes ONLY auctions/* and avatars/* publicly readable.
         PublicAccessBlockConfiguration:
           BlockPublicAcls: true
-          BlockPublicPolicy: true
+          BlockPublicPolicy: !If [HasCdn, true, false]
           IgnorePublicAcls: true
-          RestrictPublicBuckets: true
+          RestrictPublicBuckets: !If [HasCdn, true, false]
 
     # OAC lets CloudFront read the private AppBucket directly (no public bucket ACL needed).
     AppBucketOAC:
       Type: AWS::CloudFront::OriginAccessControl
+      Condition: HasCdn
       Properties:
         OriginAccessControlConfig:
           Name: ${self:service}-${sls:stage}-oac
@@ -349,6 +361,7 @@ resources:
     # (provider.environment) and the CloudFrontDomainName output.
     AppBucketDistribution:
       Type: AWS::CloudFront::Distribution
+      Condition: HasCdn
       Properties:
         DistributionConfig:
           Enabled: true
@@ -369,6 +382,7 @@ resources:
     # not "any CloudFront distribution in the account".
     AppBucketPolicy:
       Type: AWS::S3::BucketPolicy
+      Condition: HasCdn
       Properties:
         Bucket: !Ref AppBucket
         PolicyDocument:
@@ -381,6 +395,23 @@ resources:
               Condition:
                 StringEquals:
                   AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${AppBucketDistribution.Id}'
+
+    # No-CDN mode: public read for public media prefixes only. Every other key
+    # stays private (presigned access only).
+    AppBucketPublicMediaPolicy:
+      Type: AWS::S3::BucketPolicy
+      Condition: NoCdn
+      Properties:
+        Bucket: !Ref AppBucket
+        PolicyDocument:
+          Statement:
+            - Sid: PublicReadMedia
+              Effect: Allow
+              Principal: '*'
+              Action: s3:GetObject
+              Resource:
+                - !Sub '${AppBucket.Arn}/auctions/*'
+                - !Sub '${AppBucket.Arn}/avatars/*'
 
     # Optional custom domain (api.<domain>). Created only when API_DOMAIN_NAME and
     # API_CERTIFICATE_ARN are set. After deploy, create a DNS CNAME
@@ -412,7 +443,14 @@ resources:
       Value: !Sub 'wss://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${sls:stage}'
     CloudFrontDomainName:
       Description: CloudFront domain for the uploads bucket
+      Condition: HasCdn
       Value: !GetAtt AppBucketDistribution.DomainName
+    MediaBaseUrl:
+      Description: Public base URL for uploaded images (CloudFront or S3)
+      Value: !If
+        - HasCdn
+        - !Join ['', ['https://', !GetAtt AppBucketDistribution.DomainName]]
+        - !Sub 'https://${AppBucket}.s3.${AWS::Region}.amazonaws.com'
     NotifyQueueUrl:
       Description: SQS NotifyQueue URL
       Value: !GetAtt NotifyQueue.QueueUrl
