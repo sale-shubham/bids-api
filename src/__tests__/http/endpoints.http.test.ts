@@ -120,6 +120,27 @@ describe('commissions', () => {
     expect(res.body.data[0]).toMatchObject({ id: 'c1', isOverdue: true, auction: { finalBidPaise: 100_000 } });
   });
 
+  it('GET /commissions/:id -> the DTO for the owner, scoped by sellerId', async () => {
+    prismaMock.commission.findFirst.mockResolvedValue({
+      id: 'c1', auctionId: 'a1', rateBps: 500, amountPaise: 5_000, status: 'PAID',
+      dueAt: NOW, paidAt: NOW, createdAt: NOW,
+      auction: { id: 'a1', title: 'Telescope', images: [], currentBidPaise: 100_000, endedAt: NOW },
+    });
+    const res = await request(await getApp()).get('/commissions/c1').set('Authorization', await bearer('AUCTIONEER', 'seller1'));
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ id: 'c1', status: 'PAID', isOverdue: false });
+    expect(prismaMock.commission.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'c1', sellerId: 'seller1' } }),
+    );
+  });
+
+  it("GET /commissions/:id -> 404 COMMISSION_NOT_FOUND for another seller's or unknown id", async () => {
+    prismaMock.commission.findFirst.mockResolvedValue(null);
+    const res = await request(await getApp()).get('/commissions/nope').set('Authorization', await bearer('AUCTIONEER'));
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('COMMISSION_NOT_FOUND');
+  });
+
   it('POST /commissions/:id/checkout -> 404 COMMISSION_NOT_FOUND for another seller\'s / unknown id', async () => {
     prismaMock.commission.findUnique.mockResolvedValue(null);
     prismaMock.commission.findFirst.mockResolvedValue(null);
