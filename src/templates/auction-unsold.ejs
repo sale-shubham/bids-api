@@ -1,0 +1,7 @@
+<%- include('_head', { heading: 'Your auction ended without bids', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  <strong><%= auctionTitle %></strong> ended without receiving any bids.
+                  You can republish it with new dates from your dashboard.
+                </p>
+<%- include('_foot', { ctaUrl: auctionUrl, ctaLabel: 'View auction', frontendUrl }) %>

@@ -1,6 +1,7 @@
 import { prisma } from '@/core/prisma/client';
 import { AppError } from '@/core/errors/AppError';
 import { offsetArgs, pageMeta } from '@/core/http/pagination';
+import { buildAuctionDetail } from './auction-detail.service';
 import { getSetting } from '@/modules/settings/settings.service';
 import { auctionInclude, effectiveStatus, toCard, toDetail, type AuctionRow } from './auctions.serializer';
 import { effectivePrice, listWhere, orderFor, statusWhere } from './auctions.query';
@@ -105,7 +106,7 @@ export async function getAuction(id: string, viewer: Actor | undefined, now = ne
   const hidden = effectiveStatus(row, now) === 'CANCELLED';
   const privileged = !!viewer && (viewer.role === 'SUPER_ADMIN' || viewer.sub === row.sellerId);
   if (hidden && !privileged) throw auctionNotFound();
-  return toDetail(row, now);
+  return buildAuctionDetail(row, viewer?.sub ?? null, now);
 }
 
 export async function listMine(sellerId: string, q: MineQuery, now = new Date()) {

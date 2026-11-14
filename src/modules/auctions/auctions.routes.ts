@@ -3,6 +3,7 @@ import { asyncHandler } from '@/core/middleware/asyncHandler';
 import { authenticate, optionalAuthenticate, requireActiveMember, requireRole } from '@/core/middleware/auth';
 import { validate } from '@/core/middleware/validate';
 import { auctionWriteLimiter } from '@/core/middleware/rateLimit';
+import { auctionBidsRouter } from '@/modules/bids/bids.routes';
 import * as ctrl from './auctions.controller';
 import {
   createAuctionSchema,
@@ -22,6 +23,7 @@ router.get('/categories', asyncHandler(ctrl.categories));
 router.get('/mine', ...seller, validate(mineQuerySchema, 'query'), asyncHandler(ctrl.mine));
 router.post('/', ...seller, auctionWriteLimiter, validate(createAuctionSchema), asyncHandler(ctrl.create));
 
+router.use('/:id/bids', auctionBidsRouter);
 router.get('/:id', optionalAuthenticate, asyncHandler(ctrl.detail));
 router.patch('/:id', ...seller, auctionWriteLimiter, validate(updateAuctionSchema), asyncHandler(ctrl.update));
 router.delete('/:id', ...seller, asyncHandler(ctrl.remove));

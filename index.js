@@ -41,11 +41,26 @@ export const handler = async (event, context) => {
 // rows, stale Session rows, stale WS rows, expired rate-limit buckets).
 // Separate Lambda function (index.retentionPurgeHandler); see serverless.yml
 // functions.retentionPurge.
-// TODO(Phase 5+): closeAuctionsHandler, endingSoonHandler, commissionReminderHandler,
-// notifyWorkerHandler.
+// TODO(Phase 5+): endingSoonHandler, commissionReminderHandler.
 export const retentionPurgeHandler = async () => {
   const { runRetentionPurge } = await import('./src/modules/admin/retention/admin-retention.service.ts');
   return runRetentionPurge();
+};
+
+// Scheduled every minute (serverless.yml functions.closeAuctions): start due
+// auctions, close ended ones. Idempotent — overlapping runs are no-ops.
+export const closeAuctionsHandler = async () => {
+  const { runAuctionClose } = await import('./src/modules/auctions/auction-close.service.ts');
+  const counts = await runAuctionClose();
+  if (counts.started || counts.ended) logger.info(counts, 'auction close run');
+  return counts;
+};
+
+// SQS NotifyQueue worker (ReportBatchItemFailures): returns the failed
+// messageIds so only those are retried / sent to the DLQ.
+export const notifyWorkerHandler = async (event) => {
+  const { processSqsBatch } = await import('./src/modules/notify/notify.worker.ts');
+  return processSqsBatch(event);
 };
 
 // Local development server (not production / not Lambda): listen + graceful shutdown.
@@ -54,8 +69,25 @@ if (env.nodeEnv !== 'production') {
     logger.info(`NobleBid API listening on http://localhost:${env.port} (${env.nodeEnv})`);
   });
 
+  // No EventBridge locally: run the auction close job every 60 s.
+  let closing = false;
+  const closeTimer = setInterval(async () => {
+    if (closing) return;
+    closing = true;
+    try {
+      const { runAuctionClose } = await import('./src/modules/auctions/auction-close.service.ts');
+      const counts = await runAuctionClose();
+      if (counts.started || counts.ended) logger.info(counts, 'auction close run');
+    } catch (err) {
+      logger.error({ err }, 'auction close run failed');
+    } finally {
+      closing = false;
+    }
+  }, 60_000);
+
   const shutdown = async (signal) => {
     logger.info(`${signal} received, shutting down`);
+    clearInterval(closeTimer);
     server.close();
     await prisma.$disconnect();
     process.exit(0);

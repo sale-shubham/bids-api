@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import type { BidDTO } from './bidding.rules';
 
 export type EffectiveStatus = 'SCHEDULED' | 'LIVE' | 'ENDED' | 'CANCELLED';
 
@@ -41,6 +42,10 @@ export function toCard(a: AuctionRow, now: Date = new Date()) {
   };
 }
 
+export type AuctionContact = { role: 'SELLER' | 'WINNER'; name: string; email: string; phone: string | null };
+
+// recentBids / myHighestBidPaise / contact are filled by auction-detail.service
+// (they need extra queries); create/patch/republish responses carry the empty defaults.
 export function toDetail(a: AuctionRow, now: Date = new Date()) {
   return {
     ...toCard(a, now),
@@ -52,5 +57,8 @@ export function toDetail(a: AuctionRow, now: Date = new Date()) {
     endedAt: a.endedAt ? a.endedAt.toISOString() : null,
     createdAt: a.createdAt.toISOString(),
     updatedAt: a.updatedAt.toISOString(),
+    recentBids: [] as BidDTO[],
+    myHighestBidPaise: null as number | null,
+    contact: null as AuctionContact | null,
   };
 }

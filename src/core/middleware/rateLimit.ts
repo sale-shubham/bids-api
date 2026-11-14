@@ -104,3 +104,30 @@ export const auctionWriteLimiter = rateLimit({
   keyGenerator: (req) => req.user?.sub ?? ipKeyGenerator(req.ip ?? 'unknown'),
   message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many requests, try later' } },
 });
+
+// Bidding (money-adjacent, authenticated). Two stacked caps, both keyed by the
+// member and shared across Lambda containers via the Pg store: ~10 bids per
+// 10 s per member per auction (stops a script hammering one auction), and 60
+// per minute per member overall. Mounted after authenticate, so req.user is set.
+export const bidAuctionLimiter = rateLimit({
+  store: new PgRateLimitStore('rl:bid-auction:'),
+  passOnStoreError: true,
+  windowMs: 10 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) =>
+    `${req.user?.sub ?? ipKeyGenerator(req.ip ?? 'unknown')}:${typeof req.params?.id === 'string' ? req.params.id : ''}`,
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'You are bidding too fast, slow down' } },
+});
+
+export const bidMemberLimiter = rateLimit({
+  store: new PgRateLimitStore('rl:bid-member:'),
+  passOnStoreError: true,
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.sub ?? ipKeyGenerator(req.ip ?? 'unknown'),
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many bids, try again shortly' } },
+});

@@ -11,6 +11,7 @@ const db = vi.hoisted(() => ({
     groupBy: vi.fn(),
   },
   member: { findUnique: vi.fn() },
+  bid: { findMany: vi.fn(async () => []), aggregate: vi.fn(async () => ({ _max: { amountPaise: null } })) },
 }));
 vi.mock('@/core/prisma/client', () => ({ prisma: db }));
 vi.mock('@/core/config/env', () => ({

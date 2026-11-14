@@ -201,7 +201,25 @@ functions:
     timeout: 120
     events:
       - schedule: rate(1 day)
-  # TODO(Phase 5+): closeAuctions / endingSoon / commissionReminder / notifyWorker functions.
+  closeAuctions:
+    name: ${self:service}${sls:stage}-close-auctions
+    handler: dist/index.closeAuctionsHandler
+    description: Every minute - start due auctions, close ended ones (winner, commission, notifications).
+    timeout: 60
+    events:
+      - schedule: rate(1 minute)
+  notifyWorker:
+    name: ${self:service}${sls:stage}-notify-worker
+    handler: dist/index.notifyWorkerHandler
+    description: SQS NotifyQueue worker - in-app notification row, email, Web Push.
+    timeout: 30
+    reservedConcurrency: 5
+    events:
+      - sqs:
+          arn: !GetAtt NotifyQueue.Arn
+          batchSize: 10
+          functionResponseType: ReportBatchItemFailures
+  # TODO(Phase 5+): endingSoon / commissionReminder functions.
 
 resources:
   Conditions:
