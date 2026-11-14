@@ -2,8 +2,8 @@
 
 ```
 bids-api/
-├── index.js                  # Lambda handlers (api + WS + retention purge + closeAuctions + notifyWorker) and local dev server
-├── serverless.yml            # service bids-api: HTTP API, WebSocket API, S3+CloudFront, NotifyQueue/NotifyDLQ, closeAuctions (1 min) + notifyWorker (SQS), alarms
+├── index.js                  # Lambda handlers (api + WS + retention purge + closeAuctions + commissionReminder + notifyWorker) and local dev server
+├── serverless.yml            # service bids-api: HTTP API, WebSocket API, S3+CloudFront, NotifyQueue/NotifyDLQ, closeAuctions (1 min) + commissionReminder (1 day) + notifyWorker (SQS), alarms
 ├── prisma/schema.prisma      # Member, Session, OtpChallenge, Auction, Bid, Watchlist, Commission,
 │                             #   WsConnection, WsTicket, PushSubscription, RateLimitBucket, PaymentOrder,
 │                             #   WebhookEvent, Notification, AppSetting (+ migrations/, seed.ts, seed-demo.ts)
@@ -17,7 +17,7 @@ bids-api/
 │   │                         #   logger, middleware (auth, rateLimit, validate, errorHandler), prisma client
 │   ├── providers/            # email (SES + stub, render.ts), payment (Razorpay + stub), storage (S3)
 │   ├── templates/            # EJS email templates, HTML + .txt pairs (otp-code, welcome, outbid, auction-won, auction-sold,
-│                             #   auction-unsold, commission-due + _head/_foot/_contact partials)
+│                             #   auction-unsold, commission-due, commission-paid + _head/_foot/_contact partials)
 │   └── modules/
 │       ├── auth/             # signup/verify/login/password flows, token, session, device, otp-challenge, password rule
 │       ├── members/          # GET/PATCH /members/me, GET /members/:id/public, member.select.ts
@@ -31,9 +31,10 @@ bids-api/
 │       ├── push/             # Web Push subscribe/unsubscribe, sendPushToMember
 │       ├── ws/               # WebSocket: tickets, connect/default/disconnect, room + member fan-out, ws.transport (lambda|local driver), ws.local (dev server)
 │       ├── settings/         # app settings, legal pages, device limit
-│       ├── payments/         # Razorpay webhook (checkout/verify: Phase 1+)
+│       ├── commissions/      # GET /commissions/mine + /summary, POST /commissions/:id/checkout; markCommissionPaid, waiveCommission, runCommissionReminders
+│       ├── payments/         # POST /payments/verify, POST /payments/webhook (Razorpay, HMAC + WebhookEvent dedupe)
 │       └── admin/            # members, dashboard, retention, settings
-├── readme/                   # ARCHITECTURE.md, methods/, flows/auth.md, flows/auctions.md, flows/bidding.md, flows/notifications.md, flows/websocket.md
+├── readme/                   # ARCHITECTURE.md, methods/, flows/auth.md, flows/auctions.md, flows/bidding.md, flows/notifications.md, flows/payments.md, flows/websocket.md
 ├── docs/DOC_SYNC.md
 └── .claude/ .husky/ .github/workflows/
 ```

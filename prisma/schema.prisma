@@ -320,6 +320,8 @@ model PaymentOrder {
   // What the order pays for (e.g. 'COMMISSION' + its id) — set in Phase 1.
   referenceType  String?
   referenceId    String?
+  // Razorpay payment id that settled the order (set when marked PAID).
+  gatewayPaymentId String?
   idempotencyKey String        @unique
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt

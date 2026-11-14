@@ -23,8 +23,10 @@ export class StubPayment implements PaymentProvider {
     return { gatewayOrderId: `stub_order_${crypto.randomUUID()}`, keyId: 'stub' };
   }
 
-  // Stub accepts any non-empty order/payment id (frontend simulates success).
+  // Stub accepts only the literal signature 'stub' (frontend simulates success).
+  // This driver is only active when PAYMENT_DRIVER=stub, so 'stub' can never
+  // pass verification against real Razorpay.
   verifyPaymentSignature(input: VerifyPaymentInput): boolean {
-    return Boolean(input.orderId && input.paymentId);
+    return Boolean(input.orderId && input.paymentId && input.signature === 'stub');
   }
 }

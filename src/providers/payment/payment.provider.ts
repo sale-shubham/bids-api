@@ -26,7 +26,7 @@ export interface PaymentProvider {
   // Fetch a payment entity to confirm it was really captured for the right amount.
   fetchPayment(paymentId: string): Promise<GatewayPayment>;
   // Orders API: create a one-time order for `amountPaise`. `receipt` is our own reference.
-  createOrder(params: { amountPaise: number; receipt: string }): Promise<CreatedGatewayOrder>;
+  createOrder(params: { amountPaise: number; receipt: string; notes?: Record<string, string> }): Promise<CreatedGatewayOrder>;
   // Checkout signature: HMAC-SHA256(orderId|paymentId) with the key secret.
   verifyPaymentSignature(input: VerifyPaymentInput): boolean;
 }

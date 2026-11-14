@@ -1,6 +1,6 @@
 # Notifications flow
 
-Code: pipeline in `src/modules/notify/` (`notify.queue.ts`, `notify.service.ts`, `notify.worker.ts`, `notify.content.ts`, `notify.types.ts`); in-app inbox API in `src/modules/notifications/`; email templates in `src/templates/` (`outbid`, `auction-won`, `auction-sold`, `auction-unsold`, `commission-due`, each `.ejs` + `.txt.ejs`, sharing `_head` / `_foot` / `_contact` partials; links use `env.app.url`).
+Code: pipeline in `src/modules/notify/` (`notify.queue.ts`, `notify.service.ts`, `notify.worker.ts`, `notify.content.ts`, `notify.types.ts`); in-app inbox API in `src/modules/notifications/`; email templates in `src/templates/` (`outbid`, `auction-won`, `auction-sold`, `auction-unsold`, `commission-due`, `commission-paid`, each `.ejs` + `.txt.ejs`, sharing `_head` / `_foot` / `_contact` partials; links use `env.app.url`).
 
 ## In-app endpoints (auth required)
 
@@ -19,7 +19,7 @@ Model `Notification { id, memberId, type, title, body, url, data Json?, dedupeKe
 - `NOTIFY_QUEUE_URL` set (Lambda) -> SQS `SendMessage`; the `notifyWorker` Lambda (batch 10, `ReportBatchItemFailures`, reserved concurrency 5) runs `processSqsBatch`, which returns `{ batchItemFailures: [{ itemIdentifier: messageId }] }` for failed records (after 3 receives SQS moves them to NotifyDLQ).
 - Unset (local dev) -> `processNotification` inline; errors are logged, never thrown. Enqueue itself never throws (a notification must not fail a bid or the close job).
 
-Dedupe keys: `outbid:<bidId>:<memberId>`, `auction-won:<auctionId>`, `auction-sold:<auctionId>`, `commission-due:<auctionId>`, `auction-unsold:<auctionId>:<endedAtMs>` (the timestamp lets a republished auction notify again).
+Dedupe keys: `outbid:<bidId>:<memberId>`, `auction-won:<auctionId>`, `auction-sold:<auctionId>`, `commission-due:<auctionId>`, `commission-paid:<commissionId>`, `commission-reminder:<commissionId>:<YYYY-MM-DD>` (daily reminder, type `commission-due`), `auction-unsold:<auctionId>:<endedAtMs>` (the timestamp lets a republished auction notify again).
 
 `processNotification` order (idempotent, retry-safe):
 1. dedupeKey already has a row -> `duplicate`, stop.
