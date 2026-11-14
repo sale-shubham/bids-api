@@ -27,6 +27,7 @@ The app's browser calls this API directly (cross-origin, credentialed — the we
 | Limiter            | Applied to                                     | Config                                                                           |
 | ------------------ | ---------------------------------------------- | -------------------------------------------------------------------------------- |
 | `authLimiter`      | Auth endpoints (`otp/verify`, `signup/verify`) | Strict: 20 / 15 min                                                              |
+| `auctionWriteLimiter` | `POST/PATCH /auctions`, `POST /auctions/:id/republish` | 10 / min per member (in-memory) |
 | `otpIpLimiter`     | `otp/request`, `signup/start`, `signup/resend` | 20 / hour per IP across **all** identifiers — stops one IP pumping OTPs to many different numbers (`otpLimiter` alone is per IP+identifier) |
 | `otpLimiter`       | `otp/request`                                  | SMS/email-cost-bearing: 5 / hour, keyed by identifier (mobile or email) + IP     |
 | `signupLimiter`    | `signup/start`, `signup/resend`                | 5 / hour, keyed by ip+mobile+email+sessionId — a `start` call sends **two** OTPs |
