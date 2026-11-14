@@ -1,7 +1,14 @@
 // Email delivery abstraction — stub or SES. Swap by EMAIL_DRIVER env, same
 // pattern as the payment/storage providers.
-// Phase 0: `send(to, code)` is the OTP interface. TODO(Phase 1): widen to
-// `send({ to, subject, template, data })` for transactional templates.
+// `template` names an EJS pair in src/templates: `<template>.ejs` (HTML) and
+// `<template>.txt.ejs` (plain text). `data` is the template's variables.
+export interface SendEmailInput {
+  to: string;
+  subject: string;
+  template: string;
+  data?: Record<string, unknown>;
+}
+
 export interface EmailProvider {
-  send(to: string, code: string): Promise<void>;
+  send(input: SendEmailInput): Promise<void>;
 }

@@ -4,12 +4,10 @@ import { logger } from '@/core/logger/logger';
 
 // ----------------------------------------------------------------------------
 // WEBSOCKET — real-time push layered on top of the REST API, NOT a second
-// write path. Members only ever send a message via the existing
-// `POST /messages/conversations/:id/messages` (keeps validation, the
-// FEATURE_KEYS.MEMBER_CHAT gate, and rate limiting in one place); this module
-// only pushes a "here's what just happened" frame to whichever of the
-// recipient's tabs/devices currently have a socket open. See
-// readme/flows/websocket.md.
+// write path. State changes (e.g. placing a bid) always go through the REST
+// endpoints (validation and rate limiting in one place); this module only
+// pushes a "here's what just happened" frame to whichever tabs/devices
+// currently have a socket open (a member's own, or an auction room).
 //
 // Same Lambda/handler as the REST API — index.js's `handler` branches on
 // event.requestContext.eventType and routes CONNECT/DISCONNECT/MESSAGE here
@@ -116,12 +114,18 @@ async function managementClient() {
   return { sdk, client: new sdk.ApiGatewayManagementApiClient({ endpoint: env.ws.apiEndpoint }) };
 }
 
+/** Frame sent to clients: a `type` plus event-specific fields. */
+export interface WsPayload {
+  type: string;
+  [k: string]: unknown;
+}
+
 // Best-effort push to every open socket a member currently has (multiple
 // tabs/devices = multiple WsConnection rows). Never throws — a failed push
-// must not fail the REST call that triggered it (e.g. sendMessage); the
+// must not fail the REST call that triggered it (e.g. placing a bid); the
 // state is already durably saved either way. A failed/undelivered push just
 // means the recipient finds out on their next reload or reconnect.
-export async function pushToMember(memberId: string, payload: unknown) {
+export async function pushToMember(memberId: string, payload: WsPayload) {
   const mgmt = await managementClient();
   if (!mgmt) return;
   const { sdk, client } = mgmt;
@@ -157,7 +161,7 @@ export async function pushToMember(memberId: string, payload: unknown) {
 // upsertDeviceSession, fixed 2026-09-12) — WsConnection is keyed to memberId,
 // not Session.id, so without this an evicted device's REST calls start
 // 401ing immediately while its still-open WebSocket keeps receiving live
-// dm:new-message/dm:read pushes until it separately disconnects. Best-effort,
+// live pushes until it separately disconnects. Best-effort,
 // same GoneException self-healing as pushToMember — never throws, since
 // login must never fail because of a WS cleanup problem. DB rows are deleted
 // regardless of whether the AWS call itself succeeds (or whether there's no

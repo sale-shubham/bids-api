@@ -34,7 +34,7 @@ async function callMe(sub: string) {
     },
   } as unknown as Response;
   await me({ user: { sub } } as unknown as Request, res);
-  return body!.data;
+  return (body!.data as { member: Record<string, unknown> }).member;
 }
 
 describe('GET /members/me deviceLimit', () => {

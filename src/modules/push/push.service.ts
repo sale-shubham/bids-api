@@ -3,12 +3,11 @@ import { env } from '@/core/config/env';
 import { logger } from '@/core/logger/logger';
 
 // ----------------------------------------------------------------------------
-// WEB PUSH — the closed-app half of real-time DM delivery. The WebSocket
-// (ws.service.ts) only reaches a tab that is open; a push wakes the browser's
-// service worker even with the app shut, which is the only way to paint the
-// installed app's icon badge. Mirrors ws.service.ts's pushToMember point for
-// point: fan out to every row the member has, never throw, prune the dead.
-// See readme/flows/push-notifications.md.
+// WEB PUSH — the closed-app half of real-time delivery (outbid, auction won,
+// ending soon, ...). The WebSocket (ws.service.ts) only reaches a tab that is
+// open; a push wakes the browser's service worker even with the app shut.
+// Mirrors ws.service.ts's pushToMember point for point: fan out to every row
+// the member has, never throw, prune the dead.
 // ----------------------------------------------------------------------------
 
 /** What the browser's `PushSubscription.toJSON()` produces (validated in push.validation.ts). */
@@ -51,14 +50,10 @@ export async function unsubscribe(memberId: string, endpoint: string) {
   return { endpoint };
 }
 
-/** Body the service worker's `push` handler reads (web app public/sw.js). */
-export interface DmPushPayload {
-  type: 'dm:new-message';
-  conversationId: string;
-  senderName: string;
-  body: string;
-  /** The recipient's unread total after this message — the number on the app icon. */
-  badgeCount: number;
+/** Body the service worker's `push` handler reads: a `type` plus event-specific fields. */
+export interface PushPayload {
+  type: string;
+  [k: string]: unknown;
 }
 
 type WebPush = typeof import('web-push');
@@ -94,11 +89,11 @@ const isGone = (err: unknown) => {
 };
 
 // Best effort to every browser the member subscribed. Never throws — a failed
-// push must never fail the sendMessage call that triggered it; the message is
+// push must never fail the call that triggered it; the event is
 // already saved and the app catches up on next open. A dead row is deleted
 // (the same self-healing GoneException does for WsConnection); any other
 // failure (5xx, timeout) says nothing about the subscription, so it stays.
-export async function sendPushToMember(memberId: string, payload: DmPushPayload): Promise<void> {
+export async function sendPushToMember(memberId: string, payload: PushPayload): Promise<void> {
   try {
     const webpush = await client();
     if (!webpush) return;
