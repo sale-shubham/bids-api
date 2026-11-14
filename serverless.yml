@@ -232,7 +232,6 @@ resources:
     HasAlertEmail: !Not [!Equals ["${env:ALERT_EMAIL, ''}", ""]]
     # CloudFront image CDN only when ENABLE_CDN=true (GitHub variable).
     HasCdn: !Equals ["${env:ENABLE_CDN, 'false'}", "true"]
-    NoCdn: !Not [!Condition HasCdn]
     # Custom API domain only when BOTH are set (ACM cert must be in the stack region).
     HasCustomDomain: !And
       - !Not [!Equals ["${env:API_DOMAIN_NAME, ''}", ""]]
@@ -381,40 +380,37 @@ resources:
             CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # managed-CachingOptimized
           PriceClass: PriceClass_100
 
-    # Grants only the specific distribution (SourceArn condition) read access —
-    # not "any CloudFront distribution in the account".
-    AppBucketPolicy:
-      Type: AWS::S3::BucketPolicy
-      Condition: HasCdn
-      Properties:
-        Bucket: !Ref AppBucket
-        PolicyDocument:
-          Statement:
-            - Effect: Allow
-              Principal:
-                Service: cloudfront.amazonaws.com
-              Action: s3:GetObject
-              Resource: !Sub '${AppBucket.Arn}/*'
-              Condition:
-                StringEquals:
-                  AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${AppBucketDistribution.Id}'
-
-    # No-CDN mode: public read for public media prefixes only. Every other key
-    # stays private (presigned access only).
+    # The bucket's ONE policy, for both modes:
+    #   CDN    - only this distribution (OAC + SourceArn) may read; bucket fully private.
+    #   no CDN - public read on auctions/* and avatars/* only; every other key private.
+    # Keep it a single resource, and keep this logical ID (it was created in no-CDN
+    # mode). Two BucketPolicy resources, or a rename, make CloudFormation create the
+    # new policy and then delete the old resource, and that delete removes the
+    # bucket's whole policy (CloudFront would then get 403 on every image).
     AppBucketPublicMediaPolicy:
       Type: AWS::S3::BucketPolicy
-      Condition: NoCdn
       Properties:
         Bucket: !Ref AppBucket
         PolicyDocument:
           Statement:
-            - Sid: PublicReadMedia
-              Effect: Allow
-              Principal: '*'
-              Action: s3:GetObject
-              Resource:
-                - !Sub '${AppBucket.Arn}/auctions/*'
-                - !Sub '${AppBucket.Arn}/avatars/*'
+            - !If
+              - HasCdn
+              - Sid: CloudFrontReadViaOAC
+                Effect: Allow
+                Principal:
+                  Service: cloudfront.amazonaws.com
+                Action: s3:GetObject
+                Resource: !Sub '${AppBucket.Arn}/*'
+                Condition:
+                  StringEquals:
+                    AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${AppBucketDistribution.Id}'
+              - Sid: PublicReadMedia
+                Effect: Allow
+                Principal: '*'
+                Action: s3:GetObject
+                Resource:
+                  - !Sub '${AppBucket.Arn}/auctions/*'
+                  - !Sub '${AppBucket.Arn}/avatars/*'
 
     # Optional custom domain (api.<domain>). Created only when API_DOMAIN_NAME and
     # API_CERTIFICATE_ARN are set. After deploy, create a DNS CNAME
