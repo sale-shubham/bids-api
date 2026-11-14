@@ -127,6 +127,7 @@ describe('formatInr + templates', () => {
       yourBid: 'Rs 1,400',
       finalBid: 'Rs 2,000',
       commission: 'Rs 100',
+      endsAt: '6:30 pm IST',
       dueDate: '21 Nov 2026',
       commissionUrl: 'https://app.test/sell/commissions',
       seller: person,

@@ -1,0 +1,86 @@
+import { describe, expect, it, vi } from 'vitest';
+
+const store = vi.hoisted(() => ({ rows: new Map<string, { key: string; value: string; updatedAt: Date }>() }));
+vi.mock('@/core/prisma/client', () => {
+  const upsert = async ({ where, create, update }: any) => {
+    const cur = store.rows.get(where.key);
+    const row = { key: where.key, value: cur ? (update.value ?? cur.value) : create.value, updatedAt: new Date() };
+    store.rows.set(where.key, row);
+    return row;
+  };
+  return {
+    prisma: {
+      appSetting: {
+        upsert: vi.fn(upsert),
+        findMany: async ({ where }: any) => where.key.in.map((k: string) => store.rows.get(k)).filter(Boolean),
+        findUnique: async ({ where }: any) => store.rows.get(where.key) ?? null,
+      },
+      $transaction: async (ops: Promise<unknown>[]) => Promise.all(ops),
+    },
+  };
+});
+
+import { platformSettingsSchema, legalPageBodySchema } from './settings.validation';
+import { getPlatformSettings, setPlatformSettings } from './settings.service';
+import { getLegalPage, setLegalPage } from './legal-pages.service';
+import { sanitizeLegalHtml } from './legal-pages.sanitize';
+
+const valid = { commissionRateBps: 500, minIncrementPaise: 10000, antiSnipingMinutes: 2, categories: ['Art', 'Books'] };
+
+describe('platform settings validation', () => {
+  it('accepts a valid object and enforces ranges', () => {
+    expect(platformSettingsSchema.validate(valid).error).toBeUndefined();
+    expect(platformSettingsSchema.validate({ ...valid, commissionRateBps: 3001 }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...valid, commissionRateBps: -1 }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...valid, minIncrementPaise: 99 }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...valid, antiSnipingMinutes: 31 }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...valid, antiSnipingMinutes: 0 }).error).toBeUndefined();
+  });
+  it('categories: 1-30, unique (case-insensitive), 2-40 chars', () => {
+    expect(platformSettingsSchema.validate({ ...valid, categories: [] }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...valid, categories: ['Art', 'art'] }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...valid, categories: ['A'] }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...valid, categories: ['x'.repeat(41)] }).error).toBeDefined();
+    const thirtyOne = Array.from({ length: 31 }, (_, i) => `Cat ${i}`);
+    expect(platformSettingsSchema.validate({ ...valid, categories: thirtyOne }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...valid, categories: thirtyOne.slice(0, 30) }).error).toBeUndefined();
+    expect(platformSettingsSchema.validate({ ...valid, categories: undefined }).error).toBeDefined();
+  });
+  it('round-trips through the AppSetting store', async () => {
+    expect(await setPlatformSettings(valid)).toEqual(valid);
+    expect(await getPlatformSettings()).toEqual(valid);
+  });
+});
+
+describe('legal pages', () => {
+  it('sanitiser keeps allowed tags and strips scripts, handlers, images and js: links', () => {
+    const out = sanitizeLegalHtml(
+      '<h2 onclick="x()">Title</h2><p>a <strong>b</strong> <em>c</em><br></p><ul><li>x</li></ul><ol><li>y</li></ol><blockquote>q</blockquote>' +
+        '<script>alert(1)</script><img src=x onerror=z()><a href="javascript:alert(1)">bad</a><a href="https://e.com">ok</a><h1>no</h1>',
+    );
+    expect(out).toContain('<h2>Title</h2>');
+    expect(out).toContain('<strong>b</strong>');
+    expect(out).toContain('<blockquote>q</blockquote>');
+    expect(out).toContain('href="https://e.com"');
+    expect(out).toContain('rel="noopener noreferrer nofollow"');
+    expect(out).not.toMatch(/script|onclick|onerror|javascript:|<img|<h1/i);
+  });
+  it('setLegalPage sanitises before saving and getLegalPage returns title + content', async () => {
+    const page = await setLegalPage('privacy-policy', { title: ' My Privacy ', content: '<p>Hi</p><script>x</script>' });
+    expect(page).toMatchObject({ slug: 'privacy-policy', title: 'My Privacy', content: '<p>Hi</p>' });
+    expect(page.updatedAt).toEqual(expect.any(String));
+    expect((await getLegalPage('privacy-policy')).content).toBe('<p>Hi</p>');
+  });
+  it('unedited page falls back to default title, empty content, null updatedAt', async () => {
+    expect(await getLegalPage('refund-policy')).toEqual({
+      slug: 'refund-policy',
+      title: 'Refund Policy',
+      content: '',
+      updatedAt: null,
+    });
+  });
+  it('body schema requires title and content', () => {
+    expect(legalPageBodySchema.validate({ title: 'T1', content: '<p>x</p>' }).error).toBeUndefined();
+    expect(legalPageBodySchema.validate({ title: 'T1' }).error).toBeDefined();
+  });
+});

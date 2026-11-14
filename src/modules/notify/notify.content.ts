@@ -32,6 +32,10 @@ export type Content = {
 };
 
 const num = (v: unknown) => (typeof v === 'number' ? v : 0);
+const timeText = (v: unknown) =>
+  typeof v === 'string' && !Number.isNaN(Date.parse(v))
+    ? new Date(v).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) + ' IST'
+    : '';
 const dateText = (v: unknown) =>
   typeof v === 'string' && !Number.isNaN(Date.parse(v))
     ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
@@ -78,6 +82,17 @@ export function buildContent(c: ContentCtx): Content {
         subject: `Your auction "${c.auctionTitle}" sold for ${finalBid}`,
         template: 'auction-sold',
         templateData: { ...base, finalBid, commission, winner: c.counterparty ?? null },
+      };
+    }
+    case 'ending-soon': {
+      const endsAt = timeText(c.data.endTime);
+      return {
+        title: 'Auction ending soon',
+        body: `"${c.auctionTitle}" on your watchlist ends within the hour${endsAt ? ` (${endsAt})` : ''}.`,
+        url: auctionPath,
+        subject: `Ending soon: "${c.auctionTitle}"`,
+        template: 'ending-soon',
+        templateData: { ...base, endsAt },
       };
     }
     case 'auction-unsold':

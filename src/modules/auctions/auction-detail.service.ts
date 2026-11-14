@@ -5,7 +5,7 @@ import { toBidDTO } from './bidding.rules';
 const RECENT_BIDS = 5;
 const contactSelect = { name: true, email: true, phone: true } as const;
 
-type Db = Pick<typeof prisma, 'bid' | 'member'>;
+type Db = Pick<typeof prisma, 'bid' | 'member' | 'watchlist'>;
 
 /**
  * AuctionDetail with the viewer-specific extras: latest 5 bids (masked),
@@ -13,7 +13,7 @@ type Db = Pick<typeof prisma, 'bid' | 'member'>;
  * seller, seller sees the winner, everyone else null).
  */
 export async function buildAuctionDetail(row: AuctionRow, viewerId: string | null, now = new Date(), db: Db = prisma) {
-  const [bids, mine, contact] = await Promise.all([
+  const [bids, mine, contact, watcherCount, watching] = await Promise.all([
     db.bid.findMany({
       where: { auctionId: row.id },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -24,12 +24,21 @@ export async function buildAuctionDetail(row: AuctionRow, viewerId: string | nul
       ? db.bid.aggregate({ where: { auctionId: row.id, bidderId: viewerId }, _max: { amountPaise: true } })
       : Promise.resolve(null),
     findContact(row, viewerId, now, db),
+    db.watchlist.count({ where: { auctionId: row.id } }),
+    viewerId
+      ? db.watchlist.findUnique({
+          where: { memberId_auctionId: { memberId: viewerId, auctionId: row.id } },
+          select: { memberId: true },
+        })
+      : Promise.resolve(null),
   ]);
   return {
     ...toDetail(row, now),
     recentBids: bids.map((b) => toBidDTO(b, viewerId)),
     myHighestBidPaise: mine?._max.amountPaise ?? null,
     contact,
+    isWatching: !!watching,
+    watcherCount,
   };
 }
 

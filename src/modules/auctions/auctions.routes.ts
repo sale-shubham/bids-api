@@ -20,6 +20,7 @@ const seller = [authenticate, requireRole('AUCTIONEER', 'SUPER_ADMIN'), requireA
 router.get('/', validate(listQuerySchema, 'query'), asyncHandler(ctrl.list));
 router.get('/home', asyncHandler(ctrl.home));
 router.get('/categories', asyncHandler(ctrl.categories));
+router.get('/sitemap', asyncHandler(ctrl.sitemap));
 router.get('/mine', ...seller, validate(mineQuerySchema, 'query'), asyncHandler(ctrl.mine));
 router.post('/', ...seller, auctionWriteLimiter, validate(createAuctionSchema), asyncHandler(ctrl.create));
 

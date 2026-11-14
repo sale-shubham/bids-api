@@ -19,11 +19,20 @@ export async function getMemberDto(memberId: string) {
   return { ...member, deviceLimit: await getMaxDevicesForRole(member.role) };
 }
 
-export async function getPublicProfile(memberId: string) {
-  return prisma.member.findFirst({
+export async function getPublicProfile(memberId: string, now = new Date()) {
+  const member = await prisma.member.findFirst({
     where: { id: memberId, isActive: true },
     select: memberPublicSelect,
   });
+  if (!member) return null;
+  const { statusWhere } = await import('@/modules/auctions/auctions.query');
+  const [auctionsSold, activeAuctions] = await Promise.all([
+    prisma.auction.count({
+      where: { AND: [{ sellerId: memberId }, statusWhere('ended', now), { bidCount: { gt: 0 } }] },
+    }),
+    prisma.auction.count({ where: { AND: [{ sellerId: memberId }, statusWhere('live', now)] } }),
+  ]);
+  return { ...member, auctionsSold, activeAuctions };
 }
 
 // Base URLs an avatar may come from: our CloudFront, or the bucket's S3 URL.

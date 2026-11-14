@@ -26,7 +26,7 @@ const getSes = () =>
 // (HTML + plain text) and sends it via SES SendEmailCommand (no SES-native
 // templates, no attachments).
 export class SesEmail implements EmailProvider {
-  async send({ to, subject, template, data }: SendEmailInput): Promise<void> {
+  async send({ to, subject, template, data, replyTo }: SendEmailInput): Promise<void> {
     const { html, text } = await renderEmail(template, data);
 
     try {
@@ -35,6 +35,7 @@ export class SesEmail implements EmailProvider {
         new SendEmailCommand({
           Source: `${env.email.fromName} <${env.email.fromAddress}>`,
           Destination: { ToAddresses: [to] },
+          ...(replyTo ? { ReplyToAddresses: [replyTo] } : {}),
           Message: {
             Subject: { Data: subject, Charset: 'UTF-8' },
             Body: { Html: { Data: html, Charset: 'UTF-8' }, Text: { Data: text, Charset: 'UTF-8' } },

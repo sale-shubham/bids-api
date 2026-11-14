@@ -144,3 +144,15 @@ export const wsGuestLimiter = rateLimit({
   keyGenerator: (req) => ipKeyGenerator(req.ip ?? 'unknown'),
   message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many requests, try later' } },
 });
+
+// Public contact form: 5 messages per hour per IP (each one sends an email).
+export const contactLimiter = rateLimit({
+  store: new PgRateLimitStore('rl:contact:'),
+  passOnStoreError: true,
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? 'unknown'),
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many messages, try again later' } },
+});

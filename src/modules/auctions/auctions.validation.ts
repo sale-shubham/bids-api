@@ -106,6 +106,7 @@ export const listQuerySchema = Joi.object({
     .valid(...AUCTION_STATUSES)
     .default('live'),
   category: Joi.string().trim().max(100),
+  sellerId: Joi.string().trim().max(60),
   condition: Joi.string().valid('NEW', 'USED'),
   q: Joi.string().trim().allow('').max(100),
   minPrice: Joi.number().integer().min(0),
@@ -138,6 +139,7 @@ export type UpdateAuctionInput = Partial<CreateAuctionInput>;
 export type ListQuery = {
   status: 'live' | 'upcoming' | 'ended';
   category?: string;
+  sellerId?: string;
   condition?: 'NEW' | 'USED';
   q?: string;
   minPrice?: number;

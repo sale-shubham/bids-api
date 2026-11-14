@@ -7,6 +7,8 @@ export interface SendEmailInput {
   subject: string;
   template: string;
   data?: Record<string, unknown>;
+  // Optional Reply-To address (contact form: reply goes to the sender).
+  replyTo?: string;
 }
 
 export interface EmailProvider {

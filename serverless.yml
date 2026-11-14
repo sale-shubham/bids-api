@@ -208,6 +208,13 @@ functions:
     timeout: 60
     events:
       - schedule: rate(1 minute)
+  endingSoon:
+    name: ${self:service}${sls:stage}-ending-soon
+    handler: dist/index.endingSoonHandler
+    description: Every 15 min - notify watchers of auctions ending within the hour (once per watcher per auction).
+    timeout: 60
+    events:
+      - schedule: rate(15 minutes)
   notifyWorker:
     name: ${self:service}${sls:stage}-notify-worker
     handler: dist/index.notifyWorkerHandler

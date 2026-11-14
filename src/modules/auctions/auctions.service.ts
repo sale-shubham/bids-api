@@ -1,7 +1,9 @@
 import { prisma } from '@/core/prisma/client';
 import { AppError } from '@/core/errors/AppError';
+import { logger } from '@/core/logger/logger';
 import { offsetArgs, pageMeta } from '@/core/http/pagination';
 import { buildAuctionDetail } from './auction-detail.service';
+import { resetEndingSoon } from '@/modules/watchlist/watchlist.service';
 import { getSetting } from '@/modules/settings/settings.service';
 import { auctionInclude, effectiveStatus, toCard, toDetail, type AuctionRow } from './auctions.serializer';
 import { effectivePrice, listWhere, orderFor, statusWhere } from './auctions.query';
@@ -109,6 +111,25 @@ export async function getAuction(id: string, viewer: Actor | undefined, now = ne
   return buildAuctionDetail(row, viewer?.sub ?? null, now);
 }
 
+const SITEMAP_MAX = 5000;
+const SITEMAP_ENDED_DAYS = 90;
+
+/** Live + upcoming + ended in the last 90 days (cancelled excluded), newest update first. */
+export async function sitemapItems(now = new Date()) {
+  const since = new Date(now.getTime() - SITEMAP_ENDED_DAYS * 24 * 60 * 60 * 1000);
+  const rows = await prisma.auction.findMany({
+    where: {
+      deletedAt: null,
+      status: { not: 'CANCELLED' },
+      endTime: { gt: since }, // covers live + upcoming + ended in the window
+    },
+    select: { id: true, updatedAt: true },
+    orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+    take: SITEMAP_MAX,
+  });
+  return { items: rows.map((r) => ({ id: r.id, updatedAt: r.updatedAt.toISOString() })) };
+}
+
 export async function listMine(sellerId: string, q: MineQuery, now = new Date()) {
   const where = { AND: [{ sellerId }, statusWhere(q.status, now)] };
   const { skip, take } = offsetArgs(q);
@@ -203,6 +224,7 @@ export async function updateAuction(id: string, actor: Actor, input: UpdateAucti
   // bidCount: 0 in the WHERE closes the race with a bid landing after the check above.
   const { count } = await prisma.auction.updateMany({ where: { id, bidCount: 0, deletedAt: null }, data });
   if (count === 0) throw hasBids();
+  if (timesChanged) await resetEndingSoon(id);
   const row = (await prisma.auction.findUnique({ where: { id }, include: auctionInclude })) as AuctionRow;
   return toDetail(row, now);
 }
@@ -216,6 +238,7 @@ export async function deleteAuction(id: string, actor: Actor, now = new Date()) 
   const data = { status: 'CANCELLED' as const, deletedAt: now };
   if (isAdmin) {
     await prisma.auction.update({ where: { id }, data });
+    if (row.bidCount > 0) logger.info({ auctionId: id, adminId: actor.sub, bidCount: row.bidCount }, 'auction cancelled by admin with bids');
   } else {
     const { count } = await prisma.auction.updateMany({ where: { id, bidCount: 0 }, data });
     if (count === 0) throw hasBids();
@@ -254,6 +277,7 @@ export async function republishAuction(
   if (count === 0) {
     throw new AppError(409, 'AUCTION_NOT_REPUBLISHABLE', 'Only ended auctions with no bids can be republished');
   }
+  await resetEndingSoon(id);
   const row = (await prisma.auction.findUnique({ where: { id }, include: auctionInclude })) as AuctionRow;
   return toDetail(row, now);
 }

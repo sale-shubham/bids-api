@@ -35,6 +35,7 @@ export function priceFilter(minPrice?: number, maxPrice?: number): Where | undef
 export function listWhere(q: ListQuery, now: Date): Where {
   const and: Where[] = [statusWhere(q.status, now)];
   if (q.category) and.push({ category: q.category });
+  if (q.sellerId) and.push({ sellerId: q.sellerId });
   if (q.condition) and.push({ condition: q.condition });
   if (q.q) and.push({ title: { contains: q.q, mode: 'insensitive' } });
   const price = priceFilter(q.minPrice, q.maxPrice);

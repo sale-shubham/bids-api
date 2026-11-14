@@ -64,6 +64,15 @@ export const commissionReminderHandler = async () => {
   return res;
 };
 
+// Scheduled every 15 min (serverless.yml functions.endingSoon): notify watchers of
+// auctions ending within the hour. One notification per watcher per auction.
+export const endingSoonHandler = async () => {
+  const { runEndingSoon } = await import('./src/modules/watchlist/watchlist.service.ts');
+  const res = await runEndingSoon();
+  if (res.notified) logger.info(res, 'ending soon run');
+  return res;
+};
+
 // SQS NotifyQueue worker (ReportBatchItemFailures): returns the failed
 // messageIds so only those are retried / sent to the DLQ.
 export const notifyWorkerHandler = async (event) => {
@@ -113,10 +122,25 @@ if (env.nodeEnv !== 'production') {
   void runReminders();
   const reminderTimer = setInterval(runReminders, 6 * 60 * 60 * 1000);
 
+  // No EventBridge locally: ending-soon watchlist reminders every 5 min.
+  let endingSoon = false;
+  const endingSoonTimer = setInterval(async () => {
+    if (endingSoon) return;
+    endingSoon = true;
+    try {
+      await endingSoonHandler();
+    } catch (err) {
+      logger.error({ err }, 'ending soon run failed');
+    } finally {
+      endingSoon = false;
+    }
+  }, 5 * 60 * 1000);
+
   const shutdown = async (signal) => {
     logger.info(`${signal} received, shutting down`);
     clearInterval(closeTimer);
     clearInterval(reminderTimer);
+    clearInterval(endingSoonTimer);
     server.close();
     await prisma.$disconnect();
     process.exit(0);

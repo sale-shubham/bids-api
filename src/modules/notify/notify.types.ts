@@ -1,4 +1,4 @@
-export const NOTIFY_TYPES = ['outbid', 'auction-won', 'auction-sold', 'auction-unsold', 'commission-due', 'commission-paid'] as const;
+export const NOTIFY_TYPES = ['outbid', 'auction-won', 'auction-sold', 'auction-unsold', 'commission-due', 'commission-paid', 'ending-soon'] as const;
 export type NotifyType = (typeof NOTIFY_TYPES)[number];
 
 export interface NotifyMessage {
