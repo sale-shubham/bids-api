@@ -17,6 +17,10 @@ import { env } from '@/core/config/env';
 // over several warm containers would get the limit times that many. A DB error
 // fails open (passOnStoreError) rather than 500ing a login. apiLimiter is a
 // cheap anti-hammering guard on ordinary writes and stays in-memory.
+// Lower-cased + trimmed email from the body (same normalisation as the
+// validation layer), so case variants can't dodge a per-email limit.
+const bodyEmail = (req: { body?: { email?: unknown } }) => String(req.body?.email ?? '').trim().toLowerCase();
+
 export const authLimiter = rateLimit({
   store: new PgRateLimitStore('rl:auth:'),
   passOnStoreError: true,
@@ -36,7 +40,7 @@ export const otpLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? 'unknown')}:${req.body?.email ?? ''}`,
+  keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? 'unknown')}:${bodyEmail(req)}`,
   message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many OTP requests, try later' } },
 });
 
@@ -53,6 +57,18 @@ export const otpIpLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => ipKeyGenerator(req.ip ?? 'unknown'),
   message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many OTP requests, try later' } },
+});
+
+// Login brute-force guard, per email (all IPs). Stacked with authLimiter (per IP).
+export const loginEmailLimiter = rateLimit({
+  store: new PgRateLimitStore('rl:login-email:'),
+  passOnStoreError: true,
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => bodyEmail(req) || 'none',
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many login attempts, try later' } },
 });
 
 export const sensitiveLimiter = rateLimit({

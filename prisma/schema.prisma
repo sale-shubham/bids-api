@@ -1,5 +1,4 @@
-// NobleBid — Prisma schema (Phase 0: generic models only).
-// Auction / Bid / Watchlist / Commission models arrive in Phase 1.
+// NobleBid — Prisma schema.
 //  - Member = bidder, auctioneer or super admin. Login is email + password;
 //    email OTP is used only to verify the email at signup and for forgot-password.
 //  - Money amounts are integer paise.
@@ -33,6 +32,24 @@ enum PaymentStatus {
   FAILED
 }
 
+enum AuctionStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+enum ItemCondition {
+  NEW
+  USED
+}
+
+enum CommissionStatus {
+  DUE
+  PAID
+  WAIVED
+}
+
 enum OtpChannel {
   EMAIL
 }
@@ -47,29 +64,36 @@ enum OtpPurpose {
 // ----------------------------------------------------------------------------
 
 model Member {
-  id                     String    @id @default(cuid())
-  email                  String    @unique
-  name                   String
-  passwordHash           String
-  phone                  String?
-  avatarUrl              String?
-  address                String?
-  role                   Role      @default(BIDDER)
-  isActive               Boolean   @default(true)
-  emailVerifiedAt        DateTime?
+  id                    String    @id @default(cuid())
+  email                 String    @unique
+  name                  String
+  passwordHash          String
+  phone                 String?
+  avatarUrl             String?
+  address               String?
+  role                  Role      @default(BIDDER)
+  isActive              Boolean   @default(true)
+  emailVerifiedAt       DateTime?
   // Commission the auctioneer owes the platform for sold auctions (paise).
-  unpaidCommissionPaise  Int       @default(0)
+  unpaidCommissionPaise Int       @default(0)
   // Bidder stats.
-  auctionsWon            Int       @default(0)
-  moneySpentPaise        Int       @default(0)
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  auctionsWon           Int       @default(0)
+  moneySpentPaise       Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   sessions          Session[]
   paymentOrders     PaymentOrder[]
   wsConnections     WsConnection[]
   wsTickets         WsTicket[]
   pushSubscriptions PushSubscription[]
+
+  auctionsSelling Auction[]    @relation("AuctionSeller")
+  auctionsLeading Auction[]    @relation("AuctionHighestBidder")
+  auctionsWonList Auction[]    @relation("AuctionWinner")
+  bids            Bid[]
+  watchlist       Watchlist[]
+  commissions     Commission[]
 
   @@index([role])
 }
@@ -116,6 +140,88 @@ model OtpChallenge {
 
   @@index([identifier, channel, purpose, createdAt])
   @@index([expiresAt])
+}
+
+// ----------------------------------------------------------------------------
+// AUCTIONS, BIDS, WATCHLIST, COMMISSIONS (money = integer paise)
+// ----------------------------------------------------------------------------
+
+model Auction {
+  id                String        @id @default(cuid())
+  title             String
+  description       String // rich text, sanitised before save
+  category          String
+  condition         ItemCondition
+  images            String[] // CloudFront URLs, first = cover
+  startingBidPaise  Int
+  minIncrementPaise Int
+  currentBidPaise   Int           @default(0)
+  bidCount          Int           @default(0)
+  startTime         DateTime
+  endTime           DateTime
+  status            AuctionStatus @default(SCHEDULED)
+  seller            Member        @relation("AuctionSeller", fields: [sellerId], references: [id])
+  sellerId          String
+  highestBidder     Member?       @relation("AuctionHighestBidder", fields: [highestBidderId], references: [id])
+  highestBidderId   String?
+  winner            Member?       @relation("AuctionWinner", fields: [winnerId], references: [id])
+  winnerId          String?
+  endedAt           DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  deletedAt         DateTime?
+
+  bids       Bid[]
+  watchlist  Watchlist[]
+  commission Commission?
+
+  @@index([status, endTime])
+  @@index([status, startTime])
+  @@index([sellerId])
+  @@index([category, status])
+}
+
+model Bid {
+  id          String   @id @default(cuid())
+  auction     Auction  @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  auctionId   String
+  bidder      Member   @relation(fields: [bidderId], references: [id])
+  bidderId    String
+  amountPaise Int
+  createdAt   DateTime @default(now())
+
+  @@index([auctionId, amountPaise(sort: Desc)])
+  @@index([bidderId, createdAt])
+}
+
+model Watchlist {
+  member               Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId             String
+  auction              Auction   @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  auctionId            String
+  createdAt            DateTime  @default(now())
+  endingSoonNotifiedAt DateTime?
+
+  @@id([memberId, auctionId])
+}
+
+model Commission {
+  id             String           @id @default(cuid())
+  auction        Auction          @relation(fields: [auctionId], references: [id])
+  auctionId      String           @unique
+  seller         Member           @relation(fields: [sellerId], references: [id])
+  sellerId       String
+  rateBps        Int // 500 = 5%
+  amountPaise    Int
+  status         CommissionStatus @default(DUE)
+  dueAt          DateTime
+  paidAt         DateTime?
+  paymentOrder   PaymentOrder?    @relation(fields: [paymentOrderId], references: [id])
+  paymentOrderId String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([sellerId, status])
 }
 
 // ----------------------------------------------------------------------------
@@ -194,6 +300,8 @@ model PaymentOrder {
   idempotencyKey String        @unique
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+
+  commissions Commission[]
 
   @@index([memberId])
 }

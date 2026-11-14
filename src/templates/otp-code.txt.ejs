@@ -1,0 +1,19 @@
+<% const isReset = purpose === 'PASSWORD_RESET'; -%>
+<%= fromName %> - <%= isReset ? 'Reset your password' : 'Verify your email' %>
+
+<% if (isReset) { -%>
+Use this code to reset your password:
+<% } else { -%>
+Use this code to verify your email and finish creating your account:
+<% } -%>
+
+    <%= code %>
+
+This code is valid for <%= expiryMinutes %> minute<%= expiryMinutes === 1 ? '' : 's' %>. Do not share it with anyone.
+<% if (isReset) { -%>
+If you did not ask to reset your password, ignore this email - your password will not change.
+<% } else { -%>
+If you did not create an account, ignore this email.
+<% } -%>
+
+Support: <%= frontendUrl %>/contact

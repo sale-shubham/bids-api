@@ -37,7 +37,7 @@ vi.mock('@/core/prisma/client', () => ({
 }));
 
 const load = () => import('./push.service');
-const payload = { type: 'dm:new-message' as const, conversationId: 'c1', senderName: 'Asha', body: 'hi', badgeCount: 3 };
+const payload = { type: 'bid.outbid', auctionId: 'a1', amountPaise: 150000 };
 const seed = (id: string, memberId: string) =>
   rows.push({ id, memberId, sessionId: 's1', endpoint: `https://push.example.com/${id}`, p256dh: 'k', auth: 'a', userAgent: null });
 
