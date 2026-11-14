@@ -3,7 +3,7 @@
 REST API for NobleBid, an online auction platform (bidders, auctioneers, super admin).
 Stack: Express 5 + TypeScript + Prisma 7 (adapter `@prisma/adapter-pg`, generated client in `src/generated/prisma/`) + PostgreSQL, deployed to AWS Lambda (ap-south-1) via `@codegenie/serverless-express` + Serverless v4. Package manager: `npm` (Node 24).
 
-Current state: **Phase 3 backend (bidding, auction closing, notifications)** on top of Phase 2 (auctions) on top of Phase 1 — full schema (Auction/Bid/Watchlist/Commission), email+password auth, members, uploads. Auction/bid endpoints arrive next. Plan lives in `../plan/` (`02-bids-api.md`, `05-phases-checklist.md`).
+Current state: **Phase 5 backend (commission payments via Razorpay: `readme/flows/payments.md`)** on top of **Phase 3 backend (bidding, auction closing, notifications)** on top of Phase 2 (auctions) on top of Phase 1 — full schema (Auction/Bid/Watchlist/Commission), email+password auth, members, uploads. Auction/bid endpoints arrive next. Plan lives in `../plan/` (`02-bids-api.md`, `05-phases-checklist.md`).
 
 ## Rules
 
@@ -31,4 +31,4 @@ Current state: **Phase 3 backend (bidding, auction closing, notifications)** on 
 | `readme/methods/*.md` | validation, prisma, security, http conventions (partly carried over from the P2X codebase; sections that mention removed features are stale) |
 | `docs/DOC_SYNC.md` | Which docs to update for which change |
 
-Flow docs: `readme/flows/auth.md` (auth, members, uploads), `readme/flows/auctions.md` (auctions), `readme/flows/bidding.md` (bids, closing, anti-sniping), `readme/flows/notifications.md` (notify pipeline, in-app inbox), `readme/flows/websocket.md` (live updates). Others are deferred.
+Flow docs: `readme/flows/auth.md` (auth, members, uploads), `readme/flows/auctions.md` (auctions), `readme/flows/bidding.md` (bids, closing, anti-sniping), `readme/flows/notifications.md` (notify pipeline, in-app inbox), `readme/flows/payments.md` (commission payments), `readme/flows/websocket.md` (live updates). Others are deferred.

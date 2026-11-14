@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import { asyncHandler } from '@/core/middleware/asyncHandler';
+import { authenticate, requireActiveMember } from '@/core/middleware/auth';
+import { validate } from '@/core/middleware/validate';
+import { verifySchema } from './payments.validation';
 
 // Handlers lazy-load the payment service + response helpers via dynamic import()
 // (defers init -> tighter Lambda cold start). Routes stay statically registered.
@@ -21,6 +24,17 @@ router.post(
   }),
 );
 
-// TODO(Phase 1+): authenticated routes — POST /commissions/:id/checkout, POST /payments/verify.
+// Browser callback after Razorpay Checkout: verify signature + gateway payment, settle.
+router.post(
+  '/verify',
+  authenticate,
+  requireActiveMember,
+  validate(verifySchema),
+  asyncHandler(async (req, res) => {
+    const { ok } = await import('@/core/http/response');
+    const svc = await import('./payments.service');
+    return ok(res, await svc.verifyPayment(req.user!.sub, req.body));
+  }),
+);
 
 export default router;

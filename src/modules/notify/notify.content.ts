@@ -89,6 +89,18 @@ export function buildContent(c: ContentCtx): Content {
         template: 'auction-unsold',
         templateData: base,
       };
+    case 'commission-paid': {
+      const commission = formatInr(num(c.data.commissionPaise));
+      const commissionPath = '/sell/commissions';
+      return {
+        title: 'Commission payment received',
+        body: `We received your ${commission} commission payment for "${c.auctionTitle}". Thank you.`,
+        url: commissionPath,
+        subject: `Commission payment of ${commission} received`,
+        template: 'commission-paid',
+        templateData: { ...base, commission, commissionUrl: `${env.app.url}${commissionPath}` },
+      };
+    }
     case 'commission-due': {
       const commission = formatInr(num(c.data.commissionPaise));
       const commissionPath = '/sell/commissions';

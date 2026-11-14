@@ -41,7 +41,6 @@ export const handler = async (event, context) => {
 // rows, stale Session rows, stale WS rows, expired rate-limit buckets).
 // Separate Lambda function (index.retentionPurgeHandler); see serverless.yml
 // functions.retentionPurge.
-// TODO(Phase 5+): endingSoonHandler, commissionReminderHandler.
 export const retentionPurgeHandler = async () => {
   const { runRetentionPurge } = await import('./src/modules/admin/retention/admin-retention.service.ts');
   return runRetentionPurge();
@@ -54,6 +53,15 @@ export const closeAuctionsHandler = async () => {
   const counts = await runAuctionClose();
   if (counts.started || counts.ended) logger.info(counts, 'auction close run');
   return counts;
+};
+
+// Scheduled daily (serverless.yml functions.commissionReminder): remind sellers of
+// DUE commissions that are overdue or older than 3 days. One reminder per commission per day.
+export const commissionReminderHandler = async () => {
+  const { runCommissionReminders } = await import('./src/modules/commissions/commissions.service.ts');
+  const res = await runCommissionReminders();
+  if (res.reminded) logger.info(res, 'commission reminders run');
+  return res;
 };
 
 // SQS NotifyQueue worker (ReportBatchItemFailures): returns the failed
@@ -93,9 +101,22 @@ if (env.nodeEnv !== 'production') {
     }
   }, 60_000);
 
+  // No EventBridge locally: commission reminders once at startup, then every 6 h
+  // (per-day dedupeKey keeps it to one reminder per commission per day).
+  const runReminders = async () => {
+    try {
+      await commissionReminderHandler();
+    } catch (err) {
+      logger.error({ err }, 'commission reminder run failed');
+    }
+  };
+  void runReminders();
+  const reminderTimer = setInterval(runReminders, 6 * 60 * 60 * 1000);
+
   const shutdown = async (signal) => {
     logger.info(`${signal} received, shutting down`);
     clearInterval(closeTimer);
+    clearInterval(reminderTimer);
     server.close();
     await prisma.$disconnect();
     process.exit(0);

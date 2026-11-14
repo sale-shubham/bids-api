@@ -219,7 +219,13 @@ functions:
           arn: !GetAtt NotifyQueue.Arn
           batchSize: 10
           functionResponseType: ReportBatchItemFailures
-  # TODO(Phase 5+): endingSoon / commissionReminder functions.
+  commissionReminder:
+    name: ${self:service}${sls:stage}-commission-reminder
+    handler: dist/index.commissionReminderHandler
+    description: Daily - remind sellers of overdue / 3-day-old DUE commissions (one reminder per commission per day).
+    timeout: 60
+    events:
+      - schedule: rate(1 day)
 
 resources:
   Conditions:

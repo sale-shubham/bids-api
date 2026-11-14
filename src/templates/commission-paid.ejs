@@ -1,0 +1,9 @@
+<%- include('_head', { heading: 'Commission payment received', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  We received your commission payment of <strong><%= commission %></strong> for <strong><%= auctionTitle %></strong>. Thank you.
+                </p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  If you have no other commission outstanding, you can list new auctions again.
+                </p>
+<%- include('_foot', { ctaUrl: commissionUrl, ctaLabel: 'View commissions', frontendUrl }) %>
