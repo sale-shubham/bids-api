@@ -22,3 +22,6 @@ src/generated/
 
 # Per-stage deploy env files (real values) - only the *.example files are committed
 deploy/*.env
+
+# Test coverage output
+coverage/

@@ -20,5 +20,13 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
+    // Report only: no thresholds, so coverage never fails `npm run check`.
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      reportsDirectory: 'coverage',
+      include: ['src/**/*.ts'],
+      exclude: ['src/generated/**', 'src/**/*.test.ts', 'src/__tests__/**', 'src/**/*.d.ts'],
+    },
   },
 });
