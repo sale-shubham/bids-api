@@ -1,4 +1,4 @@
-# Project structure — bids-api (Phase 1: auth)
+# Project structure — bids-api (Phase 2: auctions)
 
 ```
 bids-api/
@@ -6,7 +6,7 @@ bids-api/
 ├── serverless.yml            # service bids-api: HTTP API, WebSocket API, S3+CloudFront, NotifyQueue/NotifyDLQ, alarms
 ├── prisma/schema.prisma      # Member, Session, OtpChallenge, Auction, Bid, Watchlist, Commission,
 │                             #   WsConnection, WsTicket, PushSubscription, RateLimitBucket, PaymentOrder,
-│                             #   WebhookEvent, AppSetting (+ migrations/, seed.ts)
+│                             #   WebhookEvent, AppSetting (+ migrations/, seed.ts, seed-demo.ts)
 ├── prisma.config.ts          # Prisma CLI config (DIRECT_URL)
 ├── scripts/build-lambda.mjs  # esbuild bundle (CI only)
 ├── src/
@@ -19,13 +19,15 @@ bids-api/
 │   └── modules/
 │       ├── auth/             # signup/verify/login/password flows, token, session, device, otp-challenge, password rule
 │       ├── members/          # GET/PATCH /members/me, GET /members/:id/public, member.select.ts
-│       ├── uploads/          # POST /uploads/presign (auctions, avatars; images, 5 MB)
+│       ├── uploads/          # POST /uploads/presign (auctions, avatars; images, 5 MB; size + type signed into the PUT)
+│       ├── auctions/         # catalogue, home, categories, detail, create/patch/delete/republish, mine
+│       │                     #   (routes, controller, service, validation + sanitiser, serializer + effectiveStatus, query helpers)
 │       ├── push/             # Web Push subscribe/unsubscribe, sendPushToMember
 │       ├── ws/               # WebSocket ticket + connect/disconnect, pushToMember
 │       ├── settings/         # app settings, legal pages, device limit
 │       ├── payments/         # Razorpay webhook (checkout/verify: Phase 1+)
 │       └── admin/            # members, dashboard, retention, settings
-├── readme/                   # ARCHITECTURE.md, methods/, flows/auth.md
+├── readme/                   # ARCHITECTURE.md, methods/, flows/auth.md, flows/auctions.md
 ├── docs/DOC_SYNC.md
 └── .claude/ .husky/ .github/workflows/
 ```
