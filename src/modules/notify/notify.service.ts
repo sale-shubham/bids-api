@@ -1,6 +1,7 @@
 import { prisma } from '@/core/prisma/client';
 import { logger } from '@/core/logger/logger';
 import { emailProvider } from '@/providers/email';
+import { pushToMember } from '@/modules/ws/ws.service';
 import { sendPushToMember } from '@/modules/push/push.service';
 import { buildContent, type Person } from './notify.content';
 import type { NotifyMessage } from './notify.types';
@@ -82,8 +83,9 @@ export async function processNotification(
       if (opts.rethrowEmailErrors) throw err;
     }
 
+    let notificationId: string;
     try {
-      await prisma.notification.create({
+      const row = await prisma.notification.create({
         data: {
           memberId: member.id,
           type: msg.type,
@@ -95,11 +97,13 @@ export async function processNotification(
         },
         select: { id: true },
       });
+      notificationId = row.id;
     } catch (err) {
       if (isUniqueViolation(err)) return 'duplicate';
       throw err;
     }
 
+    await pushToMember(member.id, { type: 'notification.new', notificationId }); // never throws
     await sendPushToMember(member.id, { type: msg.type, title: content.title, body: content.body, url: content.url });
     return 'sent';
   } catch (err) {

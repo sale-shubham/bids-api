@@ -131,3 +131,16 @@ export const bidMemberLimiter = rateLimit({
   keyGenerator: (req) => req.user?.sub ?? ipKeyGenerator(req.ip ?? 'unknown'),
   message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many bids, try again shortly' } },
 });
+
+// Public guest WebSocket tickets: per-IP, 30/min (a reconnect loop must not
+// be able to mint unlimited rows).
+export const wsGuestLimiter = rateLimit({
+  store: new PgRateLimitStore('rl:ws-guest:'),
+  passOnStoreError: true,
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? 'unknown'),
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many requests, try later' } },
+});

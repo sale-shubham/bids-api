@@ -14,6 +14,8 @@ vi.mock('@/core/config/env', () => ({
   env: { app: { url: 'https://app.test' }, email: { fromName: 'NobleBid', logoUrl: '' } },
 }));
 vi.mock('@/providers/email', () => ({ emailProvider: { send } }));
+const wsPush = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('@/modules/ws/ws.service', () => ({ pushToMember: wsPush }));
 vi.mock('@/modules/push/push.service', () => ({ sendPushToMember: push }));
 
 import { processNotification } from './notify.service';
@@ -44,6 +46,7 @@ describe('processNotification', () => {
   it('sends email, stores the row, pushes', async () => {
     expect(await processNotification(msg)).toBe('sent');
     expect(send).toHaveBeenCalledOnce();
+    expect(wsPush).toHaveBeenCalledWith('m1', { type: 'notification.new', notificationId: 'n1' });
     expect(db.notification.create.mock.calls[0][0].data).toMatchObject({
       memberId: 'm1',
       type: 'outbid',

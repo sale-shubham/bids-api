@@ -31,4 +31,4 @@ Current state: **Phase 3 backend (bidding, auction closing, notifications)** on 
 | `readme/methods/*.md` | validation, prisma, security, http conventions (partly carried over from the P2X codebase; sections that mention removed features are stale) |
 | `docs/DOC_SYNC.md` | Which docs to update for which change |
 
-Flow docs: `readme/flows/auth.md` (auth, members, uploads), `readme/flows/auctions.md` (auctions), `readme/flows/bidding.md` (bids, closing, anti-sniping), `readme/flows/notifications.md` (notify pipeline, in-app inbox). Others are deferred.
+Flow docs: `readme/flows/auth.md` (auth, members, uploads), `readme/flows/auctions.md` (auctions), `readme/flows/bidding.md` (bids, closing, anti-sniping), `readme/flows/notifications.md` (notify pipeline, in-app inbox), `readme/flows/websocket.md` (live updates). Others are deferred.

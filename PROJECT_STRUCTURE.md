@@ -29,11 +29,11 @@ bids-api/
 │       ├── notify/           # enqueueNotification (SQS or inline), processNotification, SQS worker, content
 │       ├── notifications/    # in-app inbox: list, unread-count, read, read-all
 │       ├── push/             # Web Push subscribe/unsubscribe, sendPushToMember
-│       ├── ws/               # WebSocket ticket + connect/disconnect, pushToMember
+│       ├── ws/               # WebSocket: tickets, connect/default/disconnect, room + member fan-out, ws.transport (lambda|local driver), ws.local (dev server)
 │       ├── settings/         # app settings, legal pages, device limit
 │       ├── payments/         # Razorpay webhook (checkout/verify: Phase 1+)
 │       └── admin/            # members, dashboard, retention, settings
-├── readme/                   # ARCHITECTURE.md, methods/, flows/auth.md, flows/auctions.md, flows/bidding.md, flows/notifications.md
+├── readme/                   # ARCHITECTURE.md, methods/, flows/auth.md, flows/auctions.md, flows/bidding.md, flows/notifications.md, flows/websocket.md
 ├── docs/DOC_SYNC.md
 └── .claude/ .husky/ .github/workflows/
 ```
