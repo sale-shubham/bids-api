@@ -1,0 +1,368 @@
+service: bids-api
+
+frameworkVersion: '4'
+
+# Built-in v4 esbuild off — scripts/build-lambda.mjs (npm run build:lambda)
+# bundles index.js + all .ts source into dist/index.mjs before `sls deploy`.
+build:
+  esbuild: false
+
+package:
+  # Ship only the esbuild bundle (~7MB) — no node_modules, no .ts source.
+  # @aws-sdk/* is left external and comes from the nodejs24.x runtime.
+  patterns:
+    - '!**'
+    - 'dist/**'
+
+provider:
+  name: aws
+  runtime: nodejs24.x
+  # Graviton — bundle is pure JS (pg, bcryptjs, Prisma wasm), no native deps.
+  architecture: arm64
+  region: ${env:AWS_REGION, 'ap-south-1'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 29
+  logRetentionInDays: 7
+  tracing:
+    lambda: true
+  httpApi:
+    name: ${self:service}${sls:stage}
+    # Only the custom domain (api.example.com) serves
+    # the API; the raw https://<id>.execute-api.<region>.amazonaws.com URL is
+    # switched off, so there is one public entry point to protect.
+    disableDefaultEndpoint: true
+    cors:
+      allowedOrigins:
+        - https://app.example.com
+        - https://dev-app.example.com
+        - http://localhost:3002
+      allowedMethods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      allowedHeaders:
+        - content-type
+        - authorization
+        - x-amz-date
+        - x-api-key
+        - x-amz-security-token
+        - x-amz-user-agent
+        - x-amzn-trace-id
+        - x-requested-with
+        - accept
+      # '*' is invalid with allowCredentials per the CORS spec — list explicitly.
+      exposedResponseHeaders:
+        - content-disposition
+        - content-length
+      allowCredentials: true
+      # Browsers call this API directly from the app (NEXT_PUBLIC_API_URL),
+      # so JSON/credentialed calls preflight. Cache the OPTIONS answer for 2h (Chrome's
+      # cap) instead of re-asking before every request. API Gateway answers preflights
+      # itself — no Lambda invoke either way.
+      maxAge: 7200
+    payload: '2.0'
+  environment:
+    NODE_ENV: ${env:NODE_ENV, 'production'}
+
+    # Database — pooler URL only (DIRECT_URL is for migrate CLI in CI, not Lambda runtime)
+    DATABASE_URL: ${env:DATABASE_URL}
+
+    # CORS / frontend
+    CORS_ORIGINS: ${env:CORS_ORIGINS}
+
+    # JWT
+    JWT_SECRET: ${env:JWT_SECRET}
+    REFRESH_TOKEN_SECRET: ${env:REFRESH_TOKEN_SECRET}
+
+    # Cookie (refresh token)
+    COOKIE_DOMAIN: ${env:COOKIE_DOMAIN}
+
+    # App
+    APP_URL: ${env:APP_URL, 'https://app.example.com'}
+    ADMIN_EMAIL: ${env:ADMIN_EMAIL, ''}
+    COMMISSION_RATE_BPS: ${env:COMMISSION_RATE_BPS, '500'}
+
+    # Storage — S3 only
+    AWS_CLOUDFRONT_URL: ${env:AWS_CLOUDFRONT_URL, ''}
+    AWS_BUCKET_NAME: ${env:AWS_BUCKET_NAME, ''}
+
+    # Payments — Razorpay
+    PAYMENT_DRIVER: ${env:PAYMENT_DRIVER, 'razorpay'}
+    RAZORPAY_KEY_ID: ${env:RAZORPAY_KEY_ID, ''}
+    RAZORPAY_KEY_SECRET: ${env:RAZORPAY_KEY_SECRET, ''}
+    RAZORPAY_WEBHOOK_SECRET: ${env:RAZORPAY_WEBHOOK_SECRET, ''}
+
+    # Email (OTP for signup verification + forgot-password). driver value itself
+    # decides behavior — 'stub' logs the fixed code server-side, 'ses' sends for real.
+    EMAIL_DRIVER: ${env:EMAIL_DRIVER, 'stub'}
+    OTP_STUB_CODE: ${env:OTP_STUB_CODE, '123456'}
+    # Per-IP OTP verify/send caps; empty = the code's production defaults (20).
+    # Only the dev stage sets them (see deploy_serverless.yml).
+    RATE_LIMIT_AUTH_MAX: ${env:RATE_LIMIT_AUTH_MAX, ''}
+    RATE_LIMIT_OTP_IP_MAX: ${env:RATE_LIMIT_OTP_IP_MAX, ''}
+    EMAIL_FROM: ${env:EMAIL_FROM, 'noreply@yourdomain.com'}
+    EMAIL_FROM_NAME: ${env:EMAIL_FROM_NAME, 'NobleBid'}
+    LOGO_URL: ${env:LOGO_URL, ''}
+
+
+    # Async notification queue (SQS). CloudFormation-resolved, not a manually-set
+    # var — see env.ts's notify.queueUrl. Empty locally = notifications sent inline.
+    NOTIFY_QUEUE_URL: !GetAtt NotifyQueue.QueueUrl
+
+    # Management-API endpoint for the WebSocket API below (`functions.api`'s
+    # websocket events) — ws.service.ts's pushToMember() posts frames here
+    # (https, even though clients connect via wss). `WebsocketsApi` is the
+    # exact logical id Serverless Framework 4 auto-generates for a function's
+    # `websocket:` events — confirmed by running `serverless package` and
+    # inspecting the synthesized template's Outputs.ServiceEndpointWebsocket
+    # (same construction, wss:// swapped for https://) before wiring this by
+    # hand, rather than guessing. CloudFormation-resolved, not a manually-set
+    # var — see env.ts's ws.apiEndpoint.
+    WS_API_ENDPOINT: !Sub 'https://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${sls:stage}'
+
+    # Web Push (app-icon badge + notification while the app is closed) — see
+    # env.ts's `push`.
+    # Unset keys disable push only; the WebSocket path above is unaffected.
+    VAPID_PUBLIC_KEY: ${env:VAPID_PUBLIC_KEY, ''}
+    VAPID_PRIVATE_KEY: ${env:VAPID_PRIVATE_KEY, ''}
+    VAPID_SUBJECT: ${env:VAPID_SUBJECT, ''}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:DeleteObject
+            - s3:ListBucket
+          Resource:
+            - 'arn:aws:s3:::${env:AWS_BUCKET_NAME}'
+            - 'arn:aws:s3:::${env:AWS_BUCKET_NAME}/*'
+        - Effect: Allow
+          Action:
+            - ses:SendEmail
+            - ses:SendRawEmail
+          Resource: '*'
+        - Effect: Allow
+          Action:
+            - xray:PutTraceSegments
+            - xray:PutTelemetryRecords
+          Resource: '*'
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+            - sqs:SendMessageBatch
+            - sqs:GetQueueUrl
+          Resource: !GetAtt NotifyQueue.Arn
+        # NOTE: no explicit execute-api:ManageConnections statement needed
+        # here for ws.service.ts's pushToMember() — Serverless Framework 4
+        # auto-adds one (broader than anything hand-written here,
+        # `arn:${AWS::Partition}:execute-api:*:*:*/@connections/*`) the
+        # moment any function declares `websocket:` events, confirmed by
+        # inspecting the synthesized template via `serverless package`
+        # before assuming it.
+
+functions:
+  api:
+    name: ${self:service}${sls:stage}
+    handler: dist/index.handler
+    tracing: true
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: '*'
+      # Keep-warm ping (replaces serverless-plugin-warmup — its path.join()-built
+      # package patterns and handler path break when deploying from Windows).
+      # index.handler short-circuits on `warmer: true` before serverless-express.
+      - schedule:
+          # 5 min: idle containers were recycled before a 10 min ping, so every
+          # ping was itself a cold start (1013/1039 invocations cold, Oct 2026).
+          rate: rate(5 minutes)
+          input:
+            warmer: true
+      # Real-time push — same Lambda/handler as the REST API above, fronted
+      # by a second, separate API Gateway (WebSocket, not HTTP). index.handler
+      # branches on event.requestContext.eventType to route these three to
+      # src/modules/ws/ws.service.ts instead of serverless-express.
+      - websocket:
+          route: $connect
+      - websocket:
+          route: $disconnect
+      - websocket:
+          route: $default
+  retentionPurge:
+    name: ${self:service}${sls:stage}-retention-purge
+    handler: dist/index.retentionPurgeHandler
+    description: Daily retention purge (expired OTP challenges, stale sessions, WS rows, rate-limit buckets).
+    timeout: 120
+    events:
+      - schedule: rate(1 day)
+  # TODO(Phase 5+): closeAuctions / endingSoon / commissionReminder / notifyWorker functions.
+
+resources:
+  Conditions:
+    HasAlertEmail: !Not [!Equals ["${env:ALERT_EMAIL, ''}", ""]]
+
+  # Whole-API throttle at API Gateway (HttpApiStage is the stage Serverless
+  # generates for provider.httpApi). Requests past it get a 429 from API
+  # Gateway before any Lambda runs — caps cost and load from a flood. Not per
+  # client; per-IP limits live in src/core/middleware/rateLimit.ts.
+  extensions:
+    HttpApiStage:
+      Properties:
+        DefaultRouteSettings:
+          ThrottlingRateLimit: 50
+          ThrottlingBurstLimit: 100
+
+  Resources:
+    # Abuse alarms, created only when ALERT_EMAIL is set (GitHub var
+    # ALERT_EMAIL / ALERT_EMAIL_PROD). Scoped to this stack's API + function —
+    # an AWS Budget would be account-wide, and the dev account is shared.
+    # AWS emails a confirmation link once; alarms stay silent until accepted.
+    AlertTopic:
+      Type: AWS::SNS::Topic
+      Condition: HasAlertEmail
+      Properties:
+        TopicName: ${self:service}-${sls:stage}-alerts
+        Subscription:
+          - Protocol: email
+            Endpoint: ${env:ALERT_EMAIL, ''}
+    ApiRequestSpikeAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Condition: HasAlertEmail
+      Properties:
+        AlarmName: ${self:service}-${sls:stage}-api-request-spike
+        AlarmDescription: HTTP API request volume far above normal — possible abuse or a client retry loop.
+        Namespace: AWS/ApiGateway
+        MetricName: Count
+        Dimensions:
+          - Name: ApiId
+            Value: !Ref HttpApi
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 3000
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: [!Ref AlertTopic]
+    Api5xxAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Condition: HasAlertEmail
+      Properties:
+        AlarmName: ${self:service}-${sls:stage}-api-5xx
+        AlarmDescription: The API is returning server errors (5xx) — Lambda failures, timeouts, or DB trouble.
+        Namespace: AWS/ApiGateway
+        MetricName: 5xx
+        Dimensions:
+          - Name: ApiId
+            Value: !Ref HttpApi
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 25
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: [!Ref AlertTopic]
+    # Async notification queue — see provider.environment.NOTIFY_QUEUE_URL.
+    NotifyQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}${sls:stage}-notify
+        VisibilityTimeout: 60
+        MessageRetentionPeriod: 86400
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt NotifyDLQ.Arn
+          maxReceiveCount: 3
+
+    NotifyDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}${sls:stage}-notify-dlq
+        MessageRetentionPeriod: 1209600
+
+    # App S3 bucket (holds uploads — auction images + avatars).
+    # Created by the stack if it does not exist; name comes from AWS_BUCKET_NAME
+    # (globally unique). Private + encrypted. Retain on stack delete so files aren't lost.
+    AppBucket:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Properties:
+        BucketName: ${env:AWS_BUCKET_NAME}
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+        # CORS so the browser can PUT directly to S3 via presigned URLs from the
+        # frontend (localhost in dev, the hosted domain in prod). The presigned URL
+        # is itself the auth (short-lived, signed) — origin is not the gatekeeper,
+        # so '*' is acceptable here. GET/HEAD allow direct reads if not via CloudFront.
+        CorsConfiguration:
+          CorsRules:
+            # '*' — presigned URL is the auth (short-lived, signed), origin is not the
+            # gatekeeper, so any origin may upload/read. See comment above.
+            - AllowedOrigins: ['*']
+              AllowedMethods: [GET, PUT, HEAD]
+              AllowedHeaders: ['*']
+              ExposedHeaders: [ETag]
+              MaxAge: 3000
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+
+    # OAC lets CloudFront read the private AppBucket directly (no public bucket ACL needed).
+    AppBucketOAC:
+      Type: AWS::CloudFront::OriginAccessControl
+      Properties:
+        OriginAccessControlConfig:
+          Name: ${self:service}-${sls:stage}-oac
+          OriginAccessControlOriginType: s3
+          SigningBehavior: always
+          SigningProtocol: sigv4
+
+    # CDN in front of AppBucket. Domain name is picked up automatically by the
+    # deploy workflow (CloudFormation output below) and fed back in as
+    # AWS_CLOUDFRONT_URL — no manual GitHub variable to maintain.
+    AppBucketDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Enabled: true
+          Comment: CDN for ${self:service} ${sls:stage} uploads bucket
+          Origins:
+            - Id: AppBucketOrigin
+              DomainName: !GetAtt AppBucket.RegionalDomainName
+              S3OriginConfig: {}
+              OriginAccessControlId: !GetAtt AppBucketOAC.Id
+          DefaultCacheBehavior:
+            TargetOriginId: AppBucketOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # managed-CachingOptimized
+          PriceClass: PriceClass_100
+
+    # Grants only the specific distribution (SourceArn condition) read access —
+    # not "any CloudFront distribution in the account".
+    AppBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref AppBucket
+        PolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: cloudfront.amazonaws.com
+              Action: s3:GetObject
+              Resource: !Sub '${AppBucket.Arn}/*'
+              Condition:
+                StringEquals:
+                  AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${AppBucketDistribution.Id}'
+  Outputs:
+    CloudFrontDomainName:
+      Value: !GetAtt AppBucketDistribution.DomainName

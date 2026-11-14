@@ -1,0 +1,39 @@
+name: PR checks
+
+# Every PR into dev or main must type-check and pass the test suite before it
+# can be merged (deploy_serverless.yml only runs after the merge). Same command
+# as .husky/pre-commit and the Claude Code Stop hook: `npm run check`.
+on:
+  pull_request:
+    branches:
+      - dev
+      - main
+
+jobs:
+  check:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The generated client is gitignored. prisma.config.ts reads DIRECT_URL,
+      # but generate never connects, so a placeholder is enough.
+      - name: Generate Prisma client
+        run: npx prisma generate
+        env:
+          DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
+      # env.ts requires DATABASE_URL at import time; the unit tests never
+      # connect, so placeholders (no secrets) are enough.
+      - name: Typecheck + tests
+        run: npm run check
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          DIRECT_URL: postgresql://ci:ci@localhost:5432/ci

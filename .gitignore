@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.serverless/
+.esbuild/
+*.log
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Local dev DB helper (embedded postgres)
+pg-dev.cjs
+
+# Prisma generated
+prisma/dev.db
+src/generated/
+
+# typescript incremental build cache
+*.tsbuildinfo

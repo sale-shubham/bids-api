@@ -1,0 +1,218 @@
+// NobleBid — Prisma schema (Phase 0: generic models only).
+// Auction / Bid / Watchlist / Commission models arrive in Phase 1.
+//  - Member = bidder, auctioneer or super admin. Login is email + password;
+//    email OTP is used only to verify the email at signup and for forgot-password.
+//  - Money amounts are integer paise.
+//  - Idempotency keys on money paths prevent double credit/charge.
+
+// Prisma 7: `prisma-client` generator emits a Rust-free TypeScript client.
+// Connection URL lives in prisma.config.ts (CLI) and src/core/prisma/client.ts (runtime adapter).
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ----------------------------------------------------------------------------
+// ENUMS
+// ----------------------------------------------------------------------------
+
+enum Role {
+  BIDDER
+  AUCTIONEER
+  SUPER_ADMIN
+}
+
+enum PaymentStatus {
+  CREATED
+  PAID
+  FAILED
+}
+
+enum OtpChannel {
+  EMAIL
+}
+
+enum OtpPurpose {
+  SIGNUP
+  PASSWORD_RESET
+}
+
+// ----------------------------------------------------------------------------
+// MEMBERS & AUTH
+// ----------------------------------------------------------------------------
+
+model Member {
+  id                     String    @id @default(cuid())
+  email                  String    @unique
+  name                   String
+  passwordHash           String
+  phone                  String?
+  avatarUrl              String?
+  address                String?
+  role                   Role      @default(BIDDER)
+  isActive               Boolean   @default(true)
+  emailVerifiedAt        DateTime?
+  // Commission the auctioneer owes the platform for sold auctions (paise).
+  unpaidCommissionPaise  Int       @default(0)
+  // Bidder stats.
+  auctionsWon            Int       @default(0)
+  moneySpentPaise        Int       @default(0)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  sessions          Session[]
+  paymentOrders     PaymentOrder[]
+  wsConnections     WsConnection[]
+  wsTickets         WsTicket[]
+  pushSubscriptions PushSubscription[]
+
+  @@index([role])
+}
+
+// One row per logged-in device. The access/refresh JWTs carry this row's id
+// as their `sid` claim — `authenticate` (and `refresh`) look the row up on
+// every call, so deleting it revokes those tokens immediately even though
+// the JWTs themselves stay cryptographically valid until natural expiry.
+// Capped at MAX_DEVICES_PER_MEMBER (session.service.ts).
+model Session {
+  id         String   @id @default(cuid())
+  member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId   String
+  deviceId   String // server-generated (or reused from the `dvid` cookie) — identifies "this browser".
+  deviceInfo Json? // {browser, os, device, type}
+  userAgent  String?
+  ip         String?
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  pushSubscriptions PushSubscription[]
+
+  @@unique([memberId, deviceId])
+  @@index([memberId, createdAt])
+}
+
+// Short-lived email verification challenge, scoped by channel + purpose
+// (signup email verification, forgot-password). No FK to Member — a signup
+// email may be brand new.
+model OtpChallenge {
+  id          String     @id @default(cuid())
+  identifier  String // lowercased email
+  channel     OtpChannel @default(EMAIL)
+  purpose     OtpPurpose @default(SIGNUP)
+  // Plaintext code alongside otpHash — lets a repeat request within the TTL
+  // resend the SAME code (see otp-challenge.service.ts).
+  code        String
+  otpHash     String
+  attempts    Int        @default(0)
+  maxAttempts Int        @default(5)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime   @default(now())
+
+  @@index([identifier, channel, purpose, createdAt])
+  @@index([expiresAt])
+}
+
+// ----------------------------------------------------------------------------
+// WEBSOCKET / PUSH / RATE LIMIT
+// ----------------------------------------------------------------------------
+
+// One row per open socket. `id` IS the API Gateway connectionId. memberId is
+// optional (guests may connect); auctionId is the auction room the socket
+// subscribed to (no relation until the Auction model exists).
+model WsConnection {
+  id          String   @id
+  member      Member?  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId    String?
+  auctionId   String?
+  connectedAt DateTime @default(now())
+
+  @@index([memberId])
+  @@index([auctionId])
+}
+
+// Short-lived, single-use ticket standing in for the access token on the
+// WebSocket handshake (`POST /ws/ticket`, then `wss://...?ticket=...`).
+model WsTicket {
+  id        String    @id @default(cuid())
+  member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([expiresAt])
+}
+
+// One row per browser Web Push subscription; cascade-deleted with the login
+// Session that registered it. `endpoint` is unique per browser (upsert).
+model PushSubscription {
+  id        String   @id @default(cuid())
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId  String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([memberId])
+  @@index([sessionId])
+}
+
+// Shared express-rate-limit counters (src/core/middleware/pgRateLimitStore.ts),
+// fixed window, shared across Lambda containers. Swept by the retention job.
+model RateLimitBucket {
+  key     String   @id
+  hits    Int
+  resetAt DateTime
+
+  @@index([resetAt])
+}
+
+// ----------------------------------------------------------------------------
+// PAYMENTS (Razorpay one-time Orders API)
+// ----------------------------------------------------------------------------
+
+model PaymentOrder {
+  id             String        @id @default(cuid())
+  member         Member        @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId       String
+  gatewayOrderId String        @unique // razorpay order id (or stub id)
+  amountPaise    Int
+  status         PaymentStatus @default(CREATED)
+  // What the order pays for (e.g. 'COMMISSION' + its id) — set in Phase 1.
+  referenceType  String?
+  referenceId    String?
+  idempotencyKey String        @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([memberId])
+}
+
+model WebhookEvent {
+  id             String   @id @default(cuid())
+  gatewayEventId String   @unique
+  type           String
+  payload        Json
+  processedAt    DateTime @default(now())
+}
+
+// ----------------------------------------------------------------------------
+// APP SETTINGS
+// ----------------------------------------------------------------------------
+
+// Admin-managed key/value config. `value` is TEXT, parsed in code.
+model AppSetting {
+  key       String   @id
+  value     String?
+  updatedAt DateTime @updatedAt
+}
