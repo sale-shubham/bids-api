@@ -19,3 +19,6 @@ src/generated/
 
 # typescript incremental build cache
 *.tsbuildinfo
+
+# Per-stage deploy env files (real values) - only the *.example files are committed
+deploy/*.env

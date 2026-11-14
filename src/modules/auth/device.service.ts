@@ -1,19 +1,18 @@
 import crypto from 'node:crypto';
 import type { Request, Response } from 'express';
 import { env } from '@/core/config/env';
+import { buildCookieBase } from '@/core/http/cookie-options';
 import type { DeviceInfo } from './auth.validation';
 import type { DeviceMeta } from './session.service';
 
 export const DEVICE_COOKIE = 'dvid';
 const DEVICE_COOKIE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000; // 1 year
 
-const cookieOpts = {
-  httpOnly: true,
-  secure: env.isProd,
-  sameSite: 'lax' as const,
+const cookieOpts = buildCookieBase({
+  isProd: env.isProd,
   domain: env.cookieDomain,
-  path: '/',
-};
+  sameSite: env.cookieSameSite,
+});
 
 // Reuses the existing `dvid` cookie if the browser already has one — same
 // physical browser keeps the same deviceId across logins and logouts (logout
