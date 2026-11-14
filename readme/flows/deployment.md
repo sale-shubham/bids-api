@@ -13,21 +13,37 @@ Browser --> Amplify (Next.js app) ----(NEXT_PUBLIC_API_URL or Next.js rewrite)--
 EventBridge schedules --> closeAuctions (1 min), endingSoon (15 min), commissionReminder (1 day),
                           retentionPurge (1 day), api warmer (5 min)
 Lambda `api` / jobs --> SQS NotifyQueue (+DLQ, 3 receives) --> Lambda notifyWorker (batch 10, ReportBatchItemFailures)
-Uploads: browser PUT via presigned URL --> S3 AppBucket (private) <-- CloudFront (OAC) <-- images
+Uploads: browser PUT via presigned URL --> S3 AppBucket <-- CloudFront (OAC, ENABLE_CDN=true) or S3 direct <-- images
 Postgres (managed, pooled URL for Lambda, direct URL for migrations)
 ```
 
 Everything under `serverless.yml`: functions (`api`, `closeAuctions`, `endingSoon`, `commissionReminder`,
-`retentionPurge`, `notifyWorker`), `NotifyQueue` + `NotifyDLQ`, `AppBucket` + OAC + CloudFront + bucket policy,
+`retentionPurge`, `notifyWorker`), `NotifyQueue` + `NotifyDLQ`, `AppBucket` + bucket policy (+ OAC + CloudFront when `ENABLE_CDN=true`),
 optional alarms (`ALERT_EMAIL`), optional custom domain (`API_DOMAIN_NAME` + `API_CERTIFICATE_ARN`).
 IAM: S3 object/list on the bucket, `ses:SendEmail/SendRawEmail`, SQS send on NotifyQueue, X-Ray, and
 `execute-api:ManageConnections` (auto-added by Serverless for WebSocket events).
 
 Env resolved by CloudFormation (never set by hand): `NOTIFY_QUEUE_URL`, `WS_API_ENDPOINT`,
-`AWS_CLOUDFRONT_URL` (`https://<distribution domain>`).
+`AWS_CLOUDFRONT_URL` (`https://<distribution domain>` with the CDN, else `https://<bucket>.s3.<region>.amazonaws.com`).
+
+### Image CDN (`ENABLE_CDN`)
+
+CloudFront is optional because a new AWS account must be verified by AWS Support before it may create
+CloudFront distributions.
+
+- `ENABLE_CDN` unset or `false` (default): no CloudFront. A bucket policy makes **only** `auctions/*` and
+  `avatars/*` publicly readable (the only folders uploads can write to, and those images are public anyway).
+  Public ACLs stay blocked; everything else stays private.
+- `ENABLE_CDN=true` (GitHub variable; `ENABLE_CDN_PROD` for prod): creates OAC + CloudFront, the bucket goes
+  fully private and the public policy is removed. After switching, update the app's
+  `NEXT_PUBLIC_IMAGE_ORIGINS` / `NEXT_PUBLIC_UPLOADS_BASE_URL` to the new `MediaBaseUrl` output.
+  Image URLs are stored in full (`Auction.images`, `Member.avatarUrl`), so images uploaded before the switch keep
+  their S3 URL and stop loading once the bucket goes private. Rewrite them in the same release:
+  `UPDATE ... SET ... = replace(..., '<old S3 base>', '<new CloudFront base>')` (additive data fix, no schema change).
 
 Stack outputs (printed in the job summary after each deploy): `HttpApiUrl`, `WebSocketUrl`,
-`CloudFrontDomainName`, `NotifyQueueUrl`, and `CustomDomainTarget` (only with a custom domain).
+`MediaBaseUrl`, `CloudFrontDomainName` (only with the CDN), `NotifyQueueUrl`, and `CustomDomainTarget` (only with a
+custom domain).
 
 ## CORS
 
@@ -101,7 +117,7 @@ passed to `gh` on stdin, never on the command line or in output. Empty values ar
 2. Generate secrets: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"` (x2) and
    `npx web-push generate-vapid-keys` (once).
 3. Fill `deploy/dev.env`, run `env:sync` (see above).
-4. Push to `dev` (or Actions > Run workflow on `dev`). Read the API/WS/CloudFront URLs in the job summary.
+4. Push to `dev` (or Actions > Run workflow on `dev`). Read the API/WS/media URLs in the job summary.
 5. Seed the Super Admin once: `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` + `npm run prisma:seed` against the DB.
 6. Point the app (`NEXT_PUBLIC_API_URL` or the Next.js rewrite target) at `HttpApiUrl`; `NEXT_PUBLIC_WS_URL`
    style settings at `WebSocketUrl`.
