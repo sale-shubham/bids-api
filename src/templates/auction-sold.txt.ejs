@@ -1,0 +1,13 @@
+<%= fromName %> - Your auction sold
+
+Hi <%= name %>,
+
+"<%= auctionTitle %>" sold for <%= finalBid %>. The platform commission for this sale is <%= commission %>.
+<% if (winner) { -%>
+Contact the winner to arrange payment and delivery:
+<%- include('_contact.txt.ejs', { label: 'Winner', person: winner }) -%>
+<% } -%>
+
+View auction: <%= auctionUrl %>
+
+Support: <%= frontendUrl %>/contact

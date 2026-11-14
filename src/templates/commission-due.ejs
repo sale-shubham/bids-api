@@ -1,0 +1,9 @@
+<%- include('_head', { heading: 'Commission due', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  A commission of <strong><%= commission %></strong> is due for your sale of <strong><%= auctionTitle %></strong><% if (dueDate) { %>, payable by <strong><%= dueDate %></strong><% } %>.
+                </p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  Unpaid commission blocks you from listing new auctions, so please pay it promptly.
+                </p>
+<%- include('_foot', { ctaUrl: commissionUrl, ctaLabel: 'Pay commission', frontendUrl }) %>

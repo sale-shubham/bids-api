@@ -16,7 +16,7 @@ List filters (`auctions.query.ts` `statusWhere`) mirror this in SQL: live = `sta
 ## Shapes
 
 `AuctionCard` = `{ id, title, category, condition: NEW|USED, coverImage|null, startingBidPaise, currentBidPaise, bidCount, startTime, endTime, status, seller: { id, name, avatarUrl } }`.
-`AuctionDetail` = card + `{ description, images[], minIncrementPaise, highestBidderId|null, winnerId|null, endedAt|null, createdAt, updatedAt }`.
+`AuctionDetail` = card + `{ description, images[], minIncrementPaise, highestBidderId|null, winnerId|null, endedAt|null, createdAt, updatedAt, recentBids: BidDTO[], myHighestBidPaise: number|null, contact: { role: 'SELLER'|'WINNER', name, email, phone }|null }`. The last three are filled for `GET /auctions/:id` and the bid response (latest 5 bids newest first; the requester's highest bid; post-auction contact card for the winner / seller only) and are `[]` / `null` / `null` on create, patch and republish. See `bidding.md`.
 
 ## Endpoints
 
@@ -31,6 +31,7 @@ List filters (`auctions.query.ts` `statusWhere`) mirror this in SQL: live = `sta
 | PATCH | `/auctions/:id` | seller | all fields optional -> `{ auction }` |
 | DELETE | `/auctions/:id` | seller / SUPER_ADMIN | soft delete -> `{ id }` |
 | POST | `/auctions/:id/republish` | seller | `{ startTime, endTime }` -> `{ auction }` |
+| POST / GET | `/auctions/:id/bids` | BIDDER / public | place a bid / list bids; see `bidding.md` |
 
 Fixed paths (`home`, `categories`, `mine`) are declared before `/:id`.
 
