@@ -67,7 +67,7 @@ vi.mock('@/core/prisma/client', () => {
   return { prisma: db };
 });
 
-import { checkout, markCommissionPaid, runCommissionReminders, waiveCommission } from './commissions.service';
+import { checkout, getMine, markCommissionPaid, runCommissionReminders, waiveCommission } from './commissions.service';
 
 const NOW = new Date('2026-11-20T10:00:00Z');
 const commission = (over: Record<string, unknown> = {}) => ({
@@ -144,6 +144,25 @@ describe('checkout', () => {
       statusCode: 409,
       code: 'COMMISSION_NOT_DUE',
     });
+  });
+});
+
+describe('getMine', () => {
+  it('returns the DTO for the owner', async () => {
+    const dto = await getMine('m1', 'c1_abcdefghijklmnop', NOW);
+    expect(dto).toMatchObject({ id: 'c1_abcdefghijklmnop', status: 'DUE', amountPaise: 50_000, isOverdue: false });
+    expect(dto.auction).toMatchObject({ title: 'Vintage Watch', coverImage: 'x.jpg' });
+  });
+
+  it('404 COMMISSION_NOT_FOUND for another seller', async () => {
+    await expect(getMine('m2', 'c1_abcdefghijklmnop', NOW)).rejects.toMatchObject({
+      statusCode: 404,
+      code: 'COMMISSION_NOT_FOUND',
+    });
+  });
+
+  it('404 COMMISSION_NOT_FOUND for an unknown id', async () => {
+    await expect(getMine('m1', 'nope', NOW)).rejects.toMatchObject({ statusCode: 404, code: 'COMMISSION_NOT_FOUND' });
   });
 });
 
