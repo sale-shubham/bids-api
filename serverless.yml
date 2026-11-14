@@ -378,7 +378,8 @@ resources:
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD]
             CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # managed-CachingOptimized
-          PriceClass: PriceClass_100
+          # PriceClass_200 adds edge locations in India (most users); _100 is NA + Europe only.
+          PriceClass: PriceClass_200
 
     # The bucket's ONE policy, for both modes:
     #   CDN    - only this distribution (OAC + SourceArn) may read; bucket fully private.
