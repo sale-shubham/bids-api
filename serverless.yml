@@ -184,9 +184,27 @@ functions:
     handler: dist/index.handler
     tracing: true
     events:
+      # Explicit methods and no OPTIONS / '*' route on purpose: an ANY route catches
+      # CORS preflights and sends them to the Lambda. Without one, API Gateway answers
+      # OPTIONS itself from provider.httpApi.cors. HEAD is kept so HEAD health checks reach Express.
       - httpApi:
           path: /{proxy+}
-          method: '*'
+          method: GET
+      - httpApi:
+          path: /{proxy+}
+          method: POST
+      - httpApi:
+          path: /{proxy+}
+          method: PUT
+      - httpApi:
+          path: /{proxy+}
+          method: PATCH
+      - httpApi:
+          path: /{proxy+}
+          method: DELETE
+      - httpApi:
+          path: /{proxy+}
+          method: HEAD
       # Keep-warm ping (replaces serverless-plugin-warmup — its path.join()-built
       # package patterns and handler path break when deploying from Windows).
       # index.handler short-circuits on `warmer: true` before serverless-express.
