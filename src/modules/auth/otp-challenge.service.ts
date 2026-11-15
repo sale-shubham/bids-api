@@ -5,38 +5,30 @@ import { env } from '@/core/config/env';
 import { OTP_TTL_SECONDS, OTP_LENGTH, OTP_RESEND_COOLDOWN_SECONDS } from '@/core/config/constants';
 import { AppError, Forbidden, ServiceUnavailable, Unauthorized } from '@/core/errors/AppError';
 import { emailProvider } from '@/providers/email';
-import { smsProvider } from '@/providers/sms';
 import type { OtpChannel, OtpPurpose } from '@prisma/client';
 
-// OTP-challenge mechanics. Email: signup + forgot-password (SIGNUP / PASSWORD_RESET).
-// SMS: phone verification (PHONE_VERIFY, identifier = E.164 number). Login is email + password.
+// PHONE_VERIFY stays in the DB enum (Postgres cannot drop values) but is never issued.
+export type EmailOtpPurpose = Exclude<OtpPurpose, 'PHONE_VERIFY'>;
 
-const channelFor = (purpose: OtpPurpose): OtpChannel => (purpose === 'PHONE_VERIFY' ? 'SMS' : 'EMAIL');
+// OTP-challenge mechanics, email only: signup + forgot-password (SIGNUP / PASSWORD_RESET). Login is email + password.
+
+const CHANNEL: OtpChannel = 'EMAIL';
 
 // Stub driver is deterministic (always env.otp.stubCode) so dev emails are
 // always usable without reading logs. A real driver gets a random code.
-function generateCode(channel: OtpChannel): string {
-  if (channel === 'SMS' ? env.sms.driver === 'stub' && !env.isProd : env.email.driver === 'stub') return env.otp.stubCode;
+function generateCode(): string {
+  if (env.email.driver === 'stub') return env.otp.stubCode;
   const max = 10 ** OTP_LENGTH;
   return crypto.randomInt(max / 10, max).toString();
 }
 
-const SUBJECTS: Record<OtpPurpose, string> = {
+const SUBJECTS: Record<EmailOtpPurpose, string> = {
   SIGNUP: 'Verify your NobleBid email',
   PASSWORD_RESET: 'Reset your NobleBid password',
-  PHONE_VERIFY: 'Verify your NobleBid phone number',
 };
 
-async function sendOtp(identifier: string, purpose: OtpPurpose, code: string) {
+async function sendOtp(identifier: string, purpose: EmailOtpPurpose, code: string) {
   const expiryMinutes = Math.round(OTP_TTL_SECONDS / 60);
-  if (channelFor(purpose) === 'SMS') {
-    await smsProvider.send({
-      to: identifier,
-      text: `${code} is your NobleBid verification code. It expires in ${expiryMinutes} minutes.`,
-      templateVars: { otp: code },
-    });
-    return;
-  }
   await emailProvider.send({
     to: identifier,
     subject: SUBJECTS[purpose],
@@ -61,10 +53,10 @@ export interface IssueOtpOptions {
 // Returns seconds until the next resend is allowed.
 export async function issueOtpChallenge(
   identifier: string,
-  purpose: OtpPurpose,
+  purpose: EmailOtpPurpose,
   opts: IssueOtpOptions = {},
 ): Promise<{ resendAfterSec: number }> {
-  const channel = channelFor(purpose);
+  const channel = CHANNEL;
   const now = new Date();
 
   const existing = await prisma.otpChallenge.findFirst({
@@ -97,7 +89,7 @@ export async function issueOtpChallenge(
     return { resendAfterSec: OTP_RESEND_COOLDOWN_SECONDS };
   }
 
-  const code = generateCode(channel);
+  const code = generateCode();
   const otpHash = await bcrypt.hash(code, 10);
   const expiresAt = new Date(now.getTime() + OTP_TTL_SECONDS * 1000);
 
@@ -125,10 +117,10 @@ export async function issueOtpChallenge(
 
 export async function consumeOtpChallenge(
   identifier: string,
-  purpose: OtpPurpose,
+  purpose: EmailOtpPurpose,
   code: string,
 ): Promise<void> {
-  const channel = channelFor(purpose);
+  const channel = CHANNEL;
   const now = new Date();
   const challenge = await prisma.otpChallenge.findFirst({
     where: { identifier, channel, purpose, consumedAt: null, expiresAt: { gt: now } },

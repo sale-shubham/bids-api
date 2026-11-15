@@ -62,13 +62,13 @@ enum CommissionStatus {
 
 enum OtpChannel {
   EMAIL
-  SMS
+  SMS // unused, kept because Postgres cannot drop enum values
 }
 
 enum OtpPurpose {
   SIGNUP
   PASSWORD_RESET
-  PHONE_VERIFY
+  PHONE_VERIFY // unused, kept because Postgres cannot drop enum values
 }
 
 // ----------------------------------------------------------------------------
@@ -86,11 +86,6 @@ model Member {
   role                  Role      @default(BIDDER)
   isActive              Boolean   @default(true)
   emailVerifiedAt       DateTime?
-  // SMS-OTP verified phone (stored as the 10-digit Indian mobile in `phone`); cleared when phone changes.
-  phoneVerifiedAt       DateTime?
-  // TOTP 2FA: AES-256-GCM encrypted secret (set at setup, enabled at twoFactorEnabledAt).
-  totpSecretEnc         String?
-  twoFactorEnabledAt    DateTime?
   // Verified-seller badge (see members/verification.service.ts); admin revoke wins over the rule.
   verifiedAt            DateTime?
   verificationRevokedAt DateTime?
@@ -104,8 +99,6 @@ model Member {
   ratingSum             Int       @default(0)
   // Followers of this seller (kept in step with Follow rows in the same transaction).
   followerCount         Int       @default(0)
-  // Opted in to WhatsApp alerts (needs a verified phone); cleared when the phone changes.
-  whatsappOptInAt       DateTime?
   // Referral code (8-char uppercase base32), generated lazily; GST details for invoices.
   referralCode          String?   @unique
   gstin                 String?
@@ -135,7 +128,6 @@ model Member {
   reviewsWritten  Review[]          @relation("ReviewsWritten")
   questions       AuctionQuestion[]
   savedSearches   SavedSearch[]
-  recoveryCodes   RecoveryCode[]
   reportsFiled    Report[]
 
   deposits             AuctionDeposit[]
@@ -606,20 +598,8 @@ model Sale {
 }
 
 // ----------------------------------------------------------------------------
-// TRUST: 2FA recovery codes, reports
+// TRUST: reports
 // ----------------------------------------------------------------------------
-
-// One-time 2FA recovery codes (sha256 of the normalized code; plaintext shown once).
-model RecoveryCode {
-  id        String    @id @default(cuid())
-  member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  memberId  String
-  codeHash  String
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  @@index([memberId])
-}
 
 enum ReportTargetType {
   AUCTION
@@ -785,14 +765,13 @@ model Follow {
   @@index([sellerId])
 }
 
-// Per-member, per-notification-type channel switches. A missing row = defaults (email + push on, WhatsApp off).
+// Per-member, per-notification-type channel switches. A missing row = defaults (email + push on).
 model NotificationPreference {
   member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
   memberId  String
   type      String
   email     Boolean  @default(true)
   push      Boolean  @default(true)
-  whatsapp  Boolean  @default(false)
   updatedAt DateTime @updatedAt
 
   @@id([memberId, type])

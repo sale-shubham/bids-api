@@ -21,7 +21,7 @@ vi.mock('@/core/prisma/client', () => ({ prisma: db }));
 vi.mock('@/core/logger/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 vi.mock('@/providers/storage', () => ({ storage }));
 vi.mock('@/modules/notify/notify.queue', () => ({ enqueueNotification: enqueue }));
-vi.mock('@/core/config/env', () => ({ env: { storage: { cdnBaseUrl: 'https://cdn.test', s3: { bucket: '', region: 'ap-south-1' } }, twoFactor: { requireAdmin: false } } }));
+vi.mock('@/core/config/env', () => ({ env: { storage: { cdnBaseUrl: 'https://cdn.test', s3: { bucket: '', region: 'ap-south-1' } } } }));
 
 import { Prisma } from '@prisma/client';
 import { amountInWords, computeInvoiceTax, financialYearOf, gstinMatchesState, invoiceNumber } from './invoice.rules';
@@ -216,7 +216,7 @@ describe('GSTIN validation', () => {
     expect(db.member.update).not.toHaveBeenCalled();
   });
   it('PATCH /members/me: a matching pair is saved', async () => {
-    db.member.update.mockResolvedValue({ id: 'm1', unpaidCommissionPaise: 0n, moneySpentPaise: 0n, twoFactorEnabledAt: null, verifiedAt: null, whatsappOptInAt: null });
+    db.member.update.mockResolvedValue({ id: 'm1', unpaidCommissionPaise: 0n, moneySpentPaise: 0n, verifiedAt: null });
     await updateProfile('m1', { gstin: GSTIN, billingState: '27' });
     expect(db.member.update.mock.calls[0][0].data).toEqual({ gstin: GSTIN, billingState: '27' });
   });

@@ -10,13 +10,12 @@ import { refreshSellerVerification } from '@/modules/members/verification.servic
 
 type AdminMemberRow = Prisma.MemberGetPayload<{ select: ReturnType<typeof memberSelect> }>;
 
-/** Admin DTO: booleans for 2FA / verified, payout status, money as numbers. */
+/** Admin DTO: boolean for verified, payout status, money as numbers. */
 function toAdminDto(m: AdminMemberRow, creditBalancePaise = 0) {
-  const { twoFactorEnabledAt, verifiedAt, payoutAccount, _count, ...rest } = m;
+  const { verifiedAt, payoutAccount, _count, ...rest } = m;
   return {
     ...withMemberMoney(rest),
     verified: !!verifiedAt,
-    twoFactorEnabled: !!twoFactorEnabledAt,
     payoutStatus: payoutAccount?.status ?? null,
     activeStrikes: _count?.strikes ?? 0,
     creditBalancePaise,
@@ -49,8 +48,6 @@ const memberSelect = (now = new Date()) => ({
   role: true,
   isActive: true,
   emailVerifiedAt: true,
-  phoneVerifiedAt: true,
-  twoFactorEnabledAt: true,
   verifiedAt: true,
   payoutAccount: { select: { status: true } },
   unpaidCommissionPaise: true,

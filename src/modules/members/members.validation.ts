@@ -16,15 +16,3 @@ export const creditsQuerySchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   pageSize: Joi.number().integer().min(1).max(100).default(20),
 });
-
-// 10-digit Indian mobile (starts 6-9); same form the app stores in Member.phone.
-const indianMobile = Joi.string().trim().pattern(/^[6-9]\d{9}$/).required().messages({ 'string.pattern.base': 'Enter a valid 10-digit mobile number' });
-
-// POST /members/me/phone/otp
-export const phoneOtpSchema = Joi.object({ phone: indianMobile });
-
-// POST /members/me/phone/verify
-export const phoneVerifySchema = Joi.object({
-  phone: indianMobile,
-  code: Joi.string().trim().pattern(/^\d{6}$/).required(),
-});

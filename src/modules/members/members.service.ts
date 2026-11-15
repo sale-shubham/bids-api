@@ -3,7 +3,6 @@ import { AppError, BadRequest } from '@/core/errors/AppError';
 import { env } from '@/core/config/env';
 import { ratingAvg } from '@/modules/reviews/reviews.rules';
 import { memberProfileSelect, memberPublicSelect, withMemberMoney, withMemberTrust } from './member.select';
-import { refreshSellerVerification } from './verification.service';
 import { gstinMatchesState } from '@/modules/invoices/invoice.rules';
 import { activeStrikeCount } from '@/modules/strikes/strikes.service';
 
@@ -25,7 +24,6 @@ export async function getMemberDto(memberId: string) {
     ...member,
     activeStrikes: (await activeStrikeCount(prisma, memberId)) ?? 0,
     deviceLimit: await getMaxDevicesForRole(member.role),
-    twoFactorSetupRequired: member.role === 'SUPER_ADMIN' && env.twoFactor.requireAdmin && !member.twoFactorEnabled,
   };
 }
 
@@ -76,21 +74,10 @@ export async function updateProfile(
     if (!gstinMatchesState(gstin, state)) throw new AppError(400, 'INVALID_GSTIN', 'The GSTIN does not match the billing state');
   }
   const data: Record<string, string | Date | null> = {};
-  let phoneChanged = false;
-  if (input.phone !== undefined) {
-    const current = await prisma.member.findUnique({ where: { id: memberId }, select: { phone: true } });
-    const next = input.phone || null;
-    if ((current?.phone ?? null) !== next) {
-      phoneChanged = true;
-      data.phoneVerifiedAt = null;
-      data.whatsappOptInAt = null;
-    }
-  }
   if (input.name !== undefined) data.name = input.name;
   for (const k of ['phone', 'address', 'avatarUrl', 'gstin', 'billingState'] as const) {
     if (input[k] !== undefined) data[k] = input[k] || null;
   }
   const updated = await prisma.member.update({ where: { id: memberId }, data, select: memberProfileSelect });
-  if (phoneChanged) await refreshSellerVerification(memberId);
   return withMemberTrust(withMemberMoney(updated));
 }

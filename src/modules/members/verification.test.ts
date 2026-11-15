@@ -5,7 +5,7 @@ const db = vi.hoisted(() => ({
   memberCredit: { aggregate: vi.fn(async () => ({ _sum: { amountPaise: null } })), groupBy: vi.fn(async () => [] as unknown[]) },
 }));
 vi.mock('@/core/prisma/client', () => ({ prisma: db }));
-vi.mock('@/core/config/env', () => ({ env: { storage: { cdnBaseUrl: 'https://cdn.test', s3: { bucket: '', region: 'ap-south-1' } }, twoFactor: { requireAdmin: false } } }));
+vi.mock('@/core/config/env', () => ({ env: { storage: { cdnBaseUrl: 'https://cdn.test', s3: { bucket: '', region: 'ap-south-1' } } } }));
 vi.mock('@/modules/settings/device-limit.service', () => ({ getMaxDevicesForRole: async () => 3 }));
 
 import { isSellerVerified, refreshSellerVerification } from './verification.service';
@@ -14,15 +14,13 @@ import { updateMember } from '@/modules/admin/members/admin-members.service';
 import { listWhere } from '@/modules/auctions/auctions.query';
 import { toCard } from '@/modules/auctions/auctions.serializer';
 
-const PHONE = new Date('2026-11-01');
-const base = { role: 'AUCTIONEER', phoneVerifiedAt: PHONE, payoutStatus: 'ACTIVE', verificationRevokedAt: null };
+const base = { role: 'AUCTIONEER', payoutStatus: 'ACTIVE', verificationRevokedAt: null };
 
 describe('isSellerVerified matrix', () => {
-  it('verified only with AUCTIONEER + phone + ACTIVE payout + not revoked', () => {
+  it('verified only with AUCTIONEER + ACTIVE payout + not revoked', () => {
     expect(isSellerVerified(base)).toBe(true);
     expect(isSellerVerified({ ...base, role: 'BIDDER' })).toBe(false);
     expect(isSellerVerified({ ...base, role: 'SUPER_ADMIN' })).toBe(false);
-    expect(isSellerVerified({ ...base, phoneVerifiedAt: null })).toBe(false);
     expect(isSellerVerified({ ...base, payoutStatus: null })).toBe(false);
     for (const s of ['PENDING', 'NEEDS_CLARIFICATION', 'SUSPENDED', 'REJECTED']) {
       expect(isSellerVerified({ ...base, payoutStatus: s })).toBe(false);
@@ -34,7 +32,6 @@ describe('isSellerVerified matrix', () => {
 describe('refreshSellerVerification', () => {
   const row = (over: Record<string, unknown> = {}) => ({
     role: 'AUCTIONEER',
-    phoneVerifiedAt: PHONE,
     verifiedAt: null,
     verificationRevokedAt: null,
     payoutAccount: { status: 'ACTIVE' },
@@ -55,11 +52,10 @@ describe('refreshSellerVerification', () => {
     expect(db.member.update).not.toHaveBeenCalled();
   });
 
-  it('clears verifiedAt when the payout account is no longer ACTIVE, the phone is lost, or it was revoked', async () => {
+  it('clears verifiedAt when the payout account is no longer ACTIVE, it was revoked, or the role is not AUCTIONEER', async () => {
     for (const over of [
       { payoutAccount: { status: 'SUSPENDED' } },
       { payoutAccount: null },
-      { phoneVerifiedAt: null },
       { verificationRevokedAt: new Date() },
       { role: 'BIDDER' },
     ]) {
@@ -86,8 +82,6 @@ describe('admin verified toggle', () => {
     role: 'AUCTIONEER',
     isActive: true,
     emailVerifiedAt: new Date(),
-    phoneVerifiedAt: PHONE,
-    twoFactorEnabledAt: null,
     verifiedAt: null,
     payoutAccount: { status: 'ACTIVE' },
     unpaidCommissionPaise: 0n,
@@ -107,14 +101,15 @@ describe('admin verified toggle', () => {
     expect(db.member.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { verificationRevokedAt: expect.any(Date), verifiedAt: null } }),
     );
-    expect(dto).toMatchObject({ verified: false, twoFactorEnabled: false, payoutStatus: 'ACTIVE', phoneVerifiedAt: PHONE });
-    expect(dto).not.toHaveProperty('twoFactorEnabledAt');
+    expect(dto).toMatchObject({ verified: false, payoutStatus: 'ACTIVE' });
+    expect(dto).not.toHaveProperty('twoFactorEnabled');
+    expect(dto).not.toHaveProperty('phoneVerifiedAt');
   });
 
   it('verified=true clears the revoke, then re-evaluates the rule', async () => {
     db.member.findUnique
       .mockResolvedValueOnce({ id: 's1' }) // existence check
-      .mockResolvedValueOnce({ role: 'AUCTIONEER', phoneVerifiedAt: PHONE, verifiedAt: null, verificationRevokedAt: null, payoutAccount: { status: 'ACTIVE' } })
+      .mockResolvedValueOnce({ role: 'AUCTIONEER', verifiedAt: null, verificationRevokedAt: null, payoutAccount: { status: 'ACTIVE' } })
       .mockResolvedValueOnce(adminRow({ verifiedAt: new Date() }));
     const dto = await updateMember('s1', 'admin1', { verified: true });
     expect(db.member.update.mock.calls[0][0].data).toEqual({ verificationRevokedAt: null });
@@ -123,37 +118,22 @@ describe('admin verified toggle', () => {
   });
 });
 
-describe('profile phone change', () => {
+describe('profile edit', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    db.member.update.mockResolvedValue({ id: 'm1', unpaidCommissionPaise: 0n, moneySpentPaise: 0n, twoFactorEnabledAt: null, verifiedAt: null });
+    db.member.update.mockResolvedValue({ id: 'm1', unpaidCommissionPaise: 0n, moneySpentPaise: 0n, verifiedAt: null });
   });
 
-  it('a changed phone clears phoneVerifiedAt and re-checks verification', async () => {
-    db.member.findUnique
-      .mockResolvedValueOnce({ phone: '9876543210' })
-      .mockResolvedValueOnce({ role: 'AUCTIONEER', phoneVerifiedAt: null, verifiedAt: new Date(), verificationRevokedAt: null, payoutAccount: { status: 'ACTIVE' } });
+  it('phone is a plain contact field: changing it writes only the phone and never touches verification', async () => {
     await updateProfile('m1', { phone: '9123456789' });
-    expect(db.member.update.mock.calls[0][0].data).toEqual({ phone: '9123456789', phoneVerifiedAt: null, whatsappOptInAt: null });
-    expect(db.member.update.mock.calls[1][0]).toEqual({ where: { id: 'm1' }, data: { verifiedAt: null } });
-  });
-
-  it('clearing the phone also clears verification; resending the same phone keeps it', async () => {
-    db.member.findUnique.mockResolvedValueOnce({ phone: '9876543210' }).mockResolvedValue(null);
-    await updateProfile('m1', { phone: '' });
-    expect(db.member.update.mock.calls[0][0].data).toEqual({ phone: null, phoneVerifiedAt: null, whatsappOptInAt: null });
-
-    db.member.update.mockClear();
-    db.member.findUnique.mockResolvedValueOnce({ phone: '9876543210' });
-    await updateProfile('m1', { phone: '9876543210', name: 'New' });
-    expect(db.member.update.mock.calls[0][0].data).toEqual({ phone: '9876543210', name: 'New' });
-    expect(db.member.update).toHaveBeenCalledTimes(1);
-  });
-
-  it('a profile edit without phone never touches verification', async () => {
-    await updateProfile('m1', { name: 'X' });
     expect(db.member.findUnique).not.toHaveBeenCalled();
-    expect(db.member.update.mock.calls[0][0].data).toEqual({ name: 'X' });
+    expect(db.member.update).toHaveBeenCalledTimes(1);
+    expect(db.member.update.mock.calls[0][0].data).toEqual({ phone: '9123456789' });
+  });
+
+  it('clearing the phone stores null', async () => {
+    await updateProfile('m1', { phone: '' });
+    expect(db.member.update.mock.calls[0][0].data).toEqual({ phone: null });
   });
 });
 

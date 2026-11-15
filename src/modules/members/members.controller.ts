@@ -29,22 +29,6 @@ export async function publicProfile(req: Request, res: Response) {
   return ok(res, member);
 }
 
-// POST /members/me/phone/otp — { sentTo }
-export async function sendPhoneOtp(req: Request, res: Response) {
-  const { ok } = await import('@/core/http/response');
-  const phone = await import('./phone.service');
-  return ok(res, await phone.sendPhoneOtp(req.body.phone));
-}
-
-// POST /members/me/phone/verify — { member }
-export async function verifyPhone(req: Request, res: Response) {
-  const { ok } = await import('@/core/http/response');
-  const phone = await import('./phone.service');
-  const svc = await import('./members.service');
-  await phone.verifyPhone(req.user!.sub, req.body.phone, req.body.code);
-  return ok(res, { member: await svc.getMemberDto(req.user!.sub) });
-}
-
 // GET /members/me/following — sellers the caller follows.
 export async function following(req: Request, res: Response) {
   const { paginated } = await import('@/core/http/response');
@@ -65,11 +49,4 @@ export async function putNotificationPreferences(req: Request, res: Response) {
   const { ok } = await import('@/core/http/response');
   const svc = await import('@/modules/notification-preferences/notification-preferences.service');
   return ok(res, await svc.updatePreferences(req.user!.sub, req.user!.role, req.body.items));
-}
-
-// POST /members/me/whatsapp — { whatsappOptIn }
-export async function setWhatsapp(req: Request, res: Response) {
-  const { ok } = await import('@/core/http/response');
-  const svc = await import('@/modules/notification-preferences/notification-preferences.service');
-  return ok(res, await svc.setWhatsappOptIn(req.user!.sub, req.body.optIn));
 }

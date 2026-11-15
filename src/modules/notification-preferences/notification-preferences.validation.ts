@@ -8,7 +8,6 @@ export const updatePreferencesSchema = Joi.object({
         type: Joi.string().valid(...NOTIFY_TYPES).required(),
         email: Joi.boolean().required(),
         push: Joi.boolean().required(),
-        whatsapp: Joi.boolean().required(),
       }),
     )
     .min(1)
@@ -16,5 +15,3 @@ export const updatePreferencesSchema = Joi.object({
     .unique('type')
     .required(),
 });
-
-export const whatsappOptSchema = Joi.object({ optIn: Joi.boolean().required() });

@@ -116,22 +116,6 @@ provider:
     # Only the dev stage sets them (see deploy_serverless.yml).
     RATE_LIMIT_AUTH_MAX: ${env:RATE_LIMIT_AUTH_MAX, ''}
     RATE_LIMIT_OTP_IP_MAX: ${env:RATE_LIMIT_OTP_IP_MAX, ''}
-    # SMS (phone verification only) and two-factor auth.
-    SMS_DRIVER: ${env:SMS_DRIVER, 'stub'}
-    MSG91_AUTH_KEY: ${env:MSG91_AUTH_KEY, ''}
-    MSG91_SENDER_ID: ${env:MSG91_SENDER_ID, ''}
-    MSG91_OTP_TEMPLATE_ID: ${env:MSG91_OTP_TEMPLATE_ID, ''}
-    TOTP_ENC_KEY: ${env:TOTP_ENC_KEY, ''}
-    REQUIRE_ADMIN_2FA: ${env:REQUIRE_ADMIN_2FA, 'false'}
-    # WhatsApp alerts (opt-in utility templates).
-    WHATSAPP_DRIVER: ${env:WHATSAPP_DRIVER, 'stub'}
-    WHATSAPP_TOKEN: ${env:WHATSAPP_TOKEN, ''}
-    WHATSAPP_PHONE_NUMBER_ID: ${env:WHATSAPP_PHONE_NUMBER_ID, ''}
-    WHATSAPP_API_VERSION: ${env:WHATSAPP_API_VERSION, 'v21.0'}
-    WHATSAPP_TEMPLATE_OUTBID: ${env:WHATSAPP_TEMPLATE_OUTBID, 'nb_outbid'}
-    WHATSAPP_TEMPLATE_ENDING_SOON: ${env:WHATSAPP_TEMPLATE_ENDING_SOON, 'nb_ending_soon'}
-    WHATSAPP_TEMPLATE_AUCTION_WON: ${env:WHATSAPP_TEMPLATE_AUCTION_WON, 'nb_auction_won'}
-    WHATSAPP_TEMPLATE_SALE_PAYMENT_DUE: ${env:WHATSAPP_TEMPLATE_SALE_PAYMENT_DUE, 'nb_sale_payment_due'}
     EMAIL_FROM: ${env:EMAIL_FROM, 'noreply@example.com'}
     EMAIL_FROM_NAME: ${env:EMAIL_FROM_NAME, 'NobleBid'}
     LOGO_URL: ${env:LOGO_URL, ''}

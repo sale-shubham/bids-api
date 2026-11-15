@@ -407,32 +407,7 @@ describe('reviews, questions and saved searches', () => {
   });
 });
 
-describe('trust: 2FA, phone, reports', () => {
-  it('2FA bodies: enable needs a 6-digit code, disable needs password + code, verify needs exactly one factor', async () => {
-    expectInvalid(await send('post', '/auth/2fa/enable', { as: 'BIDDER', body: { code: '12345' } }), 'code');
-    expectInvalid(await send('post', '/auth/2fa/disable', { as: 'BIDDER', body: { code: '123456' } }), 'password');
-    expectInvalid(await send('post', '/auth/2fa/disable', { as: 'BIDDER', body: { password: 'x' } }), 'code');
-    expectInvalid(await send('post', '/auth/2fa/recovery-codes', { as: 'BIDDER', body: {} }), 'code');
-    expectInvalid(await send('post', '/auth/2fa/verify', { body: { code: '123456' } }), 'challengeToken');
-    expectInvalid(await send('post', '/auth/2fa/verify', { body: { challengeToken: 't' } }));
-    expectInvalid(await send('post', '/auth/2fa/verify', { body: { challengeToken: 't', code: '123456', recoveryCode: 'ABCD-2345' } }));
-    expectInvalid(await send('post', '/auth/2fa/verify', { body: { challengeToken: 't', code: 'abcdef' } }), 'code');
-  });
-
-  it.each([
-    ['too short', '98765'],
-    ['starts with 5', '5876543210'],
-    ['has letters', '98765abcde'],
-    ['has +91', '+919876543210'],
-  ])('phone otp / verify reject a phone that is %s', async (_n, phone) => {
-    expectInvalid(await send('post', '/members/me/phone/otp', { as: 'BIDDER', body: { phone } }), 'phone');
-    expectInvalid(await send('post', '/members/me/phone/verify', { as: 'BIDDER', body: { phone, code: '123456' } }), 'phone');
-  });
-
-  it('phone verify needs a 6-digit code', async () => {
-    expectInvalid(await send('post', '/members/me/phone/verify', { as: 'BIDDER', body: { phone: '9876543210', code: '12' } }), 'code');
-  });
-
+describe('trust: reports', () => {
   it('POST /reports validates target, reason and details', async () => {
     const ok = { targetType: 'AUCTION', targetId: 'a1', reason: 'SPAM' };
     expectInvalid(await send('post', '/reports', { as: 'BIDDER', body: { ...ok, targetType: 'BID' } }), 'targetType');
@@ -607,17 +582,12 @@ describe('engagement: follows, preferences, analytics', () => {
 
   it('PUT /members/me/notification-preferences rejects unknown types, duplicates and non-booleans', async () => {
     const url = '/members/me/notification-preferences';
-    const item = { type: 'outbid', email: true, push: true, whatsapp: false };
+    const item = { type: 'outbid', email: true, push: true };
     expectInvalid(await send('put', url, { as: 'BIDDER', body: {} }), 'items');
     expectInvalid(await send('put', url, { as: 'BIDDER', body: { items: [] } }), 'items');
     expectInvalid(await send('put', url, { as: 'BIDDER', body: { items: [{ ...item, type: 'nope' }] } }), 'type');
     expectInvalid(await send('put', url, { as: 'BIDDER', body: { items: [item, item] } }), 'items');
     expectInvalid(await send('put', url, { as: 'BIDDER', body: { items: [{ ...item, push: 'maybe' }] } }), 'push');
-  });
-
-  it('POST /members/me/whatsapp needs a boolean optIn', async () => {
-    expectInvalid(await send('post', '/members/me/whatsapp', { as: 'BIDDER', body: {} }), 'optIn');
-    expectInvalid(await send('post', '/members/me/whatsapp', { as: 'BIDDER', body: { optIn: 'yes' } }), 'optIn');
   });
 
   it('following yourself is a 400 INVALID_FOLLOW', async () => {

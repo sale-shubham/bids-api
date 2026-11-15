@@ -35,16 +35,15 @@ All three use `path: '/'` (the web app's middleware needs `nb_rt` on every page 
 
 | Limiter | Applied to | Config | Store |
 | --- | --- | --- | --- |
-| `authLimiter` | `POST /auth/signup/verify`, `/auth/login`, `/auth/password/reset`, `/auth/password/change`, `/auth/2fa/*`, `POST /members/me/phone/verify` | 20 / 15 min per IP (`RATE_LIMIT_AUTH_MAX` overrides, dev only) | Postgres |
+| `authLimiter` | `POST /auth/signup/verify`, `/auth/login`, `/auth/password/reset`, `/auth/password/change` | 20 / 15 min per IP (`RATE_LIMIT_AUTH_MAX` overrides, dev only) | Postgres |
 | `loginEmailLimiter` | `POST /auth/login` (after `authLimiter`) | 10 / 15 min per email, across all IPs — login brute-force guard | Postgres |
-| `otpIpLimiter` | `POST /auth/signup`, `/auth/signup/resend`, `/auth/password/forgot`, `POST /members/me/phone/otp` | 20 / hour per IP across **all** emails (`RATE_LIMIT_OTP_IP_MAX` overrides, dev only) — stops one IP pumping OTP emails to many addresses | Postgres |
+| `otpIpLimiter` | `POST /auth/signup`, `/auth/signup/resend`, `/auth/password/forgot` | 20 / hour per IP across **all** emails (`RATE_LIMIT_OTP_IP_MAX` overrides, dev only) — stops one IP pumping OTP emails to many addresses | Postgres |
 | `otpLimiter` | same routes (after `otpIpLimiter`) | 5 / hour, keyed by IP + email (trimmed, lower-cased) | Postgres |
 | `sensitiveLimiter` | `POST /uploads/presign`, `POST /payouts/account` | 30 / 60 s per IP | Postgres |
 | `bidAuctionLimiter` | `POST /auctions/:id/bids` | 10 / 10 s per member per auction | Postgres |
 | `bidMemberLimiter` | `POST /auctions/:id/bids` (after `bidAuctionLimiter`) | 60 / 60 s per member | Postgres |
 | `wsGuestLimiter` | `POST /ws/guest-ticket` | 30 / 60 s per IP | Postgres |
 | `contactLimiter` | `POST /contact` | 5 / hour per IP (each message sends an email) | Postgres |
-| `twoFactorLimiter` | `POST /auth/2fa/verify` (after `authLimiter`) | 5 / 10 min per member id from the verified challenge token (IP fallback) | Postgres (`rl:2fa:`) |
 | `reportLimiter` | `POST /reports` | 20 / day per member (IP fallback) | Postgres (`rl:report:`) |
 | `bulkLimiter` | `POST /auctions/bulk` | 5 / hour per member (IP fallback) | Postgres (`rl:bulk:`) |
 | `qaLimiter` | `POST /auctions/:id/questions` | 10 / hour per member (IP fallback) | Postgres (`rl:qa:`) |
@@ -71,13 +70,13 @@ All three use `path: '/'` (the web app's middleware needs `nb_rt` on every page 
 
 - Signed with `JWT_SECRET` (access) / `REFRESH_TOKEN_SECRET` (refresh), **algorithm pinned to `HS256`** on both sign and verify (`src/modules/auth/token.service.ts`).
 - Cookie lifetimes are derived from the same `*_EXPIRES_IN` strings via `ms` (`ACCESS_TTL_MS` / `REFRESH_TTL_MS`), so no cookie outlives its token.
-- Access token payload: `{ sub, role, sid }`; refresh token payload: `{ sub, sid }`. A 2FA challenge token (`{ typ: '2fa', sub, di? }`, 5 min, signed with `JWT_SECRET`) is accepted only by `/auth/2fa/verify`; `authenticate` rejects any token carrying `typ` or lacking `sid`.
+- Access token payload: `{ sub, role, sid }`; refresh token payload: `{ sub, sid }`. `authenticate` rejects a token lacking `sid`.
 - Verified in `authenticate` middleware (`src/core/middleware/auth.ts`); a Bearer header wins over the `nb_at` cookie. `optionalAuthenticate` (public routes whose answer depends on who asks, e.g. `GET /auctions/:id`, `GET /auctions/:id/bids`) treats a missing or bad token as anonymous instead of 401.
 - **Session-backed, not fully stateless** — every access/refresh JWT carries a `sid` claim tied to a `Session` row (one per logged-in device). `authenticate` looks up that row on **every** request and 401s if it's gone or belongs to another member — so `logout` / `logout-all` / `DELETE /auth/sessions/:id` / eviction revoke a device's tokens immediately instead of waiting for natural expiry. `refresh` performs the same `Session` check, refuses a deactivated member (403 `ACCOUNT_SUSPENDED`) and then re-issues only the access token, so the refresh token keeps its login-time expiry (no sliding window).
 - **Device cap**: logging in on a new device trims the member's other sessions to `limit - 1`, oldest (by `createdAt`) first, and force-closes their WebSockets (`session.service.ts` `upsertDeviceSession`). The limit is admin-configurable per role group at `PUT /admin/settings/device-limit` (`memberLimit` for BIDDER / AUCTIONEER, `superAdminLimit`, each 1-20, stored in `AppSetting` `device_limit_config`); until it is saved the default is `MAX_DEVICES_PER_MEMBER` = 3 (`src/core/config/constants.ts`).
 - The `dvid` cookie identifies the browser for that `Session` row's `deviceId` — server-generated/reused (`device.service.ts`), never client-supplied, and kept across logout so a browser is recognised as the same device on its next login instead of consuming a fresh slot. It carries no auth privilege by itself — a request with a valid `dvid` but no valid access/refresh token is still anonymous.
 - Password reset deletes every `Session` of the member; password change deletes every session except the current one. Deactivating a member (`PATCH /admin/members/:id`) deletes their sessions and closes their WebSockets.
-- `requireRole(...roles)` gates seller routes (`AUCTIONEER`, `SUPER_ADMIN`), bidder routes (`BIDDER`) and every `/admin/*` route (`SUPER_ADMIN`). With `REQUIRE_ADMIN_2FA=true`, `requireRole('SUPER_ADMIN')` also reads `twoFactorEnabledAt` live and answers 403 `TWO_FACTOR_SETUP_REQUIRED` when it is null. `requireActiveMember` re-reads `isActive` live from the DB (not the JWT) so deactivation takes effect immediately, answering 403 `ACCOUNT_SUSPENDED`; it skips the lookup for `SUPER_ADMIN`.
+- `requireRole(...roles)` gates seller routes (`AUCTIONEER`, `SUPER_ADMIN`), bidder routes (`BIDDER`) and every `/admin/*` route (`SUPER_ADMIN`). `requireActiveMember` re-reads `isActive` live from the DB (not the JWT) so deactivation takes effect immediately, answering 403 `ACCOUNT_SUSPENDED`; it skips the lookup for `SUPER_ADMIN`.
 - Login also refuses an unverified email (403 `EMAIL_NOT_VERIFIED`, and a verification code is sent unless one went out within the resend cooldown) and a deactivated account (403 `ACCOUNT_SUSPENDED`). Signup cannot pick `SUPER_ADMIN` (Joi allows only `BIDDER` / `AUCTIONEER`), and an admin cannot change their own role or deactivate themselves (409 `CANNOT_MODIFY_SELF`).
 
 ## Env vars (security-relevant)
@@ -101,12 +100,6 @@ All three use `path: '/'` (the web app's middleware needs `nb_rt` on every page 
 | `EMAIL_FROM` | SES sender; must be a verified identity (boot refuses the placeholder with `ses`) |
 | `EMAIL_FROM_NAME` | Display name in the SES `From` header (`"${EMAIL_FROM_NAME} <${EMAIL_FROM}>"`), default `NobleBid` |
 | `LOGO_URL` | Public HTTPS URL to the brand logo shown in the email header. Optional — falls back to a text wordmark when unset |
-| `SMS_DRIVER` | `stub` (default: logs a masked number, and the code outside production) or `msg91` |
-| `MSG91_AUTH_KEY` / `MSG91_SENDER_ID` / `MSG91_OTP_TEMPLATE_ID` | MSG91 Flow API credentials and DLT-registered OTP template (India). Auth key is a GitHub **secret**; boot refuses `msg91` in production without auth key and template id |
-| `WHATSAPP_DRIVER` / `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_API_VERSION` | `stub` (default: logs a masked number and the template name) or `meta` (WhatsApp Cloud API). Token is a GitHub **secret**; boot refuses `meta` in production without token and phone number id |
-| `WHATSAPP_TEMPLATE_OUTBID` / `_ENDING_SOON` / `_AUCTION_WON` / `_SALE_PAYMENT_DUE` | Approved template names (defaults `nb_outbid`, `nb_ending_soon`, `nb_auction_won`, `nb_sale_payment_due`) |
-| `TOTP_ENC_KEY` | 32 bytes, base64 (`openssl rand -base64 32`): AES-256-GCM key for TOTP secrets. GitHub **secret**. Empty = 2FA setup / enable return 503 `TWO_FACTOR_UNAVAILABLE`. Rotating it invalidates every enrolled authenticator (members must re-enrol) |
-| `REQUIRE_ADMIN_2FA` | `true` = Super Admins must enable 2FA before any `/admin` route works (default `false`) |
 | `RATE_LIMIT_AUTH_MAX` / `RATE_LIMIT_OTP_IP_MAX` | Override the 20 / window caps of `authLimiter` / `otpIpLimiter`. Empty = 20. Set on the dev stage only (Playwright signs up many members from one CI IP); a non-number fails boot |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | Super Admin created by `npm run prisma:seed` when both are set. Remove the password from the environment after the first seed |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push signing pair. Optional — unset disables push only. The private key is a GitHub **secret**; never rotate the pair (it orphans every browser subscription). See `readme/flows/deployment.md` |
@@ -119,13 +112,9 @@ Flat, non-env-configurable values live in `src/core/config/constants.ts`, not `e
 - Member passwords are hashed with `bcryptjs`, cost 12 (`BCRYPT_COST` in `auth.service.ts`). Rule (`password.ts`, used for signup / reset / change): 8-72 **bytes** (bcrypt ignores anything past 72), at least one letter and one number. Login only checks presence, so the policy is not leaked.
 - OTP codes are `bcrypt`-hashed (cost 10) into `OtpChallenge.otpHash`; the row also keeps the plaintext `code` so a resend within the TTL sends the same code. A challenge allows 5 attempts, then must be re-requested; the daily retention job deletes challenges 30 days past expiry.
 
-## Two-factor auth and SMS
+## Log redaction
 
-- TOTP (`src/core/security/totp.ts`): RFC 6238, SHA-1, 30 s step, 6 digits, +-1 step window, constant-work comparison with `crypto.timingSafeEqual`; base32 per RFC 4648. Secrets are generated with `crypto.randomBytes(20)`.
-- Secret at rest (`src/core/security/secret-box.ts`): AES-256-GCM, random 12-byte IV, auth tag verified on decrypt (tampering or a wrong key throws). Key `TOTP_ENC_KEY`.
-- Recovery codes: 10 per member, `XXXX-XXXX` from the base32 alphabet via `crypto.randomInt`, stored only as sha256 of the normalized code, single use (`usedAt` set by a guarded `updateMany`).
-- Redaction: the pino logger censors `secret`, `totpSecret`, `totpSecretEnc`, `recoveryCode`, `recoveryCodes`, `challengeToken` (plus `pan`, `accountNumber`), at depth 0, 1 and 2 (`REDACT_PATHS`, tested in `logger.test.ts`).
-- SMS: phone-verification OTP only (never login). The stub driver logs a masked number; the code is logged only outside production.
+- The pino logger censors `secret`, `pan` and `accountNumber` at depth 0, 1 and 2 (`REDACT_PATHS`, tested in `logger.test.ts`). SMS phone verification, WhatsApp alerts and TOTP 2FA were removed (`docs/DECISIONS.md` D16).
 
 ## Timing-safe comparisons
 

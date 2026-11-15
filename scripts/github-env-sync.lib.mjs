@@ -12,9 +12,6 @@ export const STAGE_SECRETS = [
   'RAZORPAY_KEY_ID',
   'RAZORPAY_KEY_SECRET',
   'RAZORPAY_WEBHOOK_SECRET',
-  'MSG91_AUTH_KEY',
-  'TOTP_ENC_KEY',
-  'WHATSAPP_TOKEN',
 ];
 
 // Per-stage variables: `NAME` for dev, `NAME_PROD` for prod.
@@ -39,17 +36,6 @@ export const STAGE_VARIABLES = [
   'API_CERTIFICATE_ARN',
   'DISABLE_DEFAULT_ENDPOINT',
   'ENABLE_CDN', // true = CloudFront in front of the uploads bucket
-  'SMS_DRIVER',
-  'MSG91_SENDER_ID',
-  'MSG91_OTP_TEMPLATE_ID',
-  'REQUIRE_ADMIN_2FA',
-  'WHATSAPP_DRIVER',
-  'WHATSAPP_PHONE_NUMBER_ID',
-  'WHATSAPP_API_VERSION',
-  'WHATSAPP_TEMPLATE_OUTBID',
-  'WHATSAPP_TEMPLATE_ENDING_SOON',
-  'WHATSAPP_TEMPLATE_AUCTION_WON',
-  'WHATSAPP_TEMPLATE_SALE_PAYMENT_DUE',
 ];
 
 // Shared by both stages: the workflow reads these WITHOUT a _PROD twin.

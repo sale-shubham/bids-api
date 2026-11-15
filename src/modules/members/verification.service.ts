@@ -2,14 +2,13 @@ import { prisma } from '@/core/prisma/client';
 
 export type VerificationFacts = {
   role: string;
-  phoneVerifiedAt: Date | null;
   payoutStatus: string | null | undefined;
   verificationRevokedAt: Date | null;
 };
 
-/** Pure rule: AUCTIONEER + verified phone + ACTIVE payout account + not revoked by an admin. */
+/** Pure rule: AUCTIONEER + ACTIVE payout account + not revoked by an admin. */
 export function isSellerVerified(f: VerificationFacts): boolean {
-  return f.role === 'AUCTIONEER' && !!f.phoneVerifiedAt && f.payoutStatus === 'ACTIVE' && !f.verificationRevokedAt;
+  return f.role === 'AUCTIONEER' && f.payoutStatus === 'ACTIVE' && !f.verificationRevokedAt;
 }
 
 /** Recomputes Member.verifiedAt (keeps the original timestamp while still verified). Returns the new state. */
@@ -18,7 +17,6 @@ export async function refreshSellerVerification(memberId: string, now = new Date
     where: { id: memberId },
     select: {
       role: true,
-      phoneVerifiedAt: true,
       verifiedAt: true,
       verificationRevokedAt: true,
       payoutAccount: { select: { status: true } },

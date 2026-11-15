@@ -19,7 +19,7 @@ bids-api/
 │   ├── __tests__/http/       # supertest HTTP tests against createApp() (guards, validation, envelope, CORS); see readme/methods/testing.md
 │   ├── core/                 # money.ts (toPaise, HARD_MAX_PRICE_PAISE), json-bigint.ts (BigInt JSON safety net), config (env, constants), errors, http (cookies, pagination, params, response),
 │   │                         #   logger, middleware (auth, rateLimit, validate, errorHandler), prisma client
-│   ├── providers/            # email (SES + stub, render.ts), sms (MSG91 + stub), whatsapp (Meta Cloud API + stub), payment (Razorpay + stub), storage (S3)
+│   ├── providers/            # email (SES + stub, render.ts), payment (Razorpay + stub), storage (S3)
 │   ├── templates/            # EJS email templates, HTML + .txt pairs (otp-code, welcome, outbid, auction-won, auction-sold,
 │                             #   auction-unsold, reserve-not-met, ending-soon, commission-due, commission-paid, review-received, question-asked, question-answered, saved-search-match, contact-message + _head/_foot/_contact partials)
 │   └── modules/
@@ -45,7 +45,7 @@ bids-api/
 │       ├── questions/        # GET|POST /auctions/:id/questions, POST /questions/:id/answer|hide
 │       ├── saved-searches/   # GET|POST /saved-searches, DELETE /saved-searches/:id; saved-search.matcher (onAuctionPublished, notifyFollowers)
 │       ├── follows/          # POST|DELETE /sellers/:id/follow, GET /members/me/following (follows.service)
-│       ├── notification-preferences/ # GET|PUT /members/me/notification-preferences, POST /members/me/whatsapp; catalogue in notify/notify.catalogue.ts
+│       ├── notification-preferences/ # GET|PUT /members/me/notification-preferences; catalogue in notify/notify.catalogue.ts
 │       ├── analytics/        # POST /auctions/:id/view (recordView), GET /analytics/seller, /analytics/auctions/:id; analytics.rules (IST days, viewer key)
 │       ├── featured/         # POST|GET /auctions/:id/feature(/checkout); featured.rules (featuredUntil math, prices), featured.service (checkout, markFeaturePaid); promoted feed lives in auctions.service
 │       ├── referrals/        # referral codes, signup attach, qualification + reward (referrals.service, referrals.rules); GET /members/me/referral

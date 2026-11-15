@@ -55,14 +55,13 @@ async function loadAuthUser(req: Request): Promise<void> {
   const token = bearer ?? req.cookies?.[ACCESS_COOKIE];
   if (!token) throw Unauthorized('Authentication required');
 
-  let payload: AuthUser & { typ?: string };
+  let payload: AuthUser;
   try {
-    payload = jwt.verify(token, env.jwt.accessSecret, { algorithms: ['HS256'] }) as AuthUser & { typ?: string };
+    payload = jwt.verify(token, env.jwt.accessSecret, { algorithms: ['HS256'] }) as AuthUser;
   } catch {
     throw Unauthorized('Invalid or expired token');
   }
-  // A 2FA challenge token (same secret) is not a session token.
-  if (payload.typ || !payload.sid) throw Unauthorized('Invalid or expired token');
+  if (!payload.sid) throw Unauthorized('Invalid or expired token');
 
   const session = await prisma.session.findUnique({ where: { id: payload.sid } });
   if (!session || session.memberId !== payload.sub) {
@@ -73,21 +72,10 @@ async function loadAuthUser(req: Request): Promise<void> {
 }
 
 export function requireRole(...roles: Role[]) {
-  return async (req: Request, _res: Response, next: NextFunction) => {
-    try {
-      if (!req.user) throw Unauthorized();
-      if (!roles.includes(req.user.role)) throw Forbidden('Insufficient permissions');
-      // REQUIRE_ADMIN_2FA: a Super Admin without 2FA may only reach the /auth/2fa/* setup routes.
-      if (req.user.role === 'SUPER_ADMIN' && env.twoFactor.requireAdmin) {
-        const m = await prisma.member.findUnique({ where: { id: req.user.sub }, select: { twoFactorEnabledAt: true } });
-        if (!m?.twoFactorEnabledAt) {
-          throw new AppError(403, 'TWO_FACTOR_SETUP_REQUIRED', 'Enable two-factor authentication to use the admin area');
-        }
-      }
-      next();
-    } catch (err) {
-      next(err);
-    }
+  return (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.user) return next(Unauthorized());
+    if (!roles.includes(req.user.role)) return next(Forbidden('Insufficient permissions'));
+    next();
   };
 }
 

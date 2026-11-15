@@ -21,7 +21,7 @@ Webhooks `product.route.activated` / `needs_clarification` / `under_review` (and
 
 ## Verified-seller badge
 
-A seller's badge depends on the payout account status being `ACTIVE` (plus a verified phone). `refreshSellerVerification(sellerId)` runs after `createAccount` and after every `product.route.*` webhook that updates a row, so activation grants the badge and SUSPENDED / REJECTED / NEEDS_CLARIFICATION removes it (`auth.md`, `payments.md`).
+A seller's badge depends on the payout account status being `ACTIVE` (the rule is: role AUCTIONEER, payout account `ACTIVE`, not revoked by an admin). `refreshSellerVerification(sellerId)` runs after `createAccount` and after every `product.route.*` webhook that updates a row, so activation grants the badge and SUSPENDED / REJECTED / NEEDS_CLARIFICATION removes it (`auth.md`, `payments.md`).
 
 ## Stub mode
 

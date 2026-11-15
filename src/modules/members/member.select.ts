@@ -13,11 +13,8 @@ export const memberProfileSelect = {
   role: true,
   isActive: true,
   emailVerifiedAt: true,
-  phoneVerifiedAt: true,
-  whatsappOptInAt: true,
   gstin: true,
   billingState: true,
-  twoFactorEnabledAt: true,
   verifiedAt: true,
   unpaidCommissionPaise: true,
   auctionsWon: true,
@@ -38,12 +35,12 @@ export const memberPublicSelect = {
   createdAt: true,
 } as const;
 
-type MemberTrust = { twoFactorEnabledAt: Date | null; verifiedAt: Date | null; whatsappOptInAt: Date | null };
+type MemberTrust = { verifiedAt: Date | null };
 
-/** Turns the internal 2FA / verification timestamps into the client booleans (never expose twoFactorEnabledAt). */
-export function withMemberTrust<T extends MemberTrust>(m: T): Omit<T, keyof MemberTrust> & { twoFactorEnabled: boolean; verified: boolean; whatsappOptIn: boolean } {
-  const { twoFactorEnabledAt, verifiedAt, whatsappOptInAt, ...rest } = m;
-  return { ...rest, twoFactorEnabled: !!twoFactorEnabledAt, verified: !!verifiedAt, whatsappOptIn: !!whatsappOptInAt };
+/** Turns the internal verifiedAt timestamp into the client `verified` boolean. */
+export function withMemberTrust<T extends MemberTrust>(m: T): Omit<T, keyof MemberTrust> & { verified: boolean } {
+  const { verifiedAt, ...rest } = m;
+  return { ...rest, verified: !!verifiedAt };
 }
 
 type MemberMoney = { unpaidCommissionPaise: bigint | number; moneySpentPaise: bigint | number };
