@@ -29,7 +29,7 @@ export async function getPublicProfile(memberId: string, now = new Date()) {
   const { statusWhere } = await import('@/modules/auctions/auctions.query');
   const [auctionsSold, activeAuctions] = await Promise.all([
     prisma.auction.count({
-      where: { AND: [{ sellerId: memberId }, statusWhere('ended', now), { bidCount: { gt: 0 } }] },
+      where: { AND: [{ sellerId: memberId }, statusWhere('ended', now), { winnerId: { not: null } }] },
     }),
     prisma.auction.count({ where: { AND: [{ sellerId: memberId }, statusWhere('live', now)] } }),
   ]);

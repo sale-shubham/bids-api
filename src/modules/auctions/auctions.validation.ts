@@ -61,6 +61,9 @@ const fields = {
   images: Joi.array().items(imageUrl).min(1).max(MAX_IMAGES),
   startingBidPaise: Joi.number().integer().min(MIN_STARTING_BID_PAISE).max(MAX_STARTING_BID_PAISE),
   minIncrementPaise: Joi.number().integer().min(MIN_INCREMENT_PAISE).max(MAX_STARTING_BID_PAISE),
+  // Cross-field rules (reserve >= start, buy-now > start and >= reserve, admin ceiling) live in the service.
+  reservePricePaise: Joi.number().integer().min(MIN_STARTING_BID_PAISE).max(MAX_STARTING_BID_PAISE).allow(null),
+  buyNowPricePaise: Joi.number().integer().min(MIN_STARTING_BID_PAISE).max(MAX_STARTING_BID_PAISE).allow(null),
   startTime: Joi.date().iso(),
   endTime: Joi.date().iso(),
 };
@@ -83,6 +86,8 @@ export const createAuctionSchema = Joi.object({
   images: fields.images.required(),
   startingBidPaise: fields.startingBidPaise.required(),
   minIncrementPaise: fields.minIncrementPaise.optional(),
+  reservePricePaise: fields.reservePricePaise.optional(),
+  buyNowPricePaise: fields.buyNowPricePaise.optional(),
   startTime: fields.startTime.required(),
   endTime: fields.endTime.required(),
 }).custom(bothTimes);
@@ -133,6 +138,8 @@ export type CreateAuctionInput = {
   images: string[];
   startingBidPaise: number;
   minIncrementPaise?: number;
+  reservePricePaise?: number | null;
+  buyNowPricePaise?: number | null;
   startTime: Date;
   endTime: Date;
 };

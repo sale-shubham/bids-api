@@ -12,6 +12,7 @@ type A = {
   winnerId: string | null;
   bidCount: number;
   currentBidPaise: number;
+  reservePricePaise: number | null;
 };
 const state = vi.hoisted(() => ({
   auctions: [] as any[],
@@ -78,6 +79,7 @@ const mk = (id: string, over: Partial<A>): A => ({
   winnerId: null,
   bidCount: 0,
   currentBidPaise: 0,
+  reservePricePaise: null,
   ...over,
 });
 
@@ -130,5 +132,50 @@ describe('runAuctionClose', () => {
     expect(state.members.w1.auctionsWon).toBe(1);
     expect(enqueue).not.toHaveBeenCalled();
     expect(publish).not.toHaveBeenCalled();
+  });
+
+  describe('hidden reserve', () => {
+    it('reserve not met: no winner, no commission, no member stats; reserve-not-met + unsold notifications', async () => {
+      state.auctions = [mk('low', { highestBidderId: 'w1', bidCount: 3, currentBidPaise: 40_000, reservePricePaise: 50_000 })];
+      const counts = await runAuctionClose(now);
+      expect(counts).toEqual({ started: 0, ended: 1, sold: 0, unsold: 1 });
+      const a = state.auctions[0];
+      expect([a.status, a.winnerId]).toEqual(['ENDED', null]);
+      expect(state.commissions).toHaveLength(0);
+      expect(state.members.s1.unpaidCommissionPaise).toBe(0);
+      expect(state.members.w1).toMatchObject({ auctionsWon: 0, moneySpentPaise: 0 });
+      const sent = enqueue.mock.calls.map((c) => c[0] as { type: string; memberId: string; data?: unknown; dedupeKey: string });
+      expect(sent.map((m) => m.type).sort()).toEqual(['auction-unsold', 'reserve-not-met']);
+      expect(sent.find((m) => m.type === 'auction-unsold')).toMatchObject({
+        memberId: 's1',
+        data: { reserveNotMet: true },
+      });
+      expect(sent.find((m) => m.type === 'reserve-not-met')).toMatchObject({
+        memberId: 'w1',
+        dedupeKey: `reserve-not-met:low:${now.getTime()}`,
+      });
+      expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: 'auction.ended', winnerId: null, finalBidPaise: 0, bidCount: 3 }));
+    });
+
+    it('reserve met (or exactly reached): sold as before', async () => {
+      state.auctions = [mk('ok', { highestBidderId: 'w1', bidCount: 3, currentBidPaise: 50_000, reservePricePaise: 50_000 })];
+      expect(await runAuctionClose(now)).toEqual({ started: 0, ended: 1, sold: 1, unsold: 0 });
+      expect(state.auctions[0].winnerId).toBe('w1');
+      expect(state.commissions).toHaveLength(1);
+      expect(state.members.w1).toMatchObject({ auctionsWon: 1, moneySpentPaise: 50_000 });
+      expect(enqueue.mock.calls.map((c) => (c[0] as { type: string }).type).sort()).toEqual([
+        'auction-sold',
+        'auction-won',
+        'commission-due',
+      ]);
+    });
+
+    it('no bids with a reserve: plain unsold, no reserve-not-met', async () => {
+      state.auctions = [mk('none', { reservePricePaise: 50_000 })];
+      await runAuctionClose(now);
+      const sent = enqueue.mock.calls.map((c) => c[0] as { type: string; data?: unknown });
+      expect(sent.map((m) => m.type)).toEqual(['auction-unsold']);
+      expect(sent[0].data).toBeUndefined();
+    });
   });
 });

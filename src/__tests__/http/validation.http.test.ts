@@ -92,7 +92,17 @@ describe('bids schemas', () => {
     ['above HARD_MAX_PRICE_PAISE', HARD_MAX_PRICE_PAISE + 1],
     ['missing', undefined],
   ])('POST /auctions/:id/bids rejects an amount that is %s', async (_n, amountPaise) => {
-    expectInvalid(await send('post', '/auctions/a1/bids', { as: 'BIDDER', body: { amountPaise } }), 'amountPaise');
+    // `missing` fails the or() rule (no field named); the others name the field.
+    const body = { maxAmountPaise: amountPaise };
+    const res = await send('post', '/auctions/a1/bids', { as: 'BIDDER', body });
+    expectInvalid(res, amountPaise === undefined ? undefined : 'maxAmountPaise');
+    if (amountPaise !== undefined) {
+      expectInvalid(await send('post', '/auctions/a1/bids', { as: 'BIDDER', body: { amountPaise } }), 'amountPaise');
+    }
+  });
+
+  it('POST /auctions/:id/bids needs maxAmountPaise or the amountPaise alias', async () => {
+    expectInvalid(await send('post', '/auctions/a1/bids', { as: 'BIDDER', body: {} }));
   });
 
   it.each([
@@ -138,6 +148,15 @@ describe('auctions schemas', () => {
     const res = await create({ startTime: iso(-10 * 60_000), endTime: iso(2 * HOUR) });
     expectInvalid(res);
     expect(res.body.error.message).toMatch(/cannot be in the past/);
+  });
+
+  it('rejects a bad reservePricePaise / buyNowPricePaise', async () => {
+    // Another member id: the create route is limited to 10 writes / minute per member.
+    const res = await request(await getApp())
+      .post('/auctions')
+      .set('Authorization', await bearer('AUCTIONEER', 'm2'))
+      .send({ ...base, reservePricePaise: 99, buyNowPricePaise: HARD_MAX_PRICE_PAISE + 1 });
+    expectInvalid(res, /reservePricePaise|buyNowPricePaise/);
   });
 
   it('rejects foreign image hosts, empty images, low starting bid, bad condition', async () => {

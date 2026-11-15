@@ -15,7 +15,9 @@ export type AuctionEvent =
       endTime: string; // ISO, already includes any anti-sniping extension
       highestBidderId: string;
       previousHighestBidderId: string | null;
-      // Masked and viewer-agnostic (no isMe); clients compare ids themselves.
+      /** Whether the hidden reserve is met at this state (true when there is no reserve). */
+      reserveMet: boolean;
+      // Masked and viewer-agnostic (no isMe); clients compare ids themselves. Carries `kind`.
       bid: Omit<BidDTO, 'isMe'>;
     }
   | { type: 'auction.extended'; auctionId: string; endTime: string }
@@ -35,7 +37,7 @@ async function auctionTitle(auctionId: string): Promise<string> {
 
 /**
  * Fan an auction event out over WebSocket: the room (connections subscribed to
- * the auction) plus member-targeted frames (outbid / won). NEVER throws — every
+ * the auction) plus member-targeted frames (outbid / won). NEVER throws â€” every
  * leg is isolated and logged; callers also wrap it in try/catch.
  */
 export async function publishAuctionEvent(event: AuctionEvent): Promise<void> {

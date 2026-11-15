@@ -5,8 +5,15 @@ import type { ListBidsQuery, MyBidsQuery, PlaceBidInput } from './bids.validatio
 export async function place(req: Request, res: Response) {
   const { ok } = await import('@/core/http/response');
   const svc = await import('./bids.service');
-  const result = await svc.placeBid(req.user!.sub, param(req, 'id'), (req.body as PlaceBidInput).amountPaise);
+  const body = req.body as PlaceBidInput;
+  const result = await svc.placeBid(req.user!.sub, param(req, 'id'), (body.maxAmountPaise ?? body.amountPaise)!);
   return ok(res, result, 201);
+}
+
+export async function buyNow(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const svc = await import('./bids.service');
+  return ok(res, await svc.buyNow(req.user!.sub, param(req, 'id')), 201);
 }
 
 export async function list(req: Request, res: Response) {

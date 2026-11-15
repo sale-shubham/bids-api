@@ -15,8 +15,10 @@ List filters (`auctions.query.ts` `statusWhere`) mirror this in SQL: live = `sta
 
 ## Shapes
 
-`AuctionCard` = `{ id, title, category, condition: NEW|USED, coverImage|null, startingBidPaise, currentBidPaise, bidCount, startTime, endTime, status, seller: { id, name, avatarUrl } }`.
-`AuctionDetail` = card + `{ description, images[], minIncrementPaise, highestBidderId|null, winnerId|null, endedAt|null, createdAt, updatedAt, recentBids: BidDTO[], myHighestBidPaise: number|null, contact: { role: 'SELLER'|'WINNER', name, email, phone }|null, isWatching: boolean, watcherCount: number }`. `isWatching` (false for guests) and `watcherCount` come from the Watchlist table (`watchlist.md`) and are `false` / `0` on create, patch and republish. The three extras before them are filled for `GET /auctions/:id` and the bid response (latest 5 bids newest first; the requester's highest bid; post-auction contact card for the winner / seller only) and are `[]` / `null` / `null` on create, patch and republish. See `bidding.md`.
+`AuctionCard` = `{ id, title, category, condition: NEW|USED, coverImage|null, startingBidPaise, currentBidPaise, bidCount, buyNowPricePaise: number|null (null when unset or once bidCount > 0), hasReserve: boolean, reserveMet: boolean, startTime, endTime, status, seller: { id, name, avatarUrl } }`.
+`AuctionDetail` = card + `{ description, images[], minIncrementPaise, highestBidderId|null, winnerId|null, endedAt|null, createdAt, updatedAt, recentBids: BidDTO[], myHighestBidPaise: number|null, myMaxBidPaise: number|null, reservePricePaise?: number|null (owner / SUPER_ADMIN only), contact: { role: 'SELLER'|'WINNER', name, email, phone }|null, isWatching: boolean, watcherCount: number }`. `isWatching` (false for guests) and `watcherCount` come from the Watchlist table (`watchlist.md`) and are `false` / `0` on create, patch and republish. The three extras before them are filled for `GET /auctions/:id` and the bid response (latest 5 bids newest first; the requester's highest bid; post-auction contact card for the winner / seller only) and are `[]` / `null` / `null` on create, patch and republish. See `bidding.md`.
+
+**Reserve exposure:** `reservePricePaise` is never in `toCard` / `toDetail`. `buildAuctionDetail` adds it only when the viewer is the seller or a SUPER_ADMIN (`GET /auctions/:id`); the owner-only endpoints add it too (`/auctions/mine` rows, create / patch / republish responses, via `withReserve` in `auctions.service.ts`). Everyone else only sees `hasReserve` / `reserveMet`. `myMaxBidPaise` is the viewer's own `MaxBid`.
 
 ## Endpoints
 
@@ -32,7 +34,8 @@ List filters (`auctions.query.ts` `statusWhere`) mirror this in SQL: live = `sta
 | PATCH | `/auctions/:id` | seller | all fields optional -> `{ auction }` |
 | DELETE | `/auctions/:id` | seller / SUPER_ADMIN | soft delete -> `{ id }`. A SUPER_ADMIN may cancel any auction, including ones with bids (no refund or notification; it is logged). This is the admin cancel action. |
 | POST | `/auctions/:id/republish` | seller | `{ startTime, endTime }` -> `{ auction }` |
-| POST / GET | `/auctions/:id/bids` | BIDDER / public | place a bid / list bids; see `bidding.md` |
+| POST / GET | `/auctions/:id/bids` | BIDDER / public | place a (max) bid / list bids; see `bidding.md` |
+| POST | `/auctions/:id/buy-now` | BIDDER | Buy It Now; see `bidding.md` |
 
 Fixed paths (`home`, `categories`, `sitemap`, `mine`) are declared before `/:id`.
 
@@ -68,6 +71,8 @@ Price = `currentBidPaise` if `bidCount > 0` else `startingBidPaise` (the `GREATE
 | `images` | 1-8 URLs, each under our CloudFront/S3 base (`isOwnMediaUrl`, same check as avatars); first = cover |
 | `startingBidPaise` | int 100..1_000_000_000_000 (`HARD_MAX_PRICE_PAISE`); also <= AppSetting `auction.maxPricePaise` (400 `PRICE_TOO_HIGH`, `details: { maxPaise }`) |
 | `minIncrementPaise` | optional int 100..`HARD_MAX_PRICE_PAISE`, <= `auction.maxPricePaise` (`PRICE_TOO_HIGH`); default AppSetting `auction.minIncrementPaise` (10000 fallback) |
+| `reservePricePaise` | optional int 100..`HARD_MAX_PRICE_PAISE` (`null` on PATCH clears it); `>= startingBidPaise` (400 `INVALID_RESERVE`); <= `auction.maxPricePaise`. Hidden from bidders |
+| `buyNowPricePaise` | optional int 100..`HARD_MAX_PRICE_PAISE` (`null` on PATCH clears it); `> startingBidPaise` and `>= reservePricePaise` when both set (400 `INVALID_BUY_NOW`); <= `auction.maxPricePaise`. PATCH with a partial change is checked against the stored values |
 | `startTime` | ISO, `>= now - 2 min` (checked on create, republish, and on PATCH when `startTime` is sent) |
 | `endTime` | `endTime - startTime` between 1 hour and 30 days (PATCH re-checks against the stored other time when only one is sent) |
 
@@ -80,6 +85,8 @@ Stored `status` on create/republish: `LIVE` if `startTime <= now`, else `SCHEDUL
 | Status | `code` | When |
 |---|---|---|
 | 400 | `PRICE_TOO_HIGH` | create / patch with `startingBidPaise` or `minIncrementPaise` above `auction.maxPricePaise` |
+| 400 | `INVALID_RESERVE` | reserve below the starting bid |
+| 400 | `INVALID_BUY_NOW` | buy-now not above the starting bid, or below the reserve |
 | 400 | `VALIDATION_ERROR` | Joi failure, unknown category, time window broken against stored times |
 | 403 | `FORBIDDEN` | role is not AUCTIONEER / SUPER_ADMIN on create / mine / write routes |
 | 403 | `COMMISSION_UNPAID` | create while `unpaidCommissionPaise > 0` |
@@ -90,7 +97,7 @@ Stored `status` on create/republish: `LIVE` if `startTime <= now`, else `SCHEDUL
 
 Writes use `updateMany` with `bidCount: 0` in the WHERE, so a bid landing between the check and the write cannot be overwritten (the call then returns `AUCTION_HAS_BIDS`).
 
-DELETE = soft delete: `status = CANCELLED`, `deletedAt = now`. SUPER_ADMIN may delete regardless of bids (and any seller's auction). Republish sets the new times and status, clears `endedAt`, `winnerId`, `highestBidderId`.
+DELETE = soft delete: `status = CANCELLED`, `deletedAt = now`. SUPER_ADMIN may delete regardless of bids (and any seller's auction). Republish sets the new times and status, clears `endedAt`, `winnerId`, `highestBidderId` and keeps `reservePricePaise` / `buyNowPricePaise`. Relisting after an auction ended below its reserve is a client-side pre-fill of `/sell/new` (no endpoint, decision D9).
 
 Rate limit: `auctionWriteLimiter` (10 / min per member) on create, patch, republish.
 

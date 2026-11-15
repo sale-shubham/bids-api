@@ -158,7 +158,8 @@ describe('publishAuctionEvent', () => {
     endTime: '2026-01-01T00:00:00.000Z',
     highestBidderId: 'm2',
     previousHighestBidderId: 'm1',
-    bid: { id: 'b1', amountPaise: 500, createdAt: 'x', bidderLabel: 'Bidder 1' },
+    reserveMet: true,
+    bid: { id: 'b1', amountPaise: 500, kind: 'MANUAL' as const, createdAt: 'x', bidderLabel: 'Bidder 1' },
   };
 
   it('bid.placed: room frame without previousHighestBidderId + outbid to previous bidder', async () => {

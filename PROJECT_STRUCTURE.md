@@ -4,7 +4,7 @@
 bids-api/
 ├── index.js                  # Lambda handlers (api + WS, retentionPurge, closeAuctions, endingSoon, commissionReminder, notifyWorker) and local dev server
 ├── serverless.yml            # service bids-api: HTTP API, WebSocket API, S3 (+ CloudFront when ENABLE_CDN=true), NotifyQueue/NotifyDLQ, closeAuctions (1 min) + endingSoon (15 min) + commissionReminder (1 day) + retentionPurge (1 day) + notifyWorker (SQS), alarms
-├── prisma/schema.prisma      # Member, Session, OtpChallenge, Auction, Bid, Watchlist, Commission,
+├── prisma/schema.prisma      # Member, Session, OtpChallenge, Auction, Bid, MaxBid, Watchlist, Commission,
 │                             #   WsConnection, WsTicket, PushSubscription, RateLimitBucket, PaymentOrder,
 │                             #   WebhookEvent, Notification, AppSetting (+ migrations/, seed.ts, seed-demo.ts)
 ├── prisma.config.ts          # Prisma CLI config (DIRECT_URL)
@@ -21,15 +21,15 @@ bids-api/
 │   │                         #   logger, middleware (auth, rateLimit, validate, errorHandler), prisma client
 │   ├── providers/            # email (SES + stub, render.ts), payment (Razorpay + stub), storage (S3)
 │   ├── templates/            # EJS email templates, HTML + .txt pairs (otp-code, welcome, outbid, auction-won, auction-sold,
-│                             #   auction-unsold, ending-soon, commission-due, commission-paid, contact-message + _head/_foot/_contact partials)
+│                             #   auction-unsold, reserve-not-met, ending-soon, commission-due, commission-paid, contact-message + _head/_foot/_contact partials)
 │   └── modules/
 │       ├── auth/             # signup/verify/login/password flows, token, session, device, otp-challenge, password rule
 │       ├── members/          # GET/PATCH /members/me, GET /members/:id/public, member.select.ts
 │       ├── uploads/          # POST /uploads/presign (auctions, avatars; images, 5 MB; size + type signed into the PUT)
 │       ├── auctions/         # catalogue, home, categories, detail, create/patch/delete/republish, mine
 │       │                     #   (routes, controller, service, validation + sanitiser, serializer + effectiveStatus, query helpers)
-│       │                     #   + bidding.rules.ts (pure), auction-detail.service, auction-close.service, auction-events (WebSocket fan-out)
-│       ├── bids/             # POST/GET /auctions/:id/bids, GET /bids/mine
+│       │                     #   + bidding.rules.ts (pure: resolveMaxBid, reserveMet, validateBuyNow), auction-detail.service, auction-close.service, auction-events (WebSocket fan-out)
+│       ├── bids/             # POST/GET /auctions/:id/bids (max bids), POST /auctions/:id/buy-now, GET /bids/mine
 │       ├── notify/           # enqueueNotification (SQS or inline), processNotification, SQS worker, content
 │       ├── notifications/    # in-app inbox: list, unread-count, read, read-all
 │       ├── push/             # Web Push subscribe/unsubscribe, sendPushToMember

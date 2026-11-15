@@ -19,6 +19,8 @@ const row = {
   startTime: new Date(now.getTime() - 3600_000),
   endTime: new Date(now.getTime() + 3600_000),
   endedAt: null,
+  reservePricePaise: 6_000_000_000_000n,
+  buyNowPricePaise: 9_000_000_000_000n,
   highestBidderId: null,
   winnerId: null,
   createdAt: now,
@@ -38,9 +40,24 @@ describe('serializers with bigint rows', () => {
     expect(parsed.minIncrementPaise).toBe(10_000);
   });
   it('toBidDTO converts amountPaise', () => {
-    const dto = toBidDTO({ id: 'b1', amountPaise: 123_456_789_012n, createdAt: now, bidder: { id: 'u', name: 'Rahul' } }, 'u');
+    const dto = toBidDTO({ id: 'b1', amountPaise: 123_456_789_012n, kind: 'MANUAL', createdAt: now, bidder: { id: 'u', name: 'Rahul' } }, 'u');
     expect(dto.amountPaise).toBe(123_456_789_012);
     expect(typeof dto.amountPaise).toBe('number');
     expect(dto.isMe).toBe(true);
+  });
+  it('never exposes the reserve amount in card or detail', () => {
+    for (const dto of [toCard(row, now), toDetail(row, now)]) {
+      expect(JSON.stringify(dto)).not.toContain('reservePricePaise');
+      expect(JSON.stringify(dto)).not.toContain('6000000000000');
+    }
+  });
+  it('card flags: hasReserve, reserveMet, buyNow hidden once bids exist', () => {
+    const noBids = { ...row, bidCount: 0, currentBidPaise: 0n } as AuctionRow;
+    expect(toCard(noBids, now)).toMatchObject({ hasReserve: true, reserveMet: false, buyNowPricePaise: 9_000_000_000_000 });
+    expect(toCard(row, now)).toMatchObject({ hasReserve: true, reserveMet: false, buyNowPricePaise: null });
+    const met = { ...row, currentBidPaise: 6_000_000_000_000n } as AuctionRow;
+    expect(toCard(met, now).reserveMet).toBe(true);
+    const none = { ...row, reservePricePaise: null, buyNowPricePaise: null } as AuctionRow;
+    expect(toCard(none, now)).toMatchObject({ hasReserve: false, reserveMet: true, buyNowPricePaise: null });
   });
 });

@@ -17,7 +17,11 @@ export type BidAuction = {
   bidCount: number;
   startingBidPaise: number;
   currentBidPaise: number;
+  reservePricePaise: number | null;
+  buyNowPricePaise: number | null;
 };
+
+export type BidKindValue = 'MANUAL' | 'AUTO' | 'BUY_NOW';
 
 export type Bidder = { id: string; isActive: boolean };
 
@@ -29,20 +33,26 @@ export function minBidPaise(
   return a.bidCount === 0 ? a.startingBidPaise : a.currentBidPaise + minIncrementPaise;
 }
 
-/**
- * Throws the AppError the API contract names, in this order: suspended,
- * not found (cancelled/deleted), not started, ended, own auction, already
- * highest, too low. Time checks use startTime/endTime, never the stored status
- * (the close job lags), except a stored ENDED/CANCELLED which is final.
- */
-export function validateBid(input: {
-  auction: BidAuction;
-  bidder: Bidder;
-  amountPaise: number;
-  now: Date;
-  minIncrementPaise: number;
-}): { minBidPaise: number } {
-  const { auction, bidder, amountPaise, now, minIncrementPaise } = input;
+/** Reserve is met when there is none, or a bid has reached it. Never shown to bidders, only this boolean. */
+export function reserveMet(a: { reservePricePaise: number | null; bidCount: number; currentBidPaise: number }): boolean {
+  if (a.reservePricePaise === null) return true;
+  return a.bidCount > 0 && a.currentBidPaise >= a.reservePricePaise;
+}
+
+/** The close job stamps winnerId; until it runs the highest bidder wins, but only when the reserve is met. */
+export function provisionalWinnerId(a: {
+  winnerId: string | null;
+  highestBidderId: string | null;
+  reservePricePaise: number | null;
+  bidCount: number;
+  currentBidPaise: number;
+}): string | null {
+  return a.winnerId ?? (a.bidCount > 0 && reserveMet(a) ? a.highestBidderId : null);
+}
+
+type PreCheckInput = { auction: BidAuction; bidder: Bidder; now: Date };
+
+function preChecks({ auction, bidder, now }: PreCheckInput): void {
   if (!bidder.isActive) throw new AppError(403, 'ACCOUNT_SUSPENDED', 'Your account has been suspended. Contact admin support.');
   if (auction.status === 'CANCELLED' || auction.deletedAt) throw new AppError(404, 'AUCTION_NOT_FOUND', 'Auction not found');
   if (now.getTime() < auction.startTime.getTime()) throw new AppError(409, 'AUCTION_NOT_STARTED', 'This auction has not started yet');
@@ -50,12 +60,96 @@ export function validateBid(input: {
     throw new AppError(409, 'AUCTION_ENDED', 'This auction has ended');
   }
   if (auction.sellerId === bidder.id) throw new AppError(403, 'OWN_AUCTION', 'You cannot bid on your own auction');
-  if (auction.highestBidderId === bidder.id) throw new AppError(409, 'ALREADY_HIGHEST', 'You are already the highest bidder');
-  const min = minBidPaise(auction, minIncrementPaise);
-  if (amountPaise < min) {
-    throw new AppError(400, 'BID_TOO_LOW', 'Your bid is too low', { minBidPaise: min });
+}
+
+/**
+ * Throws the AppError the API contract names, in this order: suspended,
+ * not found (cancelled/deleted), not started, ended, own auction. The amount is
+ * judged by resolveMaxBid. Time checks use startTime/endTime, never the stored
+ * status (the close job lags), except a stored ENDED/CANCELLED which is final.
+ */
+export function validateBid(input: PreCheckInput): void {
+  preChecks(input);
+}
+
+/** Same pre-checks as a bid, then Buy It Now must still be on offer (set and no bids yet). */
+export function validateBuyNow(input: PreCheckInput): void {
+  preChecks(input);
+  if (input.auction.buyNowPricePaise === null || input.auction.bidCount > 0) {
+    throw new AppError(409, 'BUY_NOW_UNAVAILABLE', 'Buy It Now is no longer available');
   }
-  return { minBidPaise: min };
+}
+
+export type ResolvedRow = { bidderId: string; amountPaise: number; kind: 'MANUAL' | 'AUTO' };
+export type ResolvedBid = {
+  rows: ResolvedRow[];
+  highestBidderId: string;
+  currentBidPaise: number;
+  outbidByProxy: boolean;
+};
+
+/**
+ * Max-bid (eBay-style) resolution; every bid is a maximum. Pure: the caller
+ * feeds the locked auction row and the leader's stored max, then writes `rows`
+ * in order. See readme/flows/bidding.md for the rules.
+ */
+export function resolveMaxBid(input: {
+  auction: Pick<BidAuction, 'bidCount' | 'startingBidPaise' | 'currentBidPaise' | 'highestBidderId' | 'reservePricePaise'>;
+  minIncrementPaise: number;
+  leaderMaxPaise: number | null;
+  bidderId: string;
+  maxPaise: number;
+}): ResolvedBid {
+  const { auction, minIncrementPaise: inc, bidderId, maxPaise } = input;
+  const reserve = auction.reservePricePaise;
+  const cur = auction.currentBidPaise;
+  const rows: ResolvedRow[] = [];
+  const tooLow = (min: number) => new AppError(400, 'BID_TOO_LOW', 'Your bid is too low', { minBidPaise: min });
+
+  // Raises the final price to the reserve when the winning max reaches it.
+  const reserveJump = (winnerMax: number, price: number): number =>
+    reserve !== null && winnerMax >= reserve && price < reserve ? reserve : price;
+
+  // 2. First bid.
+  if (auction.bidCount === 0 || !auction.highestBidderId) {
+    if (maxPaise < auction.startingBidPaise) throw tooLow(auction.startingBidPaise);
+    const price = reserveJump(maxPaise, auction.startingBidPaise);
+    rows.push({ bidderId, amountPaise: price, kind: 'MANUAL' });
+    return { rows, highestBidderId: bidderId, currentBidPaise: price, outbidByProxy: false };
+  }
+
+  const leaderId = auction.highestBidderId;
+  const leaderMax = Math.max(input.leaderMaxPaise ?? cur, cur);
+
+  // 3. The leader raises their own maximum: no row, except a jump to the reserve.
+  if (leaderId === bidderId) {
+    if (maxPaise <= leaderMax) {
+      throw new AppError(400, 'MAX_TOO_LOW', 'Your new maximum must be higher than your current maximum', {
+        currentMaxPaise: leaderMax,
+      });
+    }
+    const price = reserveJump(maxPaise, cur);
+    if (price !== cur) rows.push({ bidderId, amountPaise: price, kind: 'AUTO' });
+    return { rows, highestBidderId: bidderId, currentBidPaise: price, outbidByProxy: false };
+  }
+
+  // 4. / 5. Challenger.
+  const minBid = cur + inc;
+  if (maxPaise < minBid) throw tooLow(minBid);
+
+  if (maxPaise > leaderMax) {
+    if (leaderMax > cur) rows.push({ bidderId: leaderId, amountPaise: leaderMax, kind: 'AUTO' });
+    rows.push({ bidderId, amountPaise: Math.min(maxPaise, leaderMax + inc), kind: 'MANUAL' });
+    const last = rows[rows.length - 1]!;
+    last.amountPaise = reserveJump(maxPaise, last.amountPaise);
+    return { rows, highestBidderId: bidderId, currentBidPaise: last.amountPaise, outbidByProxy: false };
+  }
+
+  rows.push({ bidderId, amountPaise: maxPaise, kind: 'MANUAL' });
+  rows.push({ bidderId: leaderId, amountPaise: Math.min(leaderMax, maxPaise + inc), kind: 'AUTO' });
+  const last = rows[rows.length - 1]!;
+  last.amountPaise = reserveJump(leaderMax, last.amountPaise);
+  return { rows, highestBidderId: leaderId, currentBidPaise: last.amountPaise, outbidByProxy: true };
 }
 
 /** Anti-sniping: a bid inside the last `minutes` pushes the end to now + minutes. 0 = off. */
@@ -73,13 +167,27 @@ export function bidderLabel(name: string): string {
   return `${chars[0]}***${chars[chars.length - 1]}`;
 }
 
-export type BidRow = { id: string; amountPaise: bigint | number; createdAt: Date; bidder: { id: string; name: string } };
-export type BidDTO = { id: string; amountPaise: number; createdAt: string; bidderLabel: string; isMe: boolean };
+export type BidRow = {
+  id: string;
+  amountPaise: bigint | number;
+  kind: BidKindValue;
+  createdAt: Date;
+  bidder: { id: string; name: string };
+};
+export type BidDTO = {
+  id: string;
+  amountPaise: number;
+  kind: BidKindValue;
+  createdAt: string;
+  bidderLabel: string;
+  isMe: boolean;
+};
 
 export function toBidDTO(b: BidRow, viewerId?: string | null): BidDTO {
   return {
     id: b.id,
     amountPaise: toPaise(b.amountPaise),
+    kind: b.kind,
     createdAt: b.createdAt.toISOString(),
     bidderLabel: bidderLabel(b.bidder.name),
     isMe: !!viewerId && b.bidder.id === viewerId,
@@ -104,6 +212,9 @@ export function bidState(
     endTime: Date;
     highestBidderId: string | null;
     winnerId: string | null;
+    bidCount: number;
+    currentBidPaise: number;
+    reservePricePaise: number | null;
   },
   memberId: string,
   now: Date,
@@ -111,9 +222,8 @@ export function bidState(
   const eff: EffectiveStatus = effectiveStatus(a, now);
   if (eff === 'LIVE') return a.highestBidderId === memberId ? 'WINNING' : 'OUTBID';
   if (eff === 'ENDED') {
-    // The close job may not have stamped winnerId yet — the highest bidder is the winner.
-    const winner = a.winnerId ?? a.highestBidderId;
-    return winner === memberId ? 'WON' : 'LOST';
+    // The close job may not have stamped winnerId yet; below the reserve nobody wins.
+    return provisionalWinnerId(a) === memberId ? 'WON' : 'LOST';
   }
   return null;
 }

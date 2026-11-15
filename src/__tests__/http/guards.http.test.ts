@@ -30,6 +30,7 @@ const AUTHED: Route[] = [
   ['delete', '/auctions/a1'],
   ['post', '/auctions/a1/republish'],
   ['post', '/auctions/a1/bids'],
+  ['post', '/auctions/a1/buy-now'],
   ['get', '/bids/mine'],
   ['get', '/notifications'],
   ['get', '/notifications/unread-count'],
@@ -71,6 +72,7 @@ const SELLER_ONLY: Route[] = [
 
 const BIDDER_ONLY: Route[] = [
   ['post', '/auctions/a1/bids'],
+  ['post', '/auctions/a1/buy-now'],
   ['get', '/bids/mine'],
 ];
 

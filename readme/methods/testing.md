@@ -22,7 +22,7 @@ Coverage is report-only: `vitest.config.ts` sets no thresholds, so it never fail
   - `guards.http.test.ts` - route matrix: unauthenticated -> 401, wrong role -> 403 (BIDDER vs seller/admin routes, AUCTIONEER vs bidder/admin routes), token / session / suspended-member cases, public routes stay public.
   - `validation.http.test.ts` - representative 400 `VALIDATION_ERROR`s per module (password rule, bid amount, auction time window and images, pagination bounds, admin settings / device-limit / legal-page / member-update / retention ranges, contact, leaderboard, commissions, members, uploads, push).
   - `auth.http.test.ts` - signup -> verify -> login, cookie flags (httpOnly, SameSite, host-only, Secure/Domain variants), refresh and logout cookies.
-  - `bidding.http.test.ts` - `POST /auctions/:id/bids` 201 shape and every mapped error code, anti-sniping, `GET /auctions` envelope (`meta`, `serverTime`), `GET /auctions/:id` 404.
+  - `bidding.http.test.ts` - `POST /auctions/:id/bids` (max bids, `amountPaise` alias, proxy rows and events, `outbidByProxy`) 201 shape and every mapped error code, `POST /auctions/:id/buy-now`, reserve / buy-now create rules, anti-sniping, `GET /auctions` envelope (`meta`, `serverTime`), `GET /auctions/:id` 404.
   - `endpoints.http.test.ts` - Razorpay webhook (real HMAC over the raw body), commissions, ws tickets, public settings / legal / leaderboard / contact, watchlist, admin dashboard and settings.
   - `modules.http.test.ts` - uploads, push, members, notifications, admin lists / retention.
   - `envelope-cors.http.test.ts` - 404 `NOT_FOUND`, malformed JSON -> 400, 413, 500 without internals, security headers, CORS allow / deny / preflight.

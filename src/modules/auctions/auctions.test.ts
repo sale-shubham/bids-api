@@ -13,6 +13,7 @@ const db = vi.hoisted(() => ({
   member: { findUnique: vi.fn() },
   watchlist: { count: vi.fn(async () => 0), findUnique: vi.fn(async () => null), updateMany: vi.fn(async () => ({ count: 0 })) },
   bid: { findMany: vi.fn(async () => []), aggregate: vi.fn(async () => ({ _max: { amountPaise: null } })) },
+  maxBid: { findUnique: vi.fn(async () => null as unknown) },
 }));
 vi.mock('@/core/prisma/client', () => ({ prisma: db }));
 vi.mock('@/core/config/env', () => ({
@@ -263,5 +264,82 @@ describe('service ownership / 409 rules', () => {
     expect(await code(svc.getAuction('a1', { sub: 'other', role: 'BIDDER' }, now))).toBe('404:AUCTION_NOT_FOUND');
     expect(await code(svc.getAuction('a1', seller, now))).toBe('ok');
     expect(await code(svc.getAuction('a1', { sub: 'adm', role: 'SUPER_ADMIN' }, now))).toBe('ok');
+  });
+
+  describe('reserve / buy-now', () => {
+    const input = {
+      title: 'Vintage camera',
+      description: '<p>A lovely vintage camera in fine shape.</p>',
+      category: 'Electronics',
+      condition: 'USED' as const,
+      images: ['https://cdn.example.com/auctions/a.png'],
+      startingBidPaise: 50_000,
+      startTime: at(H),
+      endTime: at(5 * H),
+    };
+    beforeEach(() => {
+      db.member.findUnique.mockResolvedValue({ unpaidCommissionPaise: 0n });
+      db.auction.create.mockResolvedValue(row({ reservePricePaise: 80_000n, buyNowPricePaise: 90_000n }));
+    });
+
+    it('create: INVALID_RESERVE / INVALID_BUY_NOW rules', async () => {
+      expect(await code(svc.createAuction('seller', { ...input, reservePricePaise: 49_999 }, now))).toBe('400:INVALID_RESERVE');
+      expect(await code(svc.createAuction('seller', { ...input, buyNowPricePaise: 50_000 }, now))).toBe('400:INVALID_BUY_NOW');
+      expect(
+        await code(svc.createAuction('seller', { ...input, reservePricePaise: 80_000, buyNowPricePaise: 79_999 }, now)),
+      ).toBe('400:INVALID_BUY_NOW');
+      expect(db.auction.create).not.toHaveBeenCalled();
+      expect(await code(svc.createAuction('seller', { ...input, reservePricePaise: 80_000, buyNowPricePaise: 80_000 }, now))).toBe('ok');
+      expect(db.auction.create.mock.calls[0][0].data).toMatchObject({ reservePricePaise: 80_000, buyNowPricePaise: 80_000 });
+    });
+    it('create: both prices are bound by the admin ceiling', async () => {
+      settings.map['auction.maxPricePaise'] = '1000000';
+      expect(await code(svc.createAuction('seller', { ...input, buyNowPricePaise: 1_000_001 }, now))).toBe('400:PRICE_TOO_HIGH');
+      expect(await code(svc.createAuction('seller', { ...input, reservePricePaise: 1_000_001 }, now))).toBe('400:PRICE_TOO_HIGH');
+    });
+    it('patch: partial updates combine with stored values; null clears', async () => {
+      db.auction.findUnique.mockResolvedValue(row({ reservePricePaise: 20_000n, buyNowPricePaise: 30_000n }));
+      db.auction.updateMany.mockResolvedValue({ count: 1 });
+      // starting bid 10_000 stored; reserve 20_000 stored -> a new buy-now below it is invalid
+      expect(await code(svc.updateAuction('a1', seller, { buyNowPricePaise: 15_000 }, now))).toBe('400:INVALID_BUY_NOW');
+      // raising the start above the stored reserve is invalid
+      expect(await code(svc.updateAuction('a1', seller, { startingBidPaise: 25_000 }, now))).toBe('400:INVALID_RESERVE');
+      expect(db.auction.updateMany).not.toHaveBeenCalled();
+      expect(await code(svc.updateAuction('a1', seller, { reservePricePaise: null }, now))).toBe('ok');
+      expect(db.auction.updateMany.mock.calls[0][0].data).toMatchObject({ reservePricePaise: null });
+    });
+    it('create response carries reservePricePaise for the owner', async () => {
+      db.auction.findUnique.mockResolvedValue(row({ reservePricePaise: 20_000n, buyNowPricePaise: null }));
+      db.auction.updateMany.mockResolvedValue({ count: 1 });
+      const created = (await svc.createAuction('seller', { ...input, reservePricePaise: 80_000 }, now)) as Record<string, unknown>;
+      expect(created.reservePricePaise).toBe(80_000);
+    });
+  });
+
+  describe('detail: reserve exposure and myMaxBidPaise', () => {
+    const detailRow = () => row({ status: 'LIVE', startTime: at(-H), reservePricePaise: 20_000n, buyNowPricePaise: null });
+    beforeEach(() => db.auction.findUnique.mockResolvedValue(detailRow()));
+
+    it('a stranger, an anonymous viewer and another bidder never see the reserve', async () => {
+      for (const viewer of [undefined, { sub: 'other', role: 'BIDDER' as const }, { sub: 'x', role: 'AUCTIONEER' as const }]) {
+        const d = (await svc.getAuction('a1', viewer, now)) as unknown as Record<string, unknown>;
+        expect('reservePricePaise' in d).toBe(false);
+        expect(JSON.stringify(d)).not.toContain('20000');
+        expect(d).toMatchObject({ hasReserve: true, reserveMet: false });
+      }
+    });
+    it('the seller and a SUPER_ADMIN do', async () => {
+      for (const viewer of [seller, { sub: 'adm', role: 'SUPER_ADMIN' as const }]) {
+        const d = (await svc.getAuction('a1', viewer, now)) as unknown as Record<string, unknown>;
+        expect(d.reservePricePaise).toBe(20_000);
+      }
+    });
+    it('the viewer gets their own max bid', async () => {
+      db.maxBid.findUnique.mockResolvedValue({ maxAmountPaise: 77_000n });
+      const d = (await svc.getAuction('a1', { sub: 'other', role: 'BIDDER' }, now)) as unknown as { myMaxBidPaise: number };
+      expect(d.myMaxBidPaise).toBe(77_000);
+      db.maxBid.findUnique.mockResolvedValue(null);
+      expect(((await svc.getAuction('a1', undefined, now)) as unknown as { myMaxBidPaise: number | null }).myMaxBidPaise).toBeNull();
+    });
   });
 });

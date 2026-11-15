@@ -20,7 +20,7 @@ vi.mock('@/modules/push/push.service', () => ({ sendPushToMember: push }));
 
 import { processNotification } from './notify.service';
 import { processSqsBatch } from './notify.worker';
-import { formatInr } from './notify.content';
+import { buildContent, formatInr } from './notify.content';
 import { NOTIFY_TYPES, type NotifyMessage } from './notify.types';
 // Real renderer for the template smoke test (the provider index above is mocked).
 import { renderEmail } from '@/providers/email/render';
@@ -115,6 +115,18 @@ describe('formatInr + templates', () => {
   it('formats INR with Indian grouping', () => {
     expect(formatInr(12_345_600)).toMatch(/1,23,456/);
     expect(formatInr(123_450)).toMatch(/1,234\.50/);
+  });
+
+  it('auction-unsold copy says the reserve was not met when flagged; reserve-not-met renders for the bidder', async () => {
+    const ctx = { auctionId: 'a1', auctionTitle: 'Vintage Watch', memberName: 'Ramesh' };
+    const plain = buildContent({ ...ctx, type: 'auction-unsold', data: {} });
+    const reserve = buildContent({ ...ctx, type: 'auction-unsold', data: { reserveNotMet: true } });
+    expect(plain.body).toMatch(/no bids/);
+    expect(reserve.body).toMatch(/reserve/);
+    expect(reserve.templateData).toMatchObject({ reserveNotMet: true });
+    const html = await renderEmail('auction-unsold', { ...reserve.templateData, auctionUrl: 'https://app.test/auctions/a1' });
+    expect(html.text).toMatch(/reserve/);
+    expect(buildContent({ ...ctx, type: 'reserve-not-met', data: {} })).toMatchObject({ template: 'reserve-not-met' });
   });
 
   it.each(NOTIFY_TYPES)('renders %s (html + text)', async (type) => {

@@ -33,6 +33,6 @@ Current state: feature-complete and merged into `dev`: email + password auth, me
 | `readme/methods/*.md` | validation, prisma, security (env + rate limits), http, testing conventions |
 | `docs/DOC_SYNC.md` | Which docs to update for which change |
 | `docs/GO-LIVE.md` | Go-live checklist |
-| `docs/DECISIONS.md` | History (old MERN app, P2X scaffold), product decisions D1–D8 (D7 domains decided), known limits |
+| `docs/DECISIONS.md` | History (old MERN app, P2X scaffold), product decisions D1–D9 (D7 domains decided, D9 bidding model), known limits |
 
 Flow docs: `readme/flows/auth.md` (auth, members, uploads), `readme/flows/auctions.md` (auctions), `readme/flows/bidding.md` (bids, closing, anti-sniping), `readme/flows/notifications.md` (notify pipeline, in-app inbox), `readme/flows/payments.md` (commission payments), `readme/flows/websocket.md` (live updates), `readme/flows/watchlist.md`, `readme/flows/leaderboard.md`, `readme/flows/admin.md`, `readme/flows/legal-pages.md` (legal pages, public settings, contact), `readme/flows/deployment.md` (AWS, CI, env vars, domains).

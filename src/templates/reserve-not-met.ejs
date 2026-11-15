@@ -1,0 +1,7 @@
+<%- include('_head', { heading: 'Reserve price not met', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  You held the highest bid on <strong><%= auctionTitle %></strong>, but it did not reach the seller's
+                  hidden reserve price, so the item was not sold and you have not won it. You will not be charged anything.
+                </p>
+<%- include('_foot', { ctaUrl: auctionUrl, ctaLabel: 'View auction', frontendUrl }) %>

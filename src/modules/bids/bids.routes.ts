@@ -17,7 +17,7 @@ bidsRouter.get(
   asyncHandler(ctrl.mine),
 );
 
-// Mounted inside the auctions router  (POST|GET /auctions/:id/bids)
+// Mounted inside the auctions router  (POST|GET /auctions/:id/bids, POST /auctions/:id/buy-now)
 export const auctionBidsRouter = Router({ mergeParams: true });
 auctionBidsRouter.post(
   '/',
@@ -30,3 +30,15 @@ auctionBidsRouter.post(
   asyncHandler(ctrl.place),
 );
 auctionBidsRouter.get('/', optionalAuthenticate, validate(listBidsQuerySchema, 'query'), asyncHandler(ctrl.list));
+
+// Mounted at /auctions/:id/buy-now (no body)
+export const auctionBuyNowRouter = Router({ mergeParams: true });
+auctionBuyNowRouter.post(
+  '/',
+  authenticate,
+  requireRole('BIDDER'),
+  requireActiveMember,
+  bidAuctionLimiter,
+  bidMemberLimiter,
+  asyncHandler(ctrl.buyNow),
+);

@@ -8,9 +8,11 @@ const paging = {
 };
 
 // Hard cap only; the admin-set auction.maxPricePaise ceiling is enforced in placeBid.
+// `amountPaise` is a deprecated alias of `maxAmountPaise` (the API deploys before the app).
 export const placeBidSchema = Joi.object({
-  amountPaise: Joi.number().integer().min(1).max(HARD_MAX_PRICE_PAISE).required(),
-});
+  maxAmountPaise: Joi.number().integer().min(1).max(HARD_MAX_PRICE_PAISE),
+  amountPaise: Joi.number().integer().min(1).max(HARD_MAX_PRICE_PAISE),
+}).or('maxAmountPaise', 'amountPaise');
 
 export const listBidsQuerySchema = Joi.object({ ...paging });
 
@@ -21,6 +23,6 @@ export const myBidsQuerySchema = Joi.object({
   ...paging,
 });
 
-export type PlaceBidInput = { amountPaise: number };
+export type PlaceBidInput = { maxAmountPaise?: number; amountPaise?: number };
 export type ListBidsQuery = { page: number; pageSize: number };
 export type MyBidsQuery = { tab: BidTab; page: number; pageSize: number };

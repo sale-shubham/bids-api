@@ -95,13 +95,33 @@ export function buildContent(c: ContentCtx): Content {
         templateData: { ...base, endsAt },
       };
     }
-    case 'auction-unsold':
+    case 'auction-unsold': {
+      if (c.data.reserveNotMet === true) {
+        return {
+          title: 'Your auction ended below your reserve',
+          body: `"${c.auctionTitle}" received bids but none reached your reserve price, so it did not sell. You can relist it.`,
+          url: auctionPath,
+          subject: `"${c.auctionTitle}" ended below your reserve`,
+          template: 'auction-unsold',
+          templateData: { ...base, reserveNotMet: true },
+        };
+      }
       return {
         title: 'Your auction ended without bids',
         body: `"${c.auctionTitle}" ended with no bids. You can republish it.`,
         url: auctionPath,
         subject: `"${c.auctionTitle}" ended without bids`,
         template: 'auction-unsold',
+        templateData: { ...base, reserveNotMet: false },
+      };
+    }
+    case 'reserve-not-met':
+      return {
+        title: 'Reserve price not met',
+        body: `You had the highest bid on "${c.auctionTitle}", but it did not reach the seller's reserve price, so the item was not sold.`,
+        url: auctionPath,
+        subject: `Reserve not met on "${c.auctionTitle}"`,
+        template: 'reserve-not-met',
         templateData: base,
       };
     case 'commission-paid': {

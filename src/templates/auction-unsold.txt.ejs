@@ -1,8 +1,12 @@
-<%= fromName %> - Your auction ended without bids
+<%= fromName %> - <%= locals.reserveNotMet ? 'Your auction ended below your reserve' : 'Your auction ended without bids' %>
 
 Hi <%= name %>,
 
+<% if (locals.reserveNotMet) { -%>
+"<%= auctionTitle %>" received bids, but none reached your reserve price, so it was not sold. You can list it again from your dashboard, for example with a lower reserve.
+<% } else { -%>
 "<%= auctionTitle %>" ended without receiving any bids. You can republish it with new dates from your dashboard.
+<% } -%>
 
 View auction: <%= auctionUrl %>
 

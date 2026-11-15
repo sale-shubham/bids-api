@@ -6,7 +6,7 @@ import { buildAuctionDetail } from './auction-detail.service';
 import { resetEndingSoon } from '@/modules/watchlist/watchlist.service';
 import { getSetting } from '@/modules/settings/settings.service';
 import { assertWithinMaxPrice, getMaxPricePaise } from '@/modules/settings/max-price';
-import { toPaise } from '@/core/money';
+import { toPaise, toPaiseOrNull } from '@/core/money';
 import { auctionInclude, effectiveStatus, toCard, toDetail, type AuctionRow } from './auctions.serializer';
 import { effectivePrice, listWhere, orderFor, statusWhere } from './auctions.query';
 import {
@@ -28,6 +28,25 @@ const hasBids = () => new AppError(409, 'AUCTION_HAS_BIDS', 'This auction alread
 const ended = () => new AppError(409, 'AUCTION_ENDED', 'This auction has ended or was cancelled');
 const invalid = (message: string) =>
   new AppError(400, 'VALIDATION_ERROR', message, [{ field: '', message }]);
+
+/** Owner-only extra: the hidden reserve. toCard / toDetail never carry it. */
+const withReserve = <T extends object>(row: AuctionRow, dto: T) => ({
+  ...dto,
+  reservePricePaise: toPaiseOrNull(row.reservePricePaise),
+});
+
+/** Reserve >= starting bid; buy-now > starting bid and >= reserve; both within the admin ceiling. */
+function assertReserveBuyNow(startPaise: number, reserve: number | null | undefined, buyNow: number | null | undefined) {
+  if (reserve != null && reserve < startPaise) {
+    throw new AppError(400, 'INVALID_RESERVE', 'Reserve price must be at least the starting bid');
+  }
+  if (buyNow != null && buyNow <= startPaise) {
+    throw new AppError(400, 'INVALID_BUY_NOW', 'Buy It Now price must be higher than the starting bid');
+  }
+  if (reserve != null && buyNow != null && buyNow < reserve) {
+    throw new AppError(400, 'INVALID_BUY_NOW', 'Buy It Now price must be at least the reserve price');
+  }
+}
 
 // ---------------------------------------------------------------- reads
 
@@ -115,7 +134,7 @@ export async function getAuction(id: string, viewer: Actor | undefined, now = ne
   const hidden = effectiveStatus(row, now) === 'CANCELLED';
   const privileged = !!viewer && (viewer.role === 'SUPER_ADMIN' || viewer.sub === row.sellerId);
   if (hidden && !privileged) throw auctionNotFound();
-  return buildAuctionDetail(row, viewer?.sub ?? null, now);
+  return buildAuctionDetail(row, viewer?.sub ?? null, now, prisma, viewer?.role ?? null);
 }
 
 const SITEMAP_MAX = 5000;
@@ -144,7 +163,7 @@ export async function listMine(sellerId: string, q: MineQuery, now = new Date())
     fetchCards(where, orderFor(q.status === 'upcoming' || q.status === 'live' ? 'live' : 'ended'), skip, take),
     prisma.auction.count({ where }),
   ]);
-  return { items: rows.map((r) => toCard(r, now)), meta: pageMeta(total, q) };
+  return { items: rows.map((r) => withReserve(r, toCard(r, now))), meta: pageMeta(total, q) };
 }
 
 // ---------------------------------------------------------------- writes
@@ -177,7 +196,8 @@ export async function createAuction(memberId: string, input: CreateAuctionInput,
     const setting = Number.parseInt((await getSetting('auction.minIncrementPaise')) ?? '', 10);
     minIncrementPaise = Number.isFinite(setting) && setting >= 100 ? setting : DEFAULT_MIN_INCREMENT_PAISE;
   }
-  assertWithinMaxPrice(maxPaise, minIncrementPaise);
+  assertWithinMaxPrice(maxPaise, minIncrementPaise, input.reservePricePaise ?? undefined, input.buyNowPricePaise ?? undefined);
+  assertReserveBuyNow(input.startingBidPaise, input.reservePricePaise, input.buyNowPricePaise);
 
   const row = await prisma.auction.create({
     data: {
@@ -188,6 +208,8 @@ export async function createAuction(memberId: string, input: CreateAuctionInput,
       images: input.images,
       startingBidPaise: input.startingBidPaise,
       minIncrementPaise,
+      reservePricePaise: input.reservePricePaise ?? null,
+      buyNowPricePaise: input.buyNowPricePaise ?? null,
       startTime: input.startTime,
       endTime: input.endTime,
       status: input.startTime.getTime() <= now.getTime() ? 'LIVE' : 'SCHEDULED',
@@ -195,7 +217,7 @@ export async function createAuction(memberId: string, input: CreateAuctionInput,
     },
     include: auctionInclude,
   });
-  return toDetail(row as AuctionRow, now);
+  return withReserve(row as AuctionRow, toDetail(row as AuctionRow, now));
 }
 
 // Non-owners get 404 (never reveal that the auction exists).
@@ -215,6 +237,15 @@ export async function updateAuction(id: string, actor: Actor, input: UpdateAucti
     assertWithinMaxPrice(await getMaxPricePaise(), input.startingBidPaise, input.minIncrementPaise);
   }
 
+  const priceTouched =
+    input.startingBidPaise !== undefined || input.reservePricePaise !== undefined || input.buyNowPricePaise !== undefined;
+  if (priceTouched) {
+    const reserve = input.reservePricePaise !== undefined ? input.reservePricePaise : toPaiseOrNull(existing.reservePricePaise);
+    const buyNow = input.buyNowPricePaise !== undefined ? input.buyNowPricePaise : toPaiseOrNull(existing.buyNowPricePaise);
+    assertWithinMaxPrice(await getMaxPricePaise(), reserve ?? undefined, buyNow ?? undefined);
+    assertReserveBuyNow(input.startingBidPaise ?? toPaise(existing.startingBidPaise), reserve, buyNow);
+  }
+
   const timesChanged = input.startTime !== undefined || input.endTime !== undefined;
   const start = input.startTime ?? existing.startTime;
   const end = input.endTime ?? existing.endTime;
@@ -224,7 +255,7 @@ export async function updateAuction(id: string, actor: Actor, input: UpdateAucti
   }
 
   const data: Record<string, unknown> = {};
-  for (const k of ['title', 'category', 'condition', 'images', 'startingBidPaise', 'minIncrementPaise'] as const) {
+  for (const k of ['title', 'category', 'condition', 'images', 'startingBidPaise', 'minIncrementPaise', 'reservePricePaise', 'buyNowPricePaise'] as const) {
     if (input[k] !== undefined) data[k] = input[k];
   }
   if (input.description !== undefined) data.description = cleanDescription(input.description);
@@ -239,7 +270,7 @@ export async function updateAuction(id: string, actor: Actor, input: UpdateAucti
   if (count === 0) throw hasBids();
   if (timesChanged) await resetEndingSoon(id);
   const row = (await prisma.auction.findUnique({ where: { id }, include: auctionInclude })) as AuctionRow;
-  return toDetail(row, now);
+  return withReserve(row, toDetail(row, now));
 }
 
 export async function deleteAuction(id: string, actor: Actor, now = new Date()) {
@@ -292,5 +323,5 @@ export async function republishAuction(
   }
   await resetEndingSoon(id);
   const row = (await prisma.auction.findUnique({ where: { id }, include: auctionInclude })) as AuctionRow;
-  return toDetail(row, now);
+  return withReserve(row, toDetail(row, now));
 }

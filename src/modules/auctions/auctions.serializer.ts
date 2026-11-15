@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client';
-import { toPaise } from '@/core/money';
-import type { BidDTO } from './bidding.rules';
+import { toPaise, toPaiseOrNull } from '@/core/money';
+import { reserveMet, type BidDTO } from './bidding.rules';
 
 export type EffectiveStatus = 'SCHEDULED' | 'LIVE' | 'ENDED' | 'CANCELLED';
 
@@ -36,6 +36,14 @@ export function toCard(a: AuctionRow, now: Date = new Date()) {
     startingBidPaise: toPaise(a.startingBidPaise),
     currentBidPaise: toPaise(a.currentBidPaise),
     bidCount: a.bidCount,
+    // Buy It Now disappears after the first bid. The reserve amount itself is never serialised here.
+    buyNowPricePaise: a.bidCount > 0 ? null : toPaiseOrNull(a.buyNowPricePaise),
+    hasReserve: toPaiseOrNull(a.reservePricePaise) !== null,
+    reserveMet: reserveMet({
+      reservePricePaise: toPaiseOrNull(a.reservePricePaise),
+      bidCount: a.bidCount,
+      currentBidPaise: toPaise(a.currentBidPaise),
+    }),
     startTime: a.startTime.toISOString(),
     endTime: a.endTime.toISOString(),
     status: effectiveStatus(a, now),
@@ -60,6 +68,7 @@ export function toDetail(a: AuctionRow, now: Date = new Date()) {
     updatedAt: a.updatedAt.toISOString(),
     recentBids: [] as BidDTO[],
     myHighestBidPaise: null as number | null,
+    myMaxBidPaise: null as number | null,
     contact: null as AuctionContact | null,
     isWatching: false,
     watcherCount: 0,
