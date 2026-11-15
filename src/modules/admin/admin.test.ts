@@ -26,7 +26,7 @@ describe('admin member self-protection', () => {
 
   it('deactivating another member revokes sessions and disconnects sockets', async () => {
     db.member.findUnique.mockResolvedValue({ id: 'x' });
-    db.member.update.mockResolvedValue({ id: 'x', isActive: false });
+    db.member.update.mockResolvedValue({ id: 'x', isActive: false, unpaidCommissionPaise: 0n, moneySpentPaise: 0n });
     const out = await updateMember('x', 'me', { isActive: false });
     expect(out).toMatchObject({ id: 'x', isActive: false });
     expect(db.session.deleteMany).toHaveBeenCalledWith({ where: { memberId: 'x' } });
@@ -37,7 +37,7 @@ describe('admin member self-protection', () => {
     db.member.findUnique.mockResolvedValue(null);
     await expect(updateMember('nope', 'me', { isActive: true })).rejects.toMatchObject({ statusCode: 404 });
     db.member.findUnique.mockResolvedValue({ id: 'x' });
-    db.member.update.mockResolvedValue({ id: 'x', isActive: true });
+    db.member.update.mockResolvedValue({ id: 'x', isActive: true, unpaidCommissionPaise: 0n, moneySpentPaise: 0n });
     await updateMember('x', 'me', { isActive: true });
     expect(db.session.deleteMany).not.toHaveBeenCalled();
   });
@@ -83,6 +83,23 @@ describe('dashboard zero-fill', () => {
     expect(sign).toHaveLength(12);
     expect(sign[11]).toEqual({ month: '2026-11', bidders: 2, auctioneers: 1 });
     expect(sign[0]).toEqual({ month: '2025-12', bidders: 0, auctioneers: 0 });
+  });
+
+  it('getDashboard converts bigint _sum / rows to numbers', async () => {
+    db.member.count.mockResolvedValue(0);
+    db.auction.count.mockResolvedValue(0);
+    db.bid.count.mockResolvedValue(0);
+    db.commission.aggregate
+      .mockResolvedValueOnce({ _sum: { amountPaise: 3_000_000_000n } })
+      .mockResolvedValueOnce({ _sum: { amountPaise: 7n } });
+    db.commission.findMany.mockResolvedValue([{ amountPaise: 3_000_000_000n, paidAt: new Date('2026-11-02T00:00:00Z') }]);
+    db.member.findMany.mockResolvedValue([]);
+    db.auction.findMany.mockResolvedValue([]);
+    const d = await getDashboard(now);
+    expect(d.totals.commissionPaidPaise).toBe(3_000_000_000);
+    expect(d.totals.commissionDuePaise).toBe(7);
+    expect(d.revenueByMonth.at(-1)!.paidPaise).toBe(3_000_000_000);
+    expect(() => JSON.stringify(d)).not.toThrow();
   });
 
   it('getDashboard on an empty database returns zeros and full series', async () => {

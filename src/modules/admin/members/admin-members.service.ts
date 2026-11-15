@@ -2,6 +2,7 @@ import { prisma } from '@/core/prisma/client';
 import { offsetArgs, buildOrderBy, type SortOrder } from '@/core/http/pagination';
 import { AppError, NotFound } from '@/core/errors/AppError';
 import type { Prisma, Role } from '@prisma/client';
+import { withMemberMoney } from '@/modules/members/member.select';
 
 // Backs the admin Members page: list, update (active / role).
 
@@ -62,7 +63,7 @@ export async function listMembers(params: ListParams) {
     getMemberStats(),
   ]);
 
-  return { items, total, stats };
+  return { items: items.map(withMemberMoney), total, stats };
 }
 
 // Tab counts — always the full All/Active/Inactive split, independent of the filter.
@@ -99,5 +100,5 @@ export async function updateMember(id: string, actorId: string, input: { isActiv
     const { disconnectMemberConnections } = await import('@/modules/ws/ws.service');
     await disconnectMemberConnections(id).catch(() => {});
   }
-  return member;
+  return withMemberMoney(member);
 }

@@ -1,12 +1,12 @@
 # Bidding and auction closing flow
 
-Code: `src/modules/bids/bids.{routes,controller,service,validation}.ts`, pure rules in `src/modules/auctions/bidding.rules.ts`, close job in `src/modules/auctions/auction-close.service.ts`, event hook in `src/modules/auctions/auction-events.ts`. Envelope as in `auctions.md`. Money is integer paise.
+Code: `src/modules/bids/bids.{routes,controller,service,validation}.ts`, pure rules in `src/modules/auctions/bidding.rules.ts`, close job in `src/modules/auctions/auction-close.service.ts`, event hook in `src/modules/auctions/auction-events.ts`. Envelope as in `auctions.md`. Money is integer paise (DB `BigInt`, JSON / events plain numbers; see `readme/methods/prisma.md`).
 
 ## Endpoints
 
 | Method | Path | Who | Notes |
 |---|---|---|---|
-| POST | `/auctions/:id/bids` | BIDDER only (others 403 `FORBIDDEN`) | body `{ amountPaise: int }` -> 201 `{ auction: AuctionDetail, bid: BidDTO, serverTime }` |
+| POST | `/auctions/:id/bids` | BIDDER only (others 403 `FORBIDDEN`) | body `{ amountPaise: int 1..1_000_000_000_000 }` (400 `PRICE_TOO_HIGH` with `details: { maxPaise }` above the admin ceiling `auction.maxPricePaise`, checked before the transaction) -> 201 `{ auction: AuctionDetail, bid: BidDTO, serverTime }` |
 | GET | `/auctions/:id/bids` | public, optional auth | `paginated(BidDTO[])`, newest first; cancelled/deleted -> 404 unless seller / admin |
 | GET | `/bids/mine` | BIDDER | `tab=winning\|outbid\|won\|lost` (default winning) + `page`/`pageSize` -> `paginated({ auction: AuctionCard, myHighestBidPaise, myBidCount, lastBidAt, state }[])` |
 

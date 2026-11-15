@@ -1,14 +1,15 @@
 import Joi from 'joi';
 import { BID_TABS, type BidTab } from '@/modules/auctions/bidding.rules';
+import { HARD_MAX_PRICE_PAISE } from '@/core/money';
 
 const paging = {
   page: Joi.number().integer().min(1).default(1),
   pageSize: Joi.number().integer().min(1).max(100).default(20),
 };
 
-// Max matches the Auction.startingBidPaise ceiling (and fits a Postgres INT4).
+// Hard cap only; the admin-set auction.maxPricePaise ceiling is enforced in placeBid.
 export const placeBidSchema = Joi.object({
-  amountPaise: Joi.number().integer().min(1).max(2_147_483_647).required(),
+  amountPaise: Joi.number().integer().min(1).max(HARD_MAX_PRICE_PAISE).required(),
 });
 
 export const listBidsQuerySchema = Joi.object({ ...paging });

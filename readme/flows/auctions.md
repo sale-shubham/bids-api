@@ -66,8 +66,8 @@ Price = `currentBidPaise` if `bidCount > 0` else `startingBidPaise` (the `GREATE
 | `category` | must be in AppSetting `auction.categories` (400 `VALIDATION_ERROR`) |
 | `condition` | `NEW` / `USED` |
 | `images` | 1-8 URLs, each under our CloudFront/S3 base (`isOwnMediaUrl`, same check as avatars); first = cover |
-| `startingBidPaise` | int 100..2_000_000_000 |
-| `minIncrementPaise` | optional int >= 100; default AppSetting `auction.minIncrementPaise` (10000 fallback) |
+| `startingBidPaise` | int 100..1_000_000_000_000 (`HARD_MAX_PRICE_PAISE`); also <= AppSetting `auction.maxPricePaise` (400 `PRICE_TOO_HIGH`, `details: { maxPaise }`) |
+| `minIncrementPaise` | optional int 100..`HARD_MAX_PRICE_PAISE`, <= `auction.maxPricePaise` (`PRICE_TOO_HIGH`); default AppSetting `auction.minIncrementPaise` (10000 fallback) |
 | `startTime` | ISO, `>= now - 2 min` (checked on create, republish, and on PATCH when `startTime` is sent) |
 | `endTime` | `endTime - startTime` between 1 hour and 30 days (PATCH re-checks against the stored other time when only one is sent) |
 
@@ -79,6 +79,7 @@ Stored `status` on create/republish: `LIVE` if `startTime <= now`, else `SCHEDUL
 
 | Status | `code` | When |
 |---|---|---|
+| 400 | `PRICE_TOO_HIGH` | create / patch with `startingBidPaise` or `minIncrementPaise` above `auction.maxPricePaise` |
 | 400 | `VALIDATION_ERROR` | Joi failure, unknown category, time window broken against stored times |
 | 403 | `FORBIDDEN` | role is not AUCTIONEER / SUPER_ADMIN on create / mine / write routes |
 | 403 | `COMMISSION_UNPAID` | create while `unpaidCommissionPaise > 0` |

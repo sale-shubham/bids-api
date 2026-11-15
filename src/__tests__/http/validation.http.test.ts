@@ -1,6 +1,7 @@
 import { bearer, getApp, resetPrismaMock } from './harness';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
+import { HARD_MAX_PRICE_PAISE } from '@/core/money';
 
 vi.mock('@/core/prisma/client', async () => ({ prisma: (await import('./harness')).prismaMock }));
 vi.mock('@/core/middleware/pgRateLimitStore', async () => ({ PgRateLimitStore: (await import('./harness')).PassStore }));
@@ -88,7 +89,7 @@ describe('bids schemas', () => {
     ['zero', 0],
     ['negative', -100],
     ['a string', 'lots'],
-    ['above INT4', 2_147_483_648],
+    ['above HARD_MAX_PRICE_PAISE', HARD_MAX_PRICE_PAISE + 1],
     ['missing', undefined],
   ])('POST /auctions/:id/bids rejects an amount that is %s', async (_n, amountPaise) => {
     expectInvalid(await send('post', '/auctions/a1/bids', { as: 'BIDDER', body: { amountPaise } }), 'amountPaise');

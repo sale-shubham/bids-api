@@ -57,9 +57,9 @@ vi.mock('@/core/prisma/client', () => {
       },
     },
     // GREATEST(0, unpaid - amount), values arrive as template params [amount, memberId].
-    $executeRaw: async (_q: TemplateStringsArray, amount: number, memberId: string) => {
+    $executeRaw: async (_q: TemplateStringsArray, amount: bigint, memberId: string) => {
       const m = state.members[memberId];
-      m.unpaidCommissionPaise = Math.max(0, m.unpaidCommissionPaise - amount);
+      m.unpaidCommissionPaise = Math.max(0, m.unpaidCommissionPaise - Number(amount));
       return 1;
     },
   };

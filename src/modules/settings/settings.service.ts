@@ -1,4 +1,5 @@
 import { prisma } from '@/core/prisma/client';
+import { DEFAULT_MAX_PRICE_PAISE, HARD_MAX_PRICE_PAISE, MAX_PRICE_SETTING_KEY, MIN_MAX_PRICE_PAISE } from '@/core/money';
 
 // Admin-managed app settings live in the AppSetting key/value table
 // (`value` is TEXT, parsed by each caller). Typed settings (commission rate,
@@ -23,6 +24,7 @@ export const SETTING_KEYS = {
   commissionRateBps: 'commission.rateBps',
   minIncrementPaise: 'auction.minIncrementPaise',
   antiSnipingMinutes: 'auction.antiSnipingMinutes',
+  maxPricePaise: MAX_PRICE_SETTING_KEY,
   categories: 'auction.categories',
 } as const;
 
@@ -30,10 +32,16 @@ export interface PlatformSettings {
   commissionRateBps: number;
   minIncrementPaise: number;
   antiSnipingMinutes: number;
+  maxPricePaise: number;
   categories: string[];
 }
 
-export const SETTING_DEFAULTS = { commissionRateBps: 500, minIncrementPaise: 10_000, antiSnipingMinutes: 2 } as const;
+export const SETTING_DEFAULTS = {
+  commissionRateBps: 500,
+  minIncrementPaise: 10_000,
+  antiSnipingMinutes: 2,
+  maxPricePaise: DEFAULT_MAX_PRICE_PAISE,
+} as const;
 
 const intOr = (raw: string | null | undefined, fallback: number, min: number, max: number) => {
   const n = Number.parseInt(raw ?? '', 10);
@@ -55,19 +63,22 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
   const map = new Map(rows.map((r) => [r.key, r.value]));
   return {
     commissionRateBps: intOr(map.get(SETTING_KEYS.commissionRateBps), SETTING_DEFAULTS.commissionRateBps, 0, 10_000),
-    minIncrementPaise: intOr(map.get(SETTING_KEYS.minIncrementPaise), SETTING_DEFAULTS.minIncrementPaise, 100, 2_000_000_000),
+    minIncrementPaise: intOr(map.get(SETTING_KEYS.minIncrementPaise), SETTING_DEFAULTS.minIncrementPaise, 100, HARD_MAX_PRICE_PAISE),
     antiSnipingMinutes: intOr(map.get(SETTING_KEYS.antiSnipingMinutes), SETTING_DEFAULTS.antiSnipingMinutes, 0, 30),
+    maxPricePaise: intOr(map.get(SETTING_KEYS.maxPricePaise), SETTING_DEFAULTS.maxPricePaise, MIN_MAX_PRICE_PAISE, HARD_MAX_PRICE_PAISE),
     categories: parseCategories(map.get(SETTING_KEYS.categories)),
   };
 }
 
-export async function setPlatformSettings(input: PlatformSettings): Promise<PlatformSettings> {
+// maxPricePaise is optional on write: old admin clients omit it and the stored value stays.
+export async function setPlatformSettings(input: Omit<PlatformSettings, 'maxPricePaise'> & { maxPricePaise?: number }): Promise<PlatformSettings> {
   const entries: [string, string][] = [
     [SETTING_KEYS.commissionRateBps, String(input.commissionRateBps)],
     [SETTING_KEYS.minIncrementPaise, String(input.minIncrementPaise)],
     [SETTING_KEYS.antiSnipingMinutes, String(input.antiSnipingMinutes)],
     [SETTING_KEYS.categories, JSON.stringify(input.categories)],
   ];
+  if (input.maxPricePaise !== undefined) entries.push([SETTING_KEYS.maxPricePaise, String(input.maxPricePaise)]);
   await prisma.$transaction(
     entries.map(([key, value]) => prisma.appSetting.upsert({ where: { key }, create: { key, value }, update: { value } })),
   );

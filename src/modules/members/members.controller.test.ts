@@ -17,6 +17,8 @@ vi.mock('@/core/prisma/client', () => ({
         email: 'a@example.com',
         name: 'A',
         isActive: true,
+        unpaidCommissionPaise: 0n,
+        moneySpentPaise: 0n,
         createdAt: new Date(0),
       }),
     },

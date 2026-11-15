@@ -1,5 +1,6 @@
 import { prisma } from '@/core/prisma/client';
 import { env } from '@/core/config/env';
+import { toPaise } from '@/core/money';
 import { logger } from '@/core/logger/logger';
 import { getSetting } from '@/modules/settings/settings.service';
 import { enqueueNotification } from '@/modules/notify/notify.queue';
@@ -48,6 +49,7 @@ async function closeOne(auctionId: string, now: Date, rateBps: number): Promise<
       where: { id: auctionId },
       select: { sellerId: true, highestBidderId: true, bidCount: true, currentBidPaise: true },
     });
+    const currentBidPaise = toPaise(a.currentBidPaise);
     const winnerId = a.bidCount > 0 ? a.highestBidderId : null;
     await tx.auction.update({ where: { id: auctionId }, data: { winnerId } });
 
@@ -56,7 +58,7 @@ async function closeOne(auctionId: string, now: Date, rateBps: number): Promise<
       sellerId: a.sellerId,
       winnerId,
       bidCount: a.bidCount,
-      finalBidPaise: a.bidCount > 0 ? a.currentBidPaise : 0,
+      finalBidPaise: a.bidCount > 0 ? currentBidPaise : 0,
       endedAt: now,
       commissionPaise: 0,
       rateBps,
@@ -64,7 +66,7 @@ async function closeOne(auctionId: string, now: Date, rateBps: number): Promise<
     };
 
     if (a.bidCount > 0 && winnerId) {
-      closed.commissionPaise = commissionAmountPaise(a.currentBidPaise, rateBps);
+      closed.commissionPaise = commissionAmountPaise(currentBidPaise, rateBps);
       closed.dueAt = new Date(now.getTime() + COMMISSION_DUE_DAYS * 24 * 3600_000);
       await tx.commission.create({
         data: {
@@ -82,7 +84,7 @@ async function closeOne(auctionId: string, now: Date, rateBps: number): Promise<
       });
       await tx.member.update({
         where: { id: winnerId },
-        data: { auctionsWon: { increment: 1 }, moneySpentPaise: { increment: a.currentBidPaise } },
+        data: { auctionsWon: { increment: 1 }, moneySpentPaise: { increment: currentBidPaise } },
       });
     }
     return closed;

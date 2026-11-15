@@ -11,7 +11,7 @@ All routes are under `/admin` and require `authenticate` + `requireRole('SUPER_A
 | GET | `/admin/commissions` | `status=due\|paid\|waived\|all` (default due) -> `CommissionDTO & { seller: { id, name, email } }` |
 | POST | `/admin/commissions/:id/waive` | `waiveCommission` -> `{ commission }`; 404 `COMMISSION_NOT_FOUND`, 409 `COMMISSION_NOT_DUE`; reduces the seller `unpaidCommissionPaise` (never below 0) |
 | GET | `/admin/payments` | `status=created\|paid\|failed` (omit = all) -> `{ id, member: { id, name, email }, amountPaise, status (CREATED\|PAID\|FAILED), gatewayOrderId, gatewayPaymentId, referenceType, referenceId, createdAt }[]` |
-| GET / PUT | `/admin/settings` | `{ commissionRateBps 0-3000, minIncrementPaise >= 100, antiSnipingMinutes 0-30, categories: string[] }` (1-30 unique case-insensitive, each 2-40 chars). PUT replaces the whole object in one transaction and returns it. Takes effect for new closes / bids / listings. |
+| GET / PUT | `/admin/settings` | `{ commissionRateBps 0-3000, minIncrementPaise >= 100, antiSnipingMinutes 0-30, maxPricePaise 100000..1000000000000 (default 10000000000), categories: string[] }` (1-30 unique case-insensitive, each 2-40 chars). `maxPricePaise` is optional on PUT: when absent the stored value is kept. PUT replaces the rest of the object in one transaction and returns the whole object. Takes effect for new closes / bids / listings. |
 | GET / PUT | `/admin/settings/legal[/:slug]` | see `legal-pages.md` |
 | GET / PUT | `/admin/settings/device-limit` | per-role device cap |
 | POST | `/admin/retention/purge` | manual retention purge |

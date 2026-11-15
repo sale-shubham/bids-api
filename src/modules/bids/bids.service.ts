@@ -1,8 +1,10 @@
 import { prisma } from '@/core/prisma/client';
 import { AppError } from '@/core/errors/AppError';
+import { toPaise, toPaiseOrNull } from '@/core/money';
 import { logger } from '@/core/logger/logger';
 import { offsetArgs, pageMeta } from '@/core/http/pagination';
 import { getSetting } from '@/modules/settings/settings.service';
+import { assertWithinMaxPrice, getMaxPricePaise } from '@/modules/settings/max-price';
 import { auctionInclude, effectiveStatus, toCard, type AuctionRow } from '@/modules/auctions/auctions.serializer';
 import { buildAuctionDetail } from '@/modules/auctions/auction-detail.service';
 import { auctionNotFound } from '@/modules/auctions/auctions.service';
@@ -32,6 +34,7 @@ async function antiSnipingMinutes(): Promise<number> {
  * first. Notifications / events fire after commit and never fail the bid.
  */
 export async function placeBid(memberId: string, auctionId: string, amountPaise: number) {
+  assertWithinMaxPrice(await getMaxPricePaise(), amountPaise);
   const antiSniping = await antiSnipingMinutes();
 
   const tx = await prisma.$transaction(
@@ -44,7 +47,17 @@ export async function placeBid(memberId: string, auctionId: string, amountPaise:
       if (!bidder) throw new AppError(401, 'UNAUTHORIZED', 'Unauthorized');
 
       const now = new Date(); // after the lock: bids are judged in the order they win the lock
-      validateBid({ auction, bidder, amountPaise, now, minIncrementPaise: auction.minIncrementPaise });
+      validateBid({
+        auction: {
+          ...auction,
+          startingBidPaise: toPaise(auction.startingBidPaise),
+          currentBidPaise: toPaise(auction.currentBidPaise),
+        },
+        bidder,
+        amountPaise,
+        now,
+        minIncrementPaise: toPaise(auction.minIncrementPaise),
+      });
 
       const bid = await db.bid.create({
         data: { auctionId, bidderId: memberId, amountPaise },
@@ -76,7 +89,7 @@ export async function placeBid(memberId: string, auctionId: string, amountPaise:
     await publishAuctionEvent({
       type: 'bid.placed',
       auctionId,
-      currentBidPaise: updated.currentBidPaise,
+      currentBidPaise: toPaise(updated.currentBidPaise),
       bidCount: updated.bidCount,
       endTime: updated.endTime.toISOString(),
       highestBidderId: memberId,
@@ -96,7 +109,7 @@ export async function placeBid(memberId: string, auctionId: string, amountPaise:
       type: 'outbid',
       memberId: previousHighestBidderId,
       auctionId,
-      data: { newBidPaise: amountPaise, yourBidPaise: prev?._max.amountPaise ?? 0 },
+      data: { newBidPaise: amountPaise, yourBidPaise: toPaiseOrNull(prev?._max.amountPaise) ?? 0 },
       dedupeKey: `outbid:${bid.id}:${previousHighestBidderId}`,
     });
   }
@@ -167,7 +180,7 @@ export async function listMyBids(memberId: string, q: MyBidsQuery, now = new Dat
   const { skip, take } = offsetArgs(q);
   const items = matched.slice(skip, skip + take).map(({ a, g, state }) => ({
     auction: toCard(a, now),
-    myHighestBidPaise: g._max.amountPaise ?? 0,
+    myHighestBidPaise: toPaiseOrNull(g._max.amountPaise) ?? 0,
     myBidCount: g._count._all,
     lastBidAt: (g._max.createdAt ?? new Date(0)).toISOString(),
     state,

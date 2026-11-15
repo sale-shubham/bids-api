@@ -1,4 +1,5 @@
 import { prisma } from '@/core/prisma/client';
+import { toPaise } from '@/core/money';
 
 export type LeaderboardBy = 'spent' | 'won';
 
@@ -27,7 +28,7 @@ export async function getLeaderboard(by: LeaderboardBy = 'spent', limit = 20) {
       rank: i + 1,
       member: { id: m.id, displayName: displayName(m.name), avatarUrl: m.avatarUrl },
       auctionsWon: m.auctionsWon,
-      moneySpentPaise: m.moneySpentPaise,
+      moneySpentPaise: toPaise(m.moneySpentPaise),
     })),
   };
 }

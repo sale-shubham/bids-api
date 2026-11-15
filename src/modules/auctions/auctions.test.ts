@@ -144,6 +144,9 @@ describe('service ownership / 409 rules', () => {
     id: 'a1',
     sellerId: 'seller',
     bidCount: 0,
+    startingBidPaise: 10_000n,
+    minIncrementPaise: 1_000n,
+    currentBidPaise: 0n,
     status: 'SCHEDULED',
     deletedAt: null,
     startTime: at(H),
@@ -161,6 +164,26 @@ describe('service ownership / 409 rules', () => {
     settings.map = { 'auction.categories': JSON.stringify(['Electronics']) };
   });
 
+  it('create: PRICE_TOO_HIGH above the admin ceiling; patch too', async () => {
+    settings.map = { 'auction.categories': JSON.stringify(['Electronics']), 'auction.maxPricePaise': '1000000' };
+    db.member.findUnique.mockResolvedValue({ unpaidCommissionPaise: 0n });
+    const input = {
+      title: 'Vintage camera',
+      description: '<p>A lovely vintage camera in fine shape.</p>',
+      category: 'Electronics',
+      condition: 'USED' as const,
+      images: ['https://cdn.example.com/auctions/a.png'],
+      startingBidPaise: 1_000_001,
+      startTime: at(H),
+      endTime: at(5 * H),
+    };
+    expect(await code(svc.createAuction('seller', input, now))).toBe('400:PRICE_TOO_HIGH');
+    expect(await code(svc.createAuction('seller', { ...input, startingBidPaise: 50_000, minIncrementPaise: 2_000_000 }, now))).toBe('400:PRICE_TOO_HIGH');
+    expect(db.auction.create).not.toHaveBeenCalled();
+    db.auction.findUnique.mockResolvedValue(row());
+    expect(await code(svc.updateAuction('a1', seller, { startingBidPaise: 1_000_001 }, now))).toBe('400:PRICE_TOO_HIGH');
+    expect(db.auction.updateMany).not.toHaveBeenCalled();
+  });
   it('patch: non-owner gets 404', async () => {
     db.auction.findUnique.mockResolvedValue(row({ sellerId: 'other' }));
     expect(await code(svc.updateAuction('a1', seller, { title: 'New title' }, now))).toBe('404:AUCTION_NOT_FOUND');

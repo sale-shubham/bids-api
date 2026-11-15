@@ -185,7 +185,13 @@ describe('public reads', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       success: true,
-      data: { commissionRateBps: 750, minIncrementPaise: 10_000, antiSnipingMinutes: 2, categories: ['Art', 'Cars'] },
+      data: {
+        commissionRateBps: 750,
+        minIncrementPaise: 10_000,
+        antiSnipingMinutes: 2,
+        maxPricePaise: 10_000_000_000,
+        categories: ['Art', 'Cars'],
+      },
     });
   });
 
@@ -293,11 +299,16 @@ describe('admin dashboard', () => {
   });
 
   it('GET /admin/settings reads, PUT /admin/settings echoes the saved object', async () => {
-    const settings = { commissionRateBps: 600, minIncrementPaise: 20_000, antiSnipingMinutes: 3, categories: ['Art'] };
+    const settings = {
+      commissionRateBps: 600, minIncrementPaise: 20_000, antiSnipingMinutes: 3,
+      maxPricePaise: 5_000_000_000,
+      categories: ['Art'],
+    };
     prismaMock.appSetting.findMany.mockResolvedValue([
       { key: 'commission.rateBps', value: '600' },
       { key: 'auction.minIncrementPaise', value: '20000' },
       { key: 'auction.antiSnipingMinutes', value: '3' },
+      { key: 'auction.maxPricePaise', value: '5000000000' },
       { key: 'auction.categories', value: '["Art"]' },
     ]);
     prismaMock.appSetting.upsert.mockResolvedValue({});

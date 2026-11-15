@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/core/prisma/client';
 import { AppError, BadRequest } from '@/core/errors/AppError';
 import { logger } from '@/core/logger/logger';
+import { toPaise } from '@/core/money';
 import crypto from 'node:crypto';
 import { getCommissionDTO, markCommissionPaid } from '@/modules/commissions/commissions.service';
 
@@ -32,7 +33,7 @@ export async function verifyPayment(
   if (payment.status !== 'captured' && payment.status !== 'authorized') {
     throw new AppError(409, 'PAYMENT_NOT_CAPTURED', 'Payment has not been captured');
   }
-  if (payment.amountPaise !== null && payment.amountPaise !== order.amountPaise) {
+  if (payment.amountPaise !== null && payment.amountPaise !== toPaise(order.amountPaise)) {
     throw new AppError(409, 'AMOUNT_MISMATCH', 'Paid amount does not match the order');
   }
 

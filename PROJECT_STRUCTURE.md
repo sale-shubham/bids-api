@@ -17,7 +17,7 @@ bids-api/
 │   ├── app.ts                # helmet, cors, cookies, raw body for webhook, routes, error handlers
 │   ├── routes.ts             # route mounting
 │   ├── __tests__/http/       # supertest HTTP tests against createApp() (guards, validation, envelope, CORS); see readme/methods/testing.md
-│   ├── core/                 # config (env, constants), errors, http (cookies, pagination, params, response),
+│   ├── core/                 # money.ts (toPaise, HARD_MAX_PRICE_PAISE), json-bigint.ts (BigInt JSON safety net), config (env, constants), errors, http (cookies, pagination, params, response),
 │   │                         #   logger, middleware (auth, rateLimit, validate, errorHandler), prisma client
 │   ├── providers/            # email (SES + stub, render.ts), payment (Razorpay + stub), storage (S3)
 │   ├── templates/            # EJS email templates, HTML + .txt pairs (otp-code, welcome, outbid, auction-won, auction-sold,
@@ -34,7 +34,7 @@ bids-api/
 │       ├── notifications/    # in-app inbox: list, unread-count, read, read-all
 │       ├── push/             # Web Push subscribe/unsubscribe, sendPushToMember
 │       ├── ws/               # WebSocket: tickets, connect/default/disconnect, room + member fan-out, ws.transport (lambda|local driver), ws.local (dev server)
-│       ├── settings/         # app settings, legal pages, device limit
+│       ├── settings/         # app settings (max-price.ts = admin price ceiling), legal pages, device limit
 │       ├── commissions/      # GET /commissions/mine + /summary, POST /commissions/:id/checkout; markCommissionPaid, waiveCommission, runCommissionReminders
 │       ├── payments/         # POST /payments/verify, POST /payments/webhook (Razorpay, HMAC + WebhookEvent dedupe)
 │       ├── watchlist/        # GET /watchlist, /watchlist/ids, POST|DELETE /watchlist/:auctionId, runEndingSoon job

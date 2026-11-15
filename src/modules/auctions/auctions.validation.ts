@@ -1,5 +1,6 @@
 import Joi from 'joi';
 import sanitizeHtml from 'sanitize-html';
+import { HARD_MAX_PRICE_PAISE } from '@/core/money';
 import { isOwnMediaUrl } from '@/modules/members/members.service';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -7,7 +8,7 @@ export const MIN_DURATION_MS = HOUR_MS;
 export const MAX_DURATION_MS = 30 * 24 * HOUR_MS;
 export const START_GRACE_MS = 2 * 60 * 1000; // startTime may be up to 2 min in the past
 export const MIN_STARTING_BID_PAISE = 100;
-export const MAX_STARTING_BID_PAISE = 2_000_000_000;
+export const MAX_STARTING_BID_PAISE = HARD_MAX_PRICE_PAISE;
 export const MIN_INCREMENT_PAISE = 100;
 export const MAX_IMAGES = 8;
 

@@ -1,4 +1,5 @@
 import { AppError } from '@/core/errors/AppError';
+import { toPaise } from '@/core/money';
 import { effectiveStatus, type EffectiveStatus } from './auctions.serializer';
 
 // Pure bidding / closing rules — no I/O, unit-tested. The transaction in
@@ -72,13 +73,13 @@ export function bidderLabel(name: string): string {
   return `${chars[0]}***${chars[chars.length - 1]}`;
 }
 
-export type BidRow = { id: string; amountPaise: number; createdAt: Date; bidder: { id: string; name: string } };
+export type BidRow = { id: string; amountPaise: bigint | number; createdAt: Date; bidder: { id: string; name: string } };
 export type BidDTO = { id: string; amountPaise: number; createdAt: string; bidderLabel: string; isMe: boolean };
 
 export function toBidDTO(b: BidRow, viewerId?: string | null): BidDTO {
   return {
     id: b.id,
-    amountPaise: b.amountPaise,
+    amountPaise: toPaise(b.amountPaise),
     createdAt: b.createdAt.toISOString(),
     bidderLabel: bidderLabel(b.bidder.name),
     isMe: !!viewerId && b.bidder.id === viewerId,

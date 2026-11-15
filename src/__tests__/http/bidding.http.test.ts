@@ -33,9 +33,9 @@ function auctionRow(over: Record<string, unknown> = {}) {
     sellerId: 'seller1',
     highestBidderId: null,
     bidCount: 0,
-    startingBidPaise: 50_000,
-    currentBidPaise: 0,
-    minIncrementPaise: 10_000,
+    startingBidPaise: 50_000n,
+    currentBidPaise: 0n,
+    minIncrementPaise: 10_000n,
     startTime: at(-HOUR),
     endTime: at(HOUR),
     ...over,
@@ -49,7 +49,7 @@ function arrange(over: Record<string, unknown> = {}) {
   prismaMock.auction.findUniqueOrThrow.mockResolvedValue(row);
   prismaMock.bid.create.mockImplementation(async ({ data }: { data: { amountPaise: number } }) => ({
     id: 'bid1',
-    amountPaise: data.amountPaise,
+    amountPaise: BigInt(data.amountPaise),
     createdAt: NOW,
   }));
   prismaMock.auction.update.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
@@ -101,8 +101,8 @@ describe('POST /auctions/:id/bids', () => {
   });
 
   it('notifies the previous highest bidder (outbid) and uses current + increment as the floor', async () => {
-    arrange({ highestBidderId: 'other', bidCount: 1, currentBidPaise: 60_000 });
-    prismaMock.bid.aggregate.mockResolvedValue({ _max: { amountPaise: 60_000 } });
+    arrange({ highestBidderId: 'other', bidCount: 1, currentBidPaise: 60_000n });
+    prismaMock.bid.aggregate.mockResolvedValue({ _max: { amountPaise: 60_000n } });
 
     expect((await place(69_999)).body.error.code).toBe('BID_TOO_LOW');
     const res = await place(70_000);
@@ -110,6 +110,23 @@ describe('POST /auctions/:id/bids', () => {
     expect(doubles.enqueueNotification).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'outbid', memberId: 'other', auctionId: 'a1' }),
     );
+  });
+
+  it('PRICE_TOO_HIGH when the bid is above the admin ceiling', async () => {
+    arrange();
+    prismaMock.appSetting.findUnique.mockResolvedValue({ key: 'auction.maxPricePaise', value: '1000000' });
+    const res = await place(1_000_001);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('PRICE_TOO_HIGH');
+    expect(res.body.error.details).toEqual({ maxPaise: 1_000_000 });
+    expect(prismaMock.bid.create).not.toHaveBeenCalled();
+  });
+
+  it('accepts a bid above the old int4 limit under the default ceiling', async () => {
+    arrange({ startingBidPaise: 50_000n });
+    const res = await place(5_000_000_000);
+    expect(res.status).toBe(201);
+    expect(res.body.data.bid.amountPaise).toBe(5_000_000_000);
   });
 
   it('anti-sniping extends the end time and publishes auction.extended', async () => {

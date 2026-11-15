@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { toPaise } from '@/core/money';
 import type { BidDTO } from './bidding.rules';
 
 export type EffectiveStatus = 'SCHEDULED' | 'LIVE' | 'ENDED' | 'CANCELLED';
@@ -32,8 +33,8 @@ export function toCard(a: AuctionRow, now: Date = new Date()) {
     category: a.category,
     condition: a.condition,
     coverImage: a.images[0] ?? null,
-    startingBidPaise: a.startingBidPaise,
-    currentBidPaise: a.currentBidPaise,
+    startingBidPaise: toPaise(a.startingBidPaise),
+    currentBidPaise: toPaise(a.currentBidPaise),
     bidCount: a.bidCount,
     startTime: a.startTime.toISOString(),
     endTime: a.endTime.toISOString(),
@@ -51,7 +52,7 @@ export function toDetail(a: AuctionRow, now: Date = new Date()) {
     ...toCard(a, now),
     description: a.description,
     images: a.images,
-    minIncrementPaise: a.minIncrementPaise,
+    minIncrementPaise: toPaise(a.minIncrementPaise),
     highestBidderId: a.highestBidderId,
     winnerId: a.winnerId,
     endedAt: a.endedAt ? a.endedAt.toISOString() : null,

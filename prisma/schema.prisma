@@ -75,10 +75,10 @@ model Member {
   isActive              Boolean   @default(true)
   emailVerifiedAt       DateTime?
   // Commission the auctioneer owes the platform for sold auctions (paise).
-  unpaidCommissionPaise Int       @default(0)
+  unpaidCommissionPaise BigInt    @default(0)
   // Bidder stats.
   auctionsWon           Int       @default(0)
-  moneySpentPaise       Int       @default(0)
+  moneySpentPaise       BigInt    @default(0)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -88,9 +88,9 @@ model Member {
   wsTickets         WsTicket[]
   pushSubscriptions PushSubscription[]
 
-  auctionsSelling Auction[]    @relation("AuctionSeller")
-  auctionsLeading Auction[]    @relation("AuctionHighestBidder")
-  auctionsWonList Auction[]    @relation("AuctionWinner")
+  auctionsSelling Auction[]      @relation("AuctionSeller")
+  auctionsLeading Auction[]      @relation("AuctionHighestBidder")
+  auctionsWonList Auction[]      @relation("AuctionWinner")
   bids            Bid[]
   watchlist       Watchlist[]
   commissions     Commission[]
@@ -154,9 +154,9 @@ model Auction {
   category          String
   condition         ItemCondition
   images            String[] // CloudFront URLs, first = cover
-  startingBidPaise  Int
-  minIncrementPaise Int
-  currentBidPaise   Int           @default(0)
+  startingBidPaise  BigInt
+  minIncrementPaise BigInt
+  currentBidPaise   BigInt        @default(0)
   bidCount          Int           @default(0)
   startTime         DateTime
   endTime           DateTime
@@ -188,7 +188,7 @@ model Bid {
   auctionId   String
   bidder      Member   @relation(fields: [bidderId], references: [id])
   bidderId    String
-  amountPaise Int
+  amountPaise BigInt
   createdAt   DateTime @default(now())
 
   @@index([auctionId, amountPaise(sort: Desc)])
@@ -213,7 +213,7 @@ model Commission {
   seller         Member           @relation(fields: [sellerId], references: [id])
   sellerId       String
   rateBps        Int // 500 = 5%
-  amountPaise    Int
+  amountPaise    BigInt
   status         CommissionStatus @default(DUE)
   dueAt          DateTime
   paidAt         DateTime?
@@ -311,20 +311,20 @@ model RateLimitBucket {
 // ----------------------------------------------------------------------------
 
 model PaymentOrder {
-  id             String        @id @default(cuid())
-  member         Member        @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  memberId       String
-  gatewayOrderId String        @unique // razorpay order id (or stub id)
-  amountPaise    Int
-  status         PaymentStatus @default(CREATED)
+  id               String        @id @default(cuid())
+  member           Member        @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId         String
+  gatewayOrderId   String        @unique // razorpay order id (or stub id)
+  amountPaise      BigInt
+  status           PaymentStatus @default(CREATED)
   // What the order pays for (e.g. 'COMMISSION' + its id) — set when the order is created.
-  referenceType  String?
-  referenceId    String?
+  referenceType    String?
+  referenceId      String?
   // Razorpay payment id that settled the order (set when marked PAID).
   gatewayPaymentId String?
-  idempotencyKey String        @unique
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  idempotencyKey   String        @unique
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   commissions Commission[]
 

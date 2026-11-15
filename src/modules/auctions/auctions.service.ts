@@ -5,6 +5,8 @@ import { offsetArgs, pageMeta } from '@/core/http/pagination';
 import { buildAuctionDetail } from './auction-detail.service';
 import { resetEndingSoon } from '@/modules/watchlist/watchlist.service';
 import { getSetting } from '@/modules/settings/settings.service';
+import { assertWithinMaxPrice, getMaxPricePaise } from '@/modules/settings/max-price';
+import { toPaise } from '@/core/money';
 import { auctionInclude, effectiveStatus, toCard, toDetail, type AuctionRow } from './auctions.serializer';
 import { effectivePrice, listWhere, orderFor, statusWhere } from './auctions.query';
 import {
@@ -42,10 +44,15 @@ export async function listAuctions(q: ListQuery, now = new Date()) {
     // The "price" is computed (bids ? currentBid : startingBid), which Prisma cannot
     // ORDER BY — sort the (tiny) projection in memory, then load only the page.
     // TODO: switch to raw SQL ORDER BY GREATEST(...) if the live catalogue gets large.
-    const slim = await prisma.auction.findMany({
+    const slimRows = await prisma.auction.findMany({
       where,
       select: { id: true, bidCount: true, currentBidPaise: true, startingBidPaise: true, endTime: true },
     });
+    const slim = slimRows.map((r) => ({
+      ...r,
+      currentBidPaise: toPaise(r.currentBidPaise),
+      startingBidPaise: toPaise(r.startingBidPaise),
+    }));
     const dir = q.sort === 'priceAsc' ? 1 : -1;
     slim.sort(
       (a, b) =>
@@ -156,18 +163,21 @@ function cleanDescription(html: string) {
 export async function createAuction(memberId: string, input: CreateAuctionInput, now = new Date()) {
   const member = await prisma.member.findUnique({ where: { id: memberId }, select: { unpaidCommissionPaise: true } });
   if (!member) throw new AppError(401, 'UNAUTHORIZED', 'Unauthorized');
-  if (member.unpaidCommissionPaise > 0) {
+  if (toPaise(member.unpaidCommissionPaise) > 0) {
     throw new AppError(403, 'COMMISSION_UNPAID', 'Pay your outstanding commission before listing new auctions');
   }
   await assertCategory(input.category);
   const timeError = checkTimeWindow(input.startTime, input.endTime, now);
   if (timeError) throw invalid(timeError);
+  const maxPaise = await getMaxPricePaise();
+  assertWithinMaxPrice(maxPaise, input.startingBidPaise, input.minIncrementPaise);
 
   let minIncrementPaise = input.minIncrementPaise;
   if (minIncrementPaise === undefined) {
     const setting = Number.parseInt((await getSetting('auction.minIncrementPaise')) ?? '', 10);
     minIncrementPaise = Number.isFinite(setting) && setting >= 100 ? setting : DEFAULT_MIN_INCREMENT_PAISE;
   }
+  assertWithinMaxPrice(maxPaise, minIncrementPaise);
 
   const row = await prisma.auction.create({
     data: {
@@ -201,6 +211,9 @@ export async function updateAuction(id: string, actor: Actor, input: UpdateAucti
   if (['ENDED', 'CANCELLED'].includes(effectiveStatus(existing, now))) throw ended();
 
   if (input.category !== undefined) await assertCategory(input.category);
+  if (input.startingBidPaise !== undefined || input.minIncrementPaise !== undefined) {
+    assertWithinMaxPrice(await getMaxPricePaise(), input.startingBidPaise, input.minIncrementPaise);
+  }
 
   const timesChanged = input.startTime !== undefined || input.endTime !== undefined;
   const start = input.startTime ?? existing.startTime;

@@ -3,6 +3,7 @@
 // (registered via NODE_OPTIONS=--import tsx in serverless.yml, and `tsx index.js`
 // locally) type-strips the imported .ts source and resolves the `@/*` tsconfig
 // path aliases. The deployed bundle is produced by scripts/build-lambda.mjs (CI only).
+import './src/core/json-bigint.ts';
 import serverlessExpress from '@codegenie/serverless-express';
 import { createApp } from './src/app.ts';
 import { env } from './src/core/config/env.ts';

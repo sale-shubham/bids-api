@@ -1,14 +1,15 @@
 import { prisma } from '@/core/prisma/client';
 import { BadRequest } from '@/core/errors/AppError';
 import { env } from '@/core/config/env';
-import { memberProfileSelect, memberPublicSelect } from './member.select';
+import { memberProfileSelect, memberPublicSelect, withMemberMoney } from './member.select';
 
 export { memberProfileSelect, memberPublicSelect };
 // Back-compat alias.
 export const profileSelect = memberProfileSelect;
 
 export async function getProfile(memberId: string) {
-  return prisma.member.findUnique({ where: { id: memberId }, select: memberProfileSelect });
+  const member = await prisma.member.findUnique({ where: { id: memberId }, select: memberProfileSelect });
+  return member ? withMemberMoney(member) : null;
 }
 
 // Profile + this member's device cap (what the client shows as `member`).
@@ -61,5 +62,5 @@ export async function updateProfile(
   for (const k of ['phone', 'address', 'avatarUrl'] as const) {
     if (input[k] !== undefined) data[k] = input[k] || null;
   }
-  return prisma.member.update({ where: { id: memberId }, data, select: memberProfileSelect });
+  return withMemberMoney(await prisma.member.update({ where: { id: memberId }, data, select: memberProfileSelect }));
 }

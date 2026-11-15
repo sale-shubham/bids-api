@@ -16,7 +16,7 @@ vi.mock('./session.service', () => ({ upsertDeviceSession: vi.fn(), touchSession
 import * as auth from './auth.service';
 
 const hash = bcrypt.hashSync('correct1pass', 4);
-const base = { id: 'm1', email: 'a@b.co', name: 'A', role: 'BIDDER', isActive: true, passwordHash: hash };
+const base = { id: 'm1', email: 'a@b.co', name: 'A', role: 'BIDDER', isActive: true, passwordHash: hash, unpaidCommissionPaise: 0n, moneySpentPaise: 0n };
 
 beforeEach(() => {
   vi.clearAllMocks();

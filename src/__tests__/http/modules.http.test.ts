@@ -73,7 +73,7 @@ describe('push', () => {
 });
 
 describe('members', () => {
-  const profile = { id: 'm1', name: 'Asha', email: 'a@example.com', role: 'BIDDER', isActive: true };
+  const profile = { id: 'm1', name: 'Asha', email: 'a@example.com', role: 'BIDDER', isActive: true, unpaidCommissionPaise: 0n, moneySpentPaise: 0n };
 
   it('GET /members/me -> { member } incl. deviceLimit, never the password hash', async () => {
     prismaMock.member.findFirst.mockResolvedValue(profile);

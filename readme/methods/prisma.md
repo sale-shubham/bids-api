@@ -66,9 +66,17 @@ export default defineConfig({
 
 ## Models
 
-Current models live in `prisma/schema.prisma`: `Member` (role `BIDDER` / `AUCTIONEER` / `SUPER_ADMIN`), `Session`, `OtpChallenge`, `Auction`, `Bid`, `Watchlist` (composite id `memberId` + `auctionId`), `Commission` (one per auction), `Notification` (unique `dedupeKey`), `WsConnection`, `WsTicket`, `PushSubscription`, `RateLimitBucket`, `PaymentOrder` (unique `idempotencyKey` and `gatewayOrderId`), `WebhookEvent` (unique `gatewayEventId`), `AppSetting` (key/value, `value` is text parsed in code). Every money column is an `Int` in paise (`startingBidPaise`, `currentBidPaise`, `amountPaise`, `unpaidCommissionPaise`, …); commission rates are basis points (`rateBps`, 500 = 5%).
+Current models live in `prisma/schema.prisma`: `Member` (role `BIDDER` / `AUCTIONEER` / `SUPER_ADMIN`), `Session`, `OtpChallenge`, `Auction`, `Bid`, `Watchlist` (composite id `memberId` + `auctionId`), `Commission` (one per auction), `Notification` (unique `dedupeKey`), `WsConnection`, `WsTicket`, `PushSubscription`, `RateLimitBucket`, `PaymentOrder` (unique `idempotencyKey` and `gatewayOrderId`), `WebhookEvent` (unique `gatewayEventId`), `AppSetting` (key/value, `value` is text parsed in code). Every money column is a `BigInt` in paise (`startingBidPaise`, `minIncrementPaise`, `currentBidPaise`, `amountPaise`, `unpaidCommissionPaise`, `moneySpentPaise`; see "Money (BigInt paise)" below); commission rates are basis points (`rateBps`, 500 = 5%).
 
 Auth is session-backed: there is no refresh-token table, but every JWT carries the id of a `Session` row (see `security.md`). Migrations live in `prisma/migrations/`; CI applies pending ones with `npx prisma migrate deploy` (`.github/workflows/deploy_serverless.yml`).
+
+## Money (BigInt paise)
+
+- Money columns are Postgres `BIGINT`; Prisma returns `bigint` for them (`_sum` / `_max` aggregates too). Application code, pure rules (`bidding.rules.ts`), DTOs, JSON responses, WebSocket payloads, SQS / notification `data`, email template data and payment-provider amounts all use `number`.
+- Convert at the boundary where a row or aggregate enters number-typed code with `toPaise(v)` / `toPaiseOrNull(v)` from `src/core/money.ts` (throws a plain `Error` when the value is not a safe integer). Done in the auction serializers (`toCard`, `toDetail`), `toBidDTO`, auction detail, bids, auction close, commissions, payments, leaderboard, member selects (`withMemberMoney`), and the admin dashboard / members / payments.
+- Writes keep passing `number` (BigInt inputs accept `bigint | number`, including `{ increment }`). Raw SQL binds the amount as `BigInt`.
+- `HARD_MAX_PRICE_PAISE` (1,000,000,000,000) lives in `src/core/money.ts`; the admin ceiling `auction.maxPricePaise` is read by `getMaxPricePaise()` (`src/modules/settings/max-price.ts`).
+- Safety net: `src/core/json-bigint.ts` defines `BigInt.prototype.toJSON` (number when safe, else decimal string); imported first in `src/app.ts` and `index.js`. Explicit conversion stays the rule.
 
 ## Concurrency patterns
 
@@ -84,7 +92,7 @@ Imports from `'../src/generated/prisma/client.js'` (tsx resolves `.js` to `.ts`)
 
 It is **idempotent** and never overwrites admin-edited data:
 
-1. **App settings** — upserts with `update: {}` (created only when missing): `commission.rateBps` = `500`, `auction.minIncrementPaise` = `10000`, `auction.antiSnipingMinutes` = `2`, `auction.categories` = a JSON array of starter categories.
+1. **App settings** — upserts with `update: {}` (created only when missing): `commission.rateBps` = `500`, `auction.minIncrementPaise` = `10000`, `auction.antiSnipingMinutes` = `2`, `auction.maxPricePaise` = `10000000000`, `auction.categories` = a JSON array of starter categories.
 2. **Legal pages** — for each entry of `LEGAL_SEED` in `prisma/legal-seed-content.ts` (`terms-conditions`, `privacy-policy`, `refund-policy`), creates `page:<slug>` (HTML) and `page-title:<slug>` in `AppSetting` only when missing. The copy is draft text kept in git for review; the admin edits it afterwards at `/admin/settings`. See `readme/flows/legal-pages.md`.
 3. **Super Admin** — created only when both `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` are set (password hashed with bcrypt cost 12, email marked verified). An existing member with that email is left unchanged. Remove `SEED_ADMIN_PASSWORD` from the environment after the first seed.
 

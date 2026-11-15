@@ -1,5 +1,6 @@
 import { prisma } from '@/core/prisma/client';
 import { AppError } from '@/core/errors/AppError';
+import { toPaise, toPaiseOrNull } from '@/core/money';
 import { logger } from '@/core/logger/logger';
 import { offsetArgs, pageMeta } from '@/core/http/pagination';
 import { enqueueNotification } from '@/modules/notify/notify.queue';
@@ -27,12 +28,12 @@ type CommissionRow = {
   id: string;
   auctionId: string;
   rateBps: number;
-  amountPaise: number;
+  amountPaise: bigint | number;
   status: 'DUE' | 'PAID' | 'WAIVED';
   dueAt: Date;
   paidAt: Date | null;
   createdAt: Date;
-  auction: { id: string; title: string; images: string[]; currentBidPaise: number; endedAt: Date | null };
+  auction: { id: string; title: string; images: string[]; currentBidPaise: bigint | number; endedAt: Date | null };
 };
 
 export function toCommissionDTO(c: CommissionRow, now = new Date()) {
@@ -43,11 +44,11 @@ export function toCommissionDTO(c: CommissionRow, now = new Date()) {
       id: c.auction.id,
       title: c.auction.title,
       coverImage: c.auction.images[0] ?? null,
-      finalBidPaise: c.auction.currentBidPaise,
+      finalBidPaise: toPaise(c.auction.currentBidPaise),
       endedAt: c.auction.endedAt,
     },
     rateBps: c.rateBps,
-    amountPaise: c.amountPaise,
+    amountPaise: toPaise(c.amountPaise),
     status: c.status,
     dueAt: c.dueAt,
     paidAt: c.paidAt,
@@ -99,7 +100,7 @@ export async function summary(sellerId: string, now = new Date()) {
     prisma.commission.aggregate({ where: due, _sum: { amountPaise: true }, _count: { _all: true } }),
     prisma.commission.count({ where: { ...due, dueAt: { lt: now } } }),
   ]);
-  return { unpaidPaise: agg._sum.amountPaise ?? 0, dueCount: agg._count._all, overdueCount };
+  return { unpaidPaise: toPaiseOrNull(agg._sum.amountPaise) ?? 0, dueCount: agg._count._all, overdueCount };
 }
 
 /** Admin: all commissions, each with its seller. */
@@ -144,7 +145,7 @@ export async function checkout(memberId: string, commissionId: string, now = new
   const description = `Commission for "${commission.auction.title}"`.slice(0, 255);
   const respond = (orderId: string, keyId: string) => ({
     orderId,
-    amountPaise: commission.amountPaise,
+    amountPaise: toPaise(commission.amountPaise),
     currency: 'INR' as const,
     keyId,
     description,
@@ -167,7 +168,7 @@ export async function checkout(memberId: string, commissionId: string, now = new
   // Razorpay receipt max 40 chars: "c_" + 12 chars of the id + "_" + base36 time (<= 9).
   const receipt = `c_${commission.id.slice(-12)}_${now.getTime().toString(36)}`;
   const created = await paymentProvider.createOrder({
-    amountPaise: commission.amountPaise,
+    amountPaise: toPaise(commission.amountPaise),
     receipt,
     notes: { commissionId: commission.id, memberId },
   });
@@ -190,9 +191,9 @@ export async function checkout(memberId: string, commissionId: string, now = new
 const decrementUnpaid = (
   tx: { $executeRaw: (q: TemplateStringsArray, ...v: unknown[]) => unknown },
   memberId: string,
-  amountPaise: number,
+  amountPaise: bigint | number,
 ) =>
-  tx.$executeRaw`UPDATE "Member" SET "unpaidCommissionPaise" = GREATEST(0, "unpaidCommissionPaise" - ${amountPaise}) WHERE "id" = ${memberId}`;
+  tx.$executeRaw`UPDATE "Member" SET "unpaidCommissionPaise" = GREATEST(0, "unpaidCommissionPaise" - ${BigInt(amountPaise)}) WHERE "id" = ${memberId}`;
 
 const NOTHING = { applied: false, commissionId: null, auctionId: null, amountPaise: 0, sellerId: '' };
 
@@ -233,7 +234,7 @@ export async function markCommissionPaid(
       applied,
       commissionId: commission.id as string | null,
       auctionId: commission.auctionId as string | null,
-      amountPaise: commission.amountPaise,
+      amountPaise: toPaise(commission.amountPaise),
       sellerId: commission.sellerId,
     };
   });
@@ -292,7 +293,7 @@ export async function runCommissionReminders(now = new Date()): Promise<{ remind
       type: 'commission-due',
       memberId: c.sellerId,
       auctionId: c.auctionId,
-      data: { commissionPaise: c.amountPaise, dueAt: c.dueAt.toISOString(), reminder: true },
+      data: { commissionPaise: toPaise(c.amountPaise), dueAt: c.dueAt.toISOString(), reminder: true },
       dedupeKey: `commission-reminder:${c.id}:${ymd(now)}`,
     });
   }

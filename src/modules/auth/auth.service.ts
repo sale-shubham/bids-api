@@ -6,7 +6,7 @@ import { emailProvider } from '@/providers/email';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from './token.service';
 import { upsertDeviceSession, touchSession, type DeviceMeta } from './session.service';
 import { consumeOtpChallenge, issueOtpChallenge } from './otp-challenge.service';
-import { memberProfileSelect } from '@/modules/members/member.select';
+import { memberProfileSelect, withMemberMoney } from '@/modules/members/member.select';
 
 // Email + password auth (bcryptjs, cost 12). Email OTP is used only to verify
 // the email at signup and for forgot-password (otp-challenge.service.ts).
@@ -65,7 +65,7 @@ export async function verifySignup(email: string, code: string) {
       data: { name: verified.name, role: verified.role },
     })
     .catch((err) => logger.warn({ err, to: email }, 'welcome email failed'));
-  return verified;
+  return withMemberMoney(verified);
 }
 
 export async function resendSignup(email: string) {
@@ -90,7 +90,7 @@ export async function login(email: string, password: string) {
   }
   if (!member.isActive) throw AccountSuspended();
   const { passwordHash: _omit, ...safe } = member;
-  return safe;
+  return withMemberMoney(safe);
 }
 
 export async function forgotPassword(email: string) {

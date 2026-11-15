@@ -1,4 +1,5 @@
 import { prisma } from '@/core/prisma/client';
+import { toPaise, toPaiseOrNull } from '@/core/money';
 import { auctionInclude, toCard, type AuctionRow } from '@/modules/auctions/auctions.serializer';
 import { statusWhere } from '@/modules/auctions/auctions.query';
 
@@ -30,12 +31,12 @@ export function startOfDayIst(now: Date): Date {
 }
 
 /** Zero-filled monthly series: every month of the window is present. */
-export function revenueSeries(rows: { amountPaise: number; paidAt: Date | null }[], now: Date) {
+export function revenueSeries(rows: { amountPaise: bigint | number; paidAt: Date | null }[], now: Date) {
   const sums = new Map(lastMonths(now).map((m) => [m, 0]));
   for (const r of rows) {
     if (!r.paidAt) continue;
     const k = monthKey(r.paidAt);
-    if (sums.has(k)) sums.set(k, sums.get(k)! + r.amountPaise);
+    if (sums.has(k)) sums.set(k, sums.get(k)! + toPaise(r.amountPaise));
   }
   return [...sums].map(([month, paidPaise]) => ({ month, paidPaise }));
 }
@@ -89,8 +90,8 @@ export async function getDashboard(now = new Date()) {
       upcomingAuctions: upcoming,
       endedAuctions: ended,
       bidsToday,
-      commissionPaidPaise: paid._sum.amountPaise ?? 0,
-      commissionDuePaise: due._sum.amountPaise ?? 0,
+      commissionPaidPaise: toPaiseOrNull(paid._sum.amountPaise) ?? 0,
+      commissionDuePaise: toPaiseOrNull(due._sum.amountPaise) ?? 0,
     },
     revenueByMonth: revenueSeries(paidRows, now),
     signupsByMonth: signupSeries(signupRows, now),

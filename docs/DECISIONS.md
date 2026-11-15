@@ -44,5 +44,5 @@ Live setup and the optional prod stage: the `dev` stage is what is deployed and 
 
 ## Known limits
 
-- Every paise column is Postgres `Int` (int4, max 2,147,483,647 paise, about ₹2.147 crore). Bids are capped at that value and `startingBidPaise` / `minIncrementPaise` at 2,000,000,000. The running totals `Member.moneySpentPaise` and `Member.unpaidCommissionPaise` are also `Int` and would overflow for a member whose lifetime total passes that; move them to `BigInt` before that matters.
+- Every paise column is Postgres `BigInt` (int8; migration `20261115170000_paise_bigint`). Prisma returns `bigint`; application code, JSON, WebSocket payloads, notification data and payment-provider amounts stay plain `number`, converted at the boundary with `toPaise()` (`src/core/money.ts`), so the contract is exact up to 2^53 paise. `HARD_MAX_PRICE_PAISE` = 1,000,000,000,000 (₹1,000 crore) is the Joi cap for bids, starting bid and minimum increment. A lower, admin-set ceiling `auction.maxPricePaise` (default 10,000,000,000 = ₹10 crore, allowed 100,000 to `HARD_MAX_PRICE_PAISE`) is enforced in `createAuction`, `updateAuction` and `placeBid` (400 `PRICE_TOO_HIGH`). A `BigInt.prototype.toJSON` safety net (`src/core/json-bigint.ts`) only prevents crashes on a stray `bigint`.
 - Uploaded images are not resized or compressed on the client.

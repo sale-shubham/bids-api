@@ -1,4 +1,5 @@
 import { prisma } from '@/core/prisma/client';
+import { toPaise } from '@/core/money';
 import { offsetArgs, pageMeta } from '@/core/http/pagination';
 
 export async function listPayments(q: { status?: 'created' | 'paid' | 'failed'; page: number; pageSize: number }) {
@@ -22,5 +23,5 @@ export async function listPayments(q: { status?: 'created' | 'paid' | 'failed'; 
     }),
     prisma.paymentOrder.count({ where }),
   ]);
-  return { items: rows, meta: pageMeta(total, q) };
+  return { items: rows.map((r) => ({ ...r, amountPaise: toPaise(r.amountPaise) })), meta: pageMeta(total, q) };
 }

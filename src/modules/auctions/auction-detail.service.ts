@@ -1,4 +1,5 @@
 import { prisma } from '@/core/prisma/client';
+import { toPaiseOrNull } from '@/core/money';
 import { effectiveStatus, toDetail, type AuctionContact, type AuctionRow } from './auctions.serializer';
 import { toBidDTO } from './bidding.rules';
 
@@ -35,7 +36,7 @@ export async function buildAuctionDetail(row: AuctionRow, viewerId: string | nul
   return {
     ...toDetail(row, now),
     recentBids: bids.map((b) => toBidDTO(b, viewerId)),
-    myHighestBidPaise: mine?._max.amountPaise ?? null,
+    myHighestBidPaise: toPaiseOrNull(mine?._max.amountPaise),
     contact,
     isWatching: !!watching,
     watcherCount,

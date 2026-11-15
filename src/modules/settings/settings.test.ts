@@ -25,7 +25,8 @@ import { getPlatformSettings, setPlatformSettings } from './settings.service';
 import { getLegalPage, setLegalPage } from './legal-pages.service';
 import { sanitizeLegalHtml } from './legal-pages.sanitize';
 
-const valid = { commissionRateBps: 500, minIncrementPaise: 10000, antiSnipingMinutes: 2, categories: ['Art', 'Books'] };
+const valid = { commissionRateBps: 500, minIncrementPaise: 10000, antiSnipingMinutes: 2, maxPricePaise: 10_000_000_000, categories: ['Art', 'Books'] };
+const { maxPricePaise: _omit, ...legacy } = valid;
 
 describe('platform settings validation', () => {
   it('accepts a valid object and enforces ranges', () => {
@@ -35,6 +36,12 @@ describe('platform settings validation', () => {
     expect(platformSettingsSchema.validate({ ...valid, minIncrementPaise: 99 }).error).toBeDefined();
     expect(platformSettingsSchema.validate({ ...valid, antiSnipingMinutes: 31 }).error).toBeDefined();
     expect(platformSettingsSchema.validate({ ...valid, antiSnipingMinutes: 0 }).error).toBeUndefined();
+  });
+  it('maxPricePaise is optional on PUT and range-checked', () => {
+    expect(platformSettingsSchema.validate(legacy).error).toBeUndefined();
+    expect(platformSettingsSchema.validate({ ...legacy, maxPricePaise: 99_999 }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...legacy, maxPricePaise: 1_000_000_000_001 }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...legacy, maxPricePaise: 1_000_000_000_000 }).error).toBeUndefined();
   });
   it('categories: 1-30, unique (case-insensitive), 2-40 chars', () => {
     expect(platformSettingsSchema.validate({ ...valid, categories: [] }).error).toBeDefined();
@@ -49,6 +56,16 @@ describe('platform settings validation', () => {
   it('round-trips through the AppSetting store', async () => {
     expect(await setPlatformSettings(valid)).toEqual(valid);
     expect(await getPlatformSettings()).toEqual(valid);
+  });
+  it('PUT without maxPricePaise keeps the stored value', async () => {
+    await setPlatformSettings({ ...valid, maxPricePaise: 5_000_000_000 });
+    expect((await setPlatformSettings({ ...legacy, commissionRateBps: 600 })).maxPricePaise).toBe(5_000_000_000);
+    await setPlatformSettings(valid);
+  });
+  it('maxPricePaise falls back to the default when stored out of range', async () => {
+    store.rows.set('auction.maxPricePaise', { key: 'auction.maxPricePaise', value: '5', updatedAt: new Date() });
+    expect((await getPlatformSettings()).maxPricePaise).toBe(10_000_000_000);
+    store.rows.delete('auction.maxPricePaise');
   });
 });
 

@@ -136,7 +136,7 @@ All user input passes through `validate(schema, source)` Joi middleware. `stripU
 
 - Web Push endpoints (`push.validation.ts`) accept **https URIs only** — an endpoint is a URL the API later POSTs to, so an `http://` or internal address would be a server-side request forgery a member could register.
 - Rich text is sanitised server-side with `sanitize-html` allow-lists, never trusted from the client editor: auction descriptions (`sanitizeDescription` in `auctions.validation.ts`, applied in `auctions.service.ts`, which then requires 20 characters of allowed content) and legal pages (`sanitizeLegalHtml` in `legal-pages.sanitize.ts`). Allowed tags are `p br strong em u s ul ol li h2 h3 blockquote a`; links may only use `http`, `https` or `mailto` and get `rel="noopener noreferrer nofollow" target="_blank"`.
-- Bid amounts and money fields are integer paise with explicit Joi bounds (e.g. `amountPaise` 1 to 2,147,483,647, the INT4 ceiling).
+- Bid amounts and money fields are integer paise with explicit Joi bounds (e.g. `amountPaise` 1 to `HARD_MAX_PRICE_PAISE` = 1,000,000,000,000; the admin-set `auction.maxPricePaise` is checked in the service).
 
 ---
 
