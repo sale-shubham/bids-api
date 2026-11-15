@@ -24,3 +24,5 @@ Seed (`npm run prisma:seed`, never run automatically): `prisma/seed.ts` inserts 
 ## Contact
 
 `POST /contact` `{ name 2-80, email, subject 3-120, message 10-4000 }` -> `{ received: true }`. Public; `contactLimiter` (5 per hour per IP, Pg-backed store) runs before validation. Sends the `contact-message` email to `ADMIN_EMAIL` with `Reply-To` = the sender (`SendEmailInput.replyTo`, SES `ReplyToAddresses`). 503 `SERVICE_UNAVAILABLE` if `ADMIN_EMAIL` is unset. The message is not stored.
+
+Page slugs (`src/modules/settings/legal-pages.constants.ts`): `privacy-policy`, `terms-conditions`, `refund-policy`, `prohibited-items`. `prohibited-items` ("Prohibited items") lists the banned categories: weapons, drugs, counterfeit goods, stolen property, live animals, hazardous materials, adult content, government IDs, items infringing IP. Its default draft body is in `prisma/legal-seed-content.ts` and is created by `npm run prisma:seed` only when missing (admin edits are never overwritten); until seeded it returns empty content like any unedited page. It backs the report flow (`reports.md`).

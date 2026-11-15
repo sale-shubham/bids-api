@@ -353,6 +353,55 @@ describe('reviews, questions and saved searches', () => {
   });
 });
 
+describe('trust: 2FA, phone, reports', () => {
+  it('2FA bodies: enable needs a 6-digit code, disable needs password + code, verify needs exactly one factor', async () => {
+    expectInvalid(await send('post', '/auth/2fa/enable', { as: 'BIDDER', body: { code: '12345' } }), 'code');
+    expectInvalid(await send('post', '/auth/2fa/disable', { as: 'BIDDER', body: { code: '123456' } }), 'password');
+    expectInvalid(await send('post', '/auth/2fa/disable', { as: 'BIDDER', body: { password: 'x' } }), 'code');
+    expectInvalid(await send('post', '/auth/2fa/recovery-codes', { as: 'BIDDER', body: {} }), 'code');
+    expectInvalid(await send('post', '/auth/2fa/verify', { body: { code: '123456' } }), 'challengeToken');
+    expectInvalid(await send('post', '/auth/2fa/verify', { body: { challengeToken: 't' } }));
+    expectInvalid(await send('post', '/auth/2fa/verify', { body: { challengeToken: 't', code: '123456', recoveryCode: 'ABCD-2345' } }));
+    expectInvalid(await send('post', '/auth/2fa/verify', { body: { challengeToken: 't', code: 'abcdef' } }), 'code');
+  });
+
+  it.each([
+    ['too short', '98765'],
+    ['starts with 5', '5876543210'],
+    ['has letters', '98765abcde'],
+    ['has +91', '+919876543210'],
+  ])('phone otp / verify reject a phone that is %s', async (_n, phone) => {
+    expectInvalid(await send('post', '/members/me/phone/otp', { as: 'BIDDER', body: { phone } }), 'phone');
+    expectInvalid(await send('post', '/members/me/phone/verify', { as: 'BIDDER', body: { phone, code: '123456' } }), 'phone');
+  });
+
+  it('phone verify needs a 6-digit code', async () => {
+    expectInvalid(await send('post', '/members/me/phone/verify', { as: 'BIDDER', body: { phone: '9876543210', code: '12' } }), 'code');
+  });
+
+  it('POST /reports validates target, reason and details', async () => {
+    const ok = { targetType: 'AUCTION', targetId: 'a1', reason: 'SPAM' };
+    expectInvalid(await send('post', '/reports', { as: 'BIDDER', body: { ...ok, targetType: 'BID' } }), 'targetType');
+    expectInvalid(await send('post', '/reports', { as: 'BIDDER', body: { ...ok, reason: 'RUDE' } }), 'reason');
+    expectInvalid(await send('post', '/reports', { as: 'BIDDER', body: { ...ok, targetId: '' } }), 'targetId');
+    expectInvalid(await send('post', '/reports', { as: 'BIDDER', body: { ...ok, details: 'x'.repeat(1001) } }), 'details');
+    expectInvalid(await send('post', '/reports', { as: 'BIDDER', body: { targetType: 'AUCTION' } }));
+  });
+
+  it('admin reports: list filters, resolve status and note are bounded', async () => {
+    expectInvalid(await send('get', '/admin/reports?status=DONE', { as: 'SUPER_ADMIN' }), 'status');
+    expectInvalid(await send('get', '/admin/reports?targetType=BID', { as: 'SUPER_ADMIN' }), 'targetType');
+    expectInvalid(await send('get', '/admin/reports?pageSize=101', { as: 'SUPER_ADMIN' }), 'pageSize');
+    expectInvalid(await send('patch', '/admin/reports/r1', { as: 'SUPER_ADMIN', body: { status: 'OPEN' } }), 'status');
+    expectInvalid(await send('patch', '/admin/reports/r1', { as: 'SUPER_ADMIN', body: { status: 'DISMISSED', note: 'x'.repeat(501) } }), 'note');
+  });
+
+  it('admin members PATCH accepts verified only as a boolean; browse verified filter is boolean', async () => {
+    expectInvalid(await send('patch', '/admin/members/m2', { as: 'SUPER_ADMIN', body: { verified: 'maybe' } }), 'verified');
+    expectInvalid(await send('get', '/auctions?verified=maybe'), 'verified');
+  });
+});
+
 describe('checkout: sales, payouts, admin sales, checkout mode', () => {
   const payout = {
     legalName: 'Asha Rao',

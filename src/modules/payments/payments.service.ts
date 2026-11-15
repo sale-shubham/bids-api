@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { getCommissionDTO, markCommissionPaid } from '@/modules/commissions/commissions.service';
 import { getSaleDTO, markSalePaid, storeTransferId } from '@/modules/sales/sales.service';
 import { mapActivationStatus } from '@/providers/payment/route-status';
+import { refreshSellerVerification } from '@/modules/members/verification.service';
 
 // The payment provider is lazy-loaded inside each function (dynamic import) so
 // it only initializes when a payment path is hit — keeps Lambda cold start tight.
@@ -119,11 +120,13 @@ async function processProductEvent(event: WebhookEvent) {
   const status = mapActivationStatus(entity?.activation_status ?? suffix);
   const reasons = (entity?.requirements ?? []).map((r) => r.reason_code ?? r.field_reference).filter((r): r is string => !!r);
   const statusReason = status === 'NEEDS_CLARIFICATION' && reasons.length ? reasons.join(', ').slice(0, 500) : null;
+  const accounts = await prisma.sellerPayoutAccount.findMany({ where: { razorpayAccountId: accountId }, select: { sellerId: true } });
   const { count } = await prisma.sellerPayoutAccount.updateMany({
     where: { razorpayAccountId: accountId },
     data: { status, statusReason },
   });
   if (count === 0) logger.warn({ type, accountId }, 'webhook: no payout account for product event');
+  for (const a of accounts) await refreshSellerVerification(a.sellerId);
 }
 
 async function processTransferProcessed(event: WebhookEvent) {

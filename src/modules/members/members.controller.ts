@@ -28,3 +28,19 @@ export async function publicProfile(req: Request, res: Response) {
   if (!member) throw NotFound('Member not found');
   return ok(res, member);
 }
+
+// POST /members/me/phone/otp — { sentTo }
+export async function sendPhoneOtp(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const phone = await import('./phone.service');
+  return ok(res, await phone.sendPhoneOtp(req.body.phone));
+}
+
+// POST /members/me/phone/verify — { member }
+export async function verifyPhone(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const phone = await import('./phone.service');
+  const svc = await import('./members.service');
+  await phone.verifyPhone(req.user!.sub, req.body.phone, req.body.code);
+  return ok(res, { member: await svc.getMemberDto(req.user!.sub) });
+}

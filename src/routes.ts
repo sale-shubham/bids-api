@@ -27,6 +27,8 @@ import { questionsRouter } from '@/modules/questions/questions.routes';
 import savedSearchRoutes from '@/modules/saved-searches/saved-searches.routes';
 import adminReviewsRoutes from '@/modules/admin/reviews/admin-reviews.routes';
 import adminSettingsRoutes from '@/modules/admin/settings/admin-settings.routes';
+import reportRoutes from '@/modules/reports/reports.routes';
+import adminReportsRoutes from '@/modules/admin/reports/admin-reports.routes';
 
 const router = Router();
 
@@ -59,6 +61,8 @@ router.use('/admin/members', adminMembersRoutes);
 router.use('/admin/retention', adminRetentionRoutes);
 router.use('/admin/settings', adminSettingsRoutes);
 router.use('/admin/reviews', adminReviewsRoutes);
+router.use('/admin/reports', adminReportsRoutes);
+router.use('/reports', reportRoutes);
 router.use('/admin', adminDashboardRoutes);
 
 export default router;

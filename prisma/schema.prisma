@@ -58,11 +58,13 @@ enum CommissionStatus {
 
 enum OtpChannel {
   EMAIL
+  SMS
 }
 
 enum OtpPurpose {
   SIGNUP
   PASSWORD_RESET
+  PHONE_VERIFY
 }
 
 // ----------------------------------------------------------------------------
@@ -80,7 +82,15 @@ model Member {
   role                  Role      @default(BIDDER)
   isActive              Boolean   @default(true)
   emailVerifiedAt       DateTime?
-  // Commission the auctioneer owes the platform for sold auctions (paise).
+  // SMS-OTP verified phone (stored as the 10-digit Indian mobile in `phone`); cleared when phone changes.
+  phoneVerifiedAt       DateTime?
+  // TOTP 2FA: AES-256-GCM encrypted secret (set at setup, enabled at twoFactorEnabledAt).
+  totpSecretEnc         String?
+  twoFactorEnabledAt    DateTime?
+  // Verified-seller badge (see members/verification.service.ts); admin revoke wins over the rule.
+  verifiedAt            DateTime?
+  verificationRevokedAt DateTime?
+  // Commission the auctioneer owes the platform owes the platform for sold auctions (paise).
   unpaidCommissionPaise BigInt    @default(0)
   // Bidder stats.
   auctionsWon           Int       @default(0)
@@ -113,6 +123,8 @@ model Member {
   reviewsWritten  Review[]          @relation("ReviewsWritten")
   questions       AuctionQuestion[]
   savedSearches   SavedSearch[]
+  recoveryCodes   RecoveryCode[]
+  reportsFiled    Report[]
 
   @@index([role])
 }
@@ -519,4 +531,61 @@ model Sale {
   @@index([sellerId, status])
   @@index([status, payBy])
   @@index([status, shippedAt])
+}
+
+// ----------------------------------------------------------------------------
+// TRUST: 2FA recovery codes, reports
+// ----------------------------------------------------------------------------
+
+// One-time 2FA recovery codes (sha256 of the normalized code; plaintext shown once).
+model RecoveryCode {
+  id        String    @id @default(cuid())
+  member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId  String
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([memberId])
+}
+
+enum ReportTargetType {
+  AUCTION
+  MEMBER
+  REVIEW
+  QUESTION
+}
+
+enum ReportReason {
+  COUNTERFEIT
+  PROHIBITED
+  MISLEADING
+  SPAM
+  ABUSE
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  ACTION_TAKEN
+  DISMISSED
+}
+
+model Report {
+  id           String           @id @default(cuid())
+  reporter     Member           @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  reporterId   String
+  targetType   ReportTargetType
+  targetId     String
+  reason       ReportReason
+  details      String?
+  status       ReportStatus     @default(OPEN)
+  resolvedById String?
+  resolvedAt   DateTime?
+  note         String?
+  createdAt    DateTime         @default(now())
+
+  @@unique([reporterId, targetType, targetId])
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
 }

@@ -16,4 +16,5 @@ export const listMembersQuery = Joi.object({
 export const updateMemberBody = Joi.object({
   isActive: Joi.boolean(),
   role: Joi.string().valid('BIDDER', 'AUCTIONEER', 'SUPER_ADMIN'),
+  verified: Joi.boolean(),
 }).min(1);

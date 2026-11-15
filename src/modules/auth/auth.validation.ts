@@ -51,3 +51,21 @@ export const changePasswordSchema = Joi.object({
 });
 
 export type DeviceInfo = { browser?: string; os?: string; device?: string; type?: string };
+
+const totpCode = Joi.string().trim().pattern(/^\d{6}$/).required().messages({
+  'string.pattern.base': 'code must be a 6-digit number',
+});
+// A TOTP code or a recovery code (XXXX-XXXX).
+const anyCode = Joi.string().trim().min(6).max(32).required();
+
+export const twoFactorEnableSchema = Joi.object({ code: totpCode });
+export const twoFactorDisableSchema = Joi.object({ password: Joi.string().min(1).max(1000).required(), code: anyCode });
+export const twoFactorRecoverySchema = Joi.object({ code: anyCode });
+export const twoFactorVerifySchema = Joi.object({
+  challengeToken: Joi.string().trim().max(2000).required(),
+  code: Joi.string().trim().pattern(/^\d{6}$/).messages({ 'string.pattern.base': 'code must be a 6-digit number' }),
+  recoveryCode: Joi.string().trim().min(8).max(32),
+  deviceInfo: deviceInfoSchema,
+})
+  .xor('code', 'recoveryCode')
+  .messages({ 'object.missing': 'Provide code or recoveryCode', 'object.xor': 'Provide only one of code or recoveryCode' });

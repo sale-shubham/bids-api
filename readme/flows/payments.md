@@ -85,7 +85,7 @@ No real gateway: checkout returns `orderId = stub_order_<uuid>` and `keyId = 'st
 ## Razorpay dashboard setup
 
 1. Settings -> API Keys: generate keys; set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `PAYMENT_DRIVER=razorpay`.
-2. Settings -> Webhooks -> Add: URL `https://<api-domain>/payments/webhook`, a secret (-> `RAZORPAY_WEBHOOK_SECRET`), events `payment.captured`, `payment.failed`, `order.paid`, plus `transfer.processed` and the Route product events (`product.route.activated`, `product.route.needs_clarification`, `product.route.under_review`) for checkout.
+2. Settings -> Webhooks -> Add (Route product events also call `refreshSellerVerification` for the seller, which grants / removes the verified-seller badge): URL `https://<api-domain>/payments/webhook`, a secret (-> `RAZORPAY_WEBHOOK_SECRET`), events `payment.captured`, `payment.failed`, `order.paid`, plus `transfer.processed` and the Route product events (`product.route.activated`, `product.route.needs_clarification`, `product.route.under_review`) for checkout.
 3. Use Test mode keys/webhook on dev; live keys only in prod. Payment capture should be automatic (otherwise payments stay `authorized`, which verify accepts but the webhook events will not fire until captured).
 
 ## Tests

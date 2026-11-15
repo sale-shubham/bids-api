@@ -111,4 +111,24 @@ export const LEGAL_SEED: { slug: string; title: string; content: string }[] = [
 <h2>6. Contact</h2>
 <p>For any refund request, use our Contact page.</p>`,
   },
+  {
+    slug: 'prohibited-items',
+    title: 'Prohibited items',
+    content: `${DRAFT}
+<h2>Items you may not list</h2>
+<p>To keep NobleBid safe and lawful, the following may not be listed or sold. Listings that break these rules are removed and the account may be suspended.</p>
+<ul>
+<li><strong>Weapons</strong>: firearms, ammunition, explosives and other weapons.</li>
+<li><strong>Drugs</strong>: illegal drugs, controlled substances and drug paraphernalia.</li>
+<li><strong>Counterfeit goods</strong>: fake, replica or unauthorised copies of branded items.</li>
+<li><strong>Stolen property</strong>: anything obtained through theft or fraud.</li>
+<li><strong>Live animals</strong> and products from protected or endangered species.</li>
+<li><strong>Hazardous materials</strong>: chemicals, flammable, toxic or radioactive items.</li>
+<li><strong>Adult content</strong>: pornographic or sexually explicit material.</li>
+<li><strong>Government IDs</strong>: identity documents, official seals and similar items.</li>
+<li><strong>Items infringing intellectual property</strong>: pirated media, software or unlicensed copies.</li>
+</ul>
+<h2>Reporting a listing</h2>
+<p>If you see a listing or member that breaks these rules, use the Report option on the page. Our team reviews every report.</p>`,
+  },
 ];

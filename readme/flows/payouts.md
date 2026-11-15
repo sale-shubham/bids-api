@@ -19,6 +19,10 @@ Code: `src/modules/payouts/` (`payouts.{routes,controller,service,validation}.ts
 
 Webhooks `product.route.activated` / `needs_clarification` / `under_review` (and other `product.route.*`) update the row by `razorpayAccountId`; `statusReason` carries the requirement reason codes for NEEDS_CLARIFICATION (cleared otherwise). Exact event names and payload shape are marked VERIFY in `checkout.md`.
 
+## Verified-seller badge
+
+A seller's badge depends on the payout account status being `ACTIVE` (plus a verified phone). `refreshSellerVerification(sellerId)` runs after `createAccount` and after every `product.route.*` webhook that updates a row, so activation grants the badge and SUSPENDED / REJECTED / NEEDS_CLARIFICATION removes it (`auth.md`, `payments.md`).
+
 ## Stub mode
 
 `PAYMENT_DRIVER=stub`: `createRouteAccount` returns `acc_stub_<hash of referenceId>` with status ACTIVE immediately, so the whole checkout flow works in dev without Razorpay.

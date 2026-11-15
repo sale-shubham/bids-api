@@ -89,6 +89,11 @@ the same name with `_PROD`. Shared names have no `_PROD` twin. Empty optional va
 | `EMAIL_DRIVER` | var | optional | default `stub` dev, `ses` prod |
 | `EMAIL_FROM`, `EMAIL_FROM_NAME`, `LOGO_URL` | var | `EMAIL_FROM` if `ses` | |
 | `OTP_STUB_CODE` | var | optional | stub driver only |
+| `SMS_DRIVER` | var | optional | `stub` (default) / `msg91` |
+| `MSG91_AUTH_KEY` | secret | if `SMS_DRIVER=msg91` | |
+| `MSG91_SENDER_ID`, `MSG91_OTP_TEMPLATE_ID` | var | if `SMS_DRIVER=msg91` | DLT-registered sender id + OTP template are required in India; template id from the MSG91 dashboard |
+| `TOTP_ENC_KEY` | secret | for 2FA | 32 bytes base64 (`openssl rand -base64 32`); empty = 2FA setup returns 503. Rotating it invalidates every enrolled authenticator |
+| `REQUIRE_ADMIN_2FA` | var | optional | `true` = Super Admins must enable 2FA before `/admin` works; default `false` |
 | `ADMIN_EMAIL`, `ALERT_EMAIL` | var | optional | `ALERT_EMAIL` enables alarms + SNS |
 | `COMMISSION_RATE_BPS` | var | optional | default 500 |
 | `VAPID_PUBLIC_KEY`, `VAPID_SUBJECT` | var | shared | |

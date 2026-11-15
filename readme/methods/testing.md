@@ -24,6 +24,7 @@ Coverage is report-only: `vitest.config.ts` sets no thresholds, so it never fail
   - `auth.http.test.ts` - signup -> verify -> login, cookie flags (httpOnly, SameSite, host-only, Secure/Domain variants), refresh and logout cookies.
   - `bidding.http.test.ts` - `POST /auctions/:id/bids` (max bids, `amountPaise` alias, proxy rows and events, `outbidByProxy`) 201 shape and every mapped error code, `POST /auctions/:id/buy-now`, reserve / buy-now create rules, anti-sniping, `GET /auctions` envelope (`meta`, `serverTime`), `GET /auctions/:id` 404.
   - `endpoints.http.test.ts` - Razorpay webhook (real HMAC over the raw body), commissions, ws tickets, public settings / legal / leaderboard / contact, watchlist, admin dashboard and settings.
+  - `trust.http.test.ts` - 2FA login challenge (no cookies), `/auth/2fa/verify` (code window, recovery code once, bad / expired token), setup / enable / disable / regenerate, missing `TOTP_ENC_KEY` -> 503, `REQUIRE_ADMIN_2FA` on / off, phone OTP send / verify, `POST /reports` rules.
   - `modules.http.test.ts` - uploads, push, members, notifications, admin lists / retention.
   - `envelope-cors.http.test.ts` - 404 `NOT_FOUND`, malformed JSON -> 400, 413, 500 without internals, security headers, CORS allow / deny / preflight.
 

@@ -12,6 +12,8 @@ export const STAGE_SECRETS = [
   'RAZORPAY_KEY_ID',
   'RAZORPAY_KEY_SECRET',
   'RAZORPAY_WEBHOOK_SECRET',
+  'MSG91_AUTH_KEY',
+  'TOTP_ENC_KEY',
 ];
 
 // Per-stage variables: `NAME` for dev, `NAME_PROD` for prod.
@@ -36,6 +38,10 @@ export const STAGE_VARIABLES = [
   'API_CERTIFICATE_ARN',
   'DISABLE_DEFAULT_ENDPOINT',
   'ENABLE_CDN', // true = CloudFront in front of the uploads bucket
+  'SMS_DRIVER',
+  'MSG91_SENDER_ID',
+  'MSG91_OTP_TEMPLATE_ID',
+  'REQUIRE_ADMIN_2FA',
 ];
 
 // Shared by both stages: the workflow reads these WITHOUT a _PROD twin.

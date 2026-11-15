@@ -221,6 +221,19 @@ export function buildContent(c: ContentCtx): Content {
         templateData: { ...base, commission, commissionUrl: `${env.app.url}${commissionPath}` },
       };
     }
+    case 'report-filed': {
+      const targetType = str(c.data.targetType).toLowerCase();
+      const reason = str(c.data.reason).toLowerCase();
+      const targetLabel = clip(c.data.targetLabel, 120);
+      return {
+        title: 'New report filed',
+        body: `A ${targetType || 'listing'} was reported (${reason || 'other'}): ${targetLabel}`,
+        url: '/admin/reports',
+        subject: `New ${targetType || 'content'} report on NobleBid`,
+        template: 'report-filed',
+        templateData: { name: c.memberName, targetType, reason, targetLabel, reportsUrl: `${env.app.url}/admin/reports` },
+      };
+    }
     case 'commission-due': {
       const commission = formatInr(num(c.data.commissionPaise));
       const commissionPath = '/sell/commissions';

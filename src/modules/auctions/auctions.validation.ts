@@ -117,6 +117,7 @@ export const listQuerySchema = Joi.object({
   q: Joi.string().trim().allow('').max(100),
   minPrice: Joi.number().integer().min(0),
   maxPrice: Joi.number().integer().min(0),
+  verified: Joi.boolean(),
   sort: Joi.string().valid(...SORTS),
   ...paging,
 }).custom((v: { minPrice?: number; maxPrice?: number }, helpers) =>
@@ -152,6 +153,7 @@ export type ListQuery = {
   q?: string;
   minPrice?: number;
   maxPrice?: number;
+  verified?: boolean;
   sort?: (typeof SORTS)[number];
   page: number;
   pageSize: number;

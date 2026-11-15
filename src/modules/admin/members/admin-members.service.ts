@@ -3,8 +3,22 @@ import { offsetArgs, buildOrderBy, type SortOrder } from '@/core/http/pagination
 import { AppError, NotFound } from '@/core/errors/AppError';
 import type { Prisma, Role } from '@prisma/client';
 import { withMemberMoney } from '@/modules/members/member.select';
+import { refreshSellerVerification } from '@/modules/members/verification.service';
 
-// Backs the admin Members page: list, update (active / role).
+// Backs the admin Members page: list, update (active / role / verified).
+
+type AdminMemberRow = Prisma.MemberGetPayload<{ select: typeof memberSelect }>;
+
+/** Admin DTO: booleans for 2FA / verified, payout status, money as numbers. */
+function toAdminDto(m: AdminMemberRow) {
+  const { twoFactorEnabledAt, verifiedAt, payoutAccount, ...rest } = m;
+  return {
+    ...withMemberMoney(rest),
+    verified: !!verifiedAt,
+    twoFactorEnabled: !!twoFactorEnabledAt,
+    payoutStatus: payoutAccount?.status ?? null,
+  };
+}
 
 interface ListParams {
   status?: 'active' | 'inactive';
@@ -32,6 +46,10 @@ const memberSelect = {
   role: true,
   isActive: true,
   emailVerifiedAt: true,
+  phoneVerifiedAt: true,
+  twoFactorEnabledAt: true,
+  verifiedAt: true,
+  payoutAccount: { select: { status: true } },
   unpaidCommissionPaise: true,
   auctionsWon: true,
   moneySpentPaise: true,
@@ -63,7 +81,7 @@ export async function listMembers(params: ListParams) {
     getMemberStats(),
   ]);
 
-  return { items: items.map(withMemberMoney), total, stats };
+  return { items: items.map(toAdminDto), total, stats };
 }
 
 // Tab counts — always the full All/Active/Inactive split, independent of the filter.
@@ -84,7 +102,7 @@ export const cannotModifySelf = () =>
  * own role or deactivate themselves (no accidental lock-out). Deactivating
  * kills every live Session + WebSocket connection so it takes effect at once.
  */
-export async function updateMember(id: string, actorId: string, input: { isActive?: boolean; role?: Role }) {
+export async function updateMember(id: string, actorId: string, input: { isActive?: boolean; role?: Role; verified?: boolean }) {
   if (id === actorId && (input.isActive === false || input.role !== undefined)) throw cannotModifySelf();
 
   const existing = await prisma.member.findUnique({ where: { id }, select: { id: true } });
@@ -93,12 +111,23 @@ export async function updateMember(id: string, actorId: string, input: { isActiv
   const data: Prisma.MemberUpdateInput = {};
   if (input.isActive !== undefined) data.isActive = input.isActive;
   if (input.role !== undefined) data.role = input.role;
-  const member = await prisma.member.update({ where: { id }, data, select: memberSelect });
+  // verified=false revokes (wins over the rule); verified=true lifts the revoke, then the rule re-decides.
+  if (input.verified === false) {
+    data.verificationRevokedAt = new Date();
+    data.verifiedAt = null;
+  } else if (input.verified === true) {
+    data.verificationRevokedAt = null;
+  }
+  let member = await prisma.member.update({ where: { id }, data, select: memberSelect });
+  if (input.verified === true || input.role !== undefined) {
+    await refreshSellerVerification(id);
+    member = (await prisma.member.findUnique({ where: { id }, select: memberSelect })) ?? member;
+  }
 
   if (input.isActive === false) {
     await prisma.session.deleteMany({ where: { memberId: id } });
     const { disconnectMemberConnections } = await import('@/modules/ws/ws.service');
     await disconnectMemberConnections(id).catch(() => {});
   }
-  return withMemberMoney(member);
+  return toAdminDto(member);
 }

@@ -2,7 +2,8 @@ import { prisma } from '@/core/prisma/client';
 import { BadRequest } from '@/core/errors/AppError';
 import { env } from '@/core/config/env';
 import { ratingAvg } from '@/modules/reviews/reviews.rules';
-import { memberProfileSelect, memberPublicSelect, withMemberMoney } from './member.select';
+import { memberProfileSelect, memberPublicSelect, withMemberMoney, withMemberTrust } from './member.select';
+import { refreshSellerVerification } from './verification.service';
 
 export { memberProfileSelect, memberPublicSelect };
 // Back-compat alias.
@@ -10,7 +11,7 @@ export const profileSelect = memberProfileSelect;
 
 export async function getProfile(memberId: string) {
   const member = await prisma.member.findUnique({ where: { id: memberId }, select: memberProfileSelect });
-  return member ? withMemberMoney(member) : null;
+  return member ? withMemberTrust(withMemberMoney(member)) : null;
 }
 
 // Profile + this member's device cap (what the client shows as `member`).
@@ -18,7 +19,11 @@ export async function getMemberDto(memberId: string) {
   const member = await getProfile(memberId);
   if (!member) return null;
   const { getMaxDevicesForRole } = await import('@/modules/settings/device-limit.service');
-  return { ...member, deviceLimit: await getMaxDevicesForRole(member.role) };
+  return {
+    ...member,
+    deviceLimit: await getMaxDevicesForRole(member.role),
+    twoFactorSetupRequired: member.role === 'SUPER_ADMIN' && env.twoFactor.requireAdmin && !member.twoFactorEnabled,
+  };
 }
 
 export async function getPublicProfile(memberId: string, now = new Date()) {
@@ -34,8 +39,8 @@ export async function getPublicProfile(memberId: string, now = new Date()) {
     }),
     prisma.auction.count({ where: { AND: [{ sellerId: memberId }, statusWhere('live', now)] } }),
   ]);
-  const { ratingSum, ratingCount, ...publicFields } = member;
-  return { ...publicFields, ratingAvg: ratingAvg(ratingSum, ratingCount), ratingCount, auctionsSold, activeAuctions };
+  const { ratingSum, ratingCount, verifiedAt, ...publicFields } = member;
+  return { ...publicFields, verified: !!verifiedAt, ratingAvg: ratingAvg(ratingSum, ratingCount), ratingCount, auctionsSold, activeAuctions };
 }
 
 // Base URLs an avatar may come from: our CloudFront, or the bucket's S3 URL.
@@ -59,10 +64,21 @@ export async function updateProfile(
   if (input.avatarUrl && !isOwnMediaUrl(input.avatarUrl)) {
     throw BadRequest('avatarUrl must be an uploaded image from this platform');
   }
-  const data: Record<string, string | null> = {};
+  const data: Record<string, string | Date | null> = {};
+  let phoneChanged = false;
+  if (input.phone !== undefined) {
+    const current = await prisma.member.findUnique({ where: { id: memberId }, select: { phone: true } });
+    const next = input.phone || null;
+    if ((current?.phone ?? null) !== next) {
+      phoneChanged = true;
+      data.phoneVerifiedAt = null;
+    }
+  }
   if (input.name !== undefined) data.name = input.name;
   for (const k of ['phone', 'address', 'avatarUrl'] as const) {
     if (input[k] !== undefined) data[k] = input[k] || null;
   }
-  return withMemberMoney(await prisma.member.update({ where: { id: memberId }, data, select: memberProfileSelect }));
+  const updated = await prisma.member.update({ where: { id: memberId }, data, select: memberProfileSelect });
+  if (phoneChanged) await refreshSellerVerification(memberId);
+  return withMemberTrust(withMemberMoney(updated));
 }

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const db = vi.hoisted(() => ({
   paymentOrder: { findFirst: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
-  sellerPayoutAccount: { updateMany: vi.fn() },
+  sellerPayoutAccount: { updateMany: vi.fn(), findMany: vi.fn() },
   sale: { updateMany: vi.fn() },
   webhookEvent: { findUnique: vi.fn(), create: vi.fn() },
 }));
@@ -20,6 +20,8 @@ vi.mock('@/core/prisma/client', () => ({ prisma: db }));
 vi.mock('@/core/logger/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/providers/payment', () => ({ paymentProvider: provider }));
 vi.mock('@/modules/commissions/commissions.service', () => settle);
+const verification = vi.hoisted(() => ({ refreshSellerVerification: vi.fn() }));
+vi.mock('@/modules/members/verification.service', () => verification);
 const sales = vi.hoisted(() => ({ markSalePaid: vi.fn(), getSaleDTO: vi.fn(), storeTransferId: vi.fn() }));
 vi.mock('@/modules/sales/sales.service', () => sales);
 
@@ -46,6 +48,7 @@ beforeEach(() => {
   sales.getSaleDTO.mockResolvedValue({ id: 'sale1', status: 'PAID' });
   db.sale.updateMany.mockResolvedValue({ count: 1 });
   db.sellerPayoutAccount.updateMany.mockResolvedValue({ count: 1 });
+  db.sellerPayoutAccount.findMany.mockResolvedValue([{ sellerId: 'seller1' }]);
 });
 
 describe('verifyPayment', () => {
@@ -182,6 +185,7 @@ describe('handleWebhook', () => {
       where: { razorpayAccountId: 'acc_1' },
       data: { status, statusReason: reason },
     });
+    expect(verification.refreshSellerVerification).toHaveBeenCalledWith('seller1');
   });
 
   it('payment.failed marks a CREATED order FAILED and does not settle', async () => {

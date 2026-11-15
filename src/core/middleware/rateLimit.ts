@@ -1,6 +1,7 @@
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { PgRateLimitStore } from '@/core/middleware/pgRateLimitStore';
 import { env } from '@/core/config/env';
+import { verifyTwoFactorChallenge } from '@/modules/auth/token.service';
 
 // Custom keyGenerators key the client IP through the library's
 // `ipKeyGenerator`, never raw `req.ip`: it groups an IPv6 client by /56
@@ -167,4 +168,35 @@ export const qaLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => req.user?.sub ?? ipKeyGenerator(req.ip ?? 'unknown'),
   message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many questions, try again later' } },
+});
+
+// 2FA login step: 5 attempts / 10 min per member, keyed by the (verified) challenge token subject so a
+// guesser cannot rotate IPs; a bad token falls back to the IP.
+export const twoFactorLimiter = rateLimit({
+  store: new PgRateLimitStore('rl:2fa:'),
+  passOnStoreError: true,
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    try {
+      return verifyTwoFactorChallenge(String(req.body?.challengeToken ?? '')).sub;
+    } catch {
+      return ipKeyGenerator(req.ip ?? 'unknown');
+    }
+  },
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many attempts, try again later' } },
+});
+
+// Reports: 20 per day per member (authenticated, so keyed by member id).
+export const reportLimiter = rateLimit({
+  store: new PgRateLimitStore('rl:report:'),
+  passOnStoreError: true,
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.sub ?? ipKeyGenerator(req.ip ?? 'unknown'),
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many reports today, try again tomorrow' } },
 });

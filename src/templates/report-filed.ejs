@@ -1,0 +1,9 @@
+<%- include('_head', { heading: 'New report filed', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  A member reported a <%= targetType %> (reason: <%= reason %>):
+                </p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  <strong><%= targetLabel %></strong>
+                </p>
+<%- include('_foot', { ctaUrl: reportsUrl, ctaLabel: 'Review reports', frontendUrl }) %>

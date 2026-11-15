@@ -37,6 +37,7 @@ export function listWhere(q: ListQuery, now: Date): Where {
   if (q.category) and.push({ category: q.category });
   if (q.sellerId) and.push({ sellerId: q.sellerId });
   if (q.condition) and.push({ condition: q.condition });
+  if (q.verified) and.push({ seller: { verifiedAt: { not: null } } });
   if (q.q) and.push({ title: { contains: q.q, mode: 'insensitive' } });
   const price = priceFilter(q.minPrice, q.maxPrice);
   if (price) and.push(price);

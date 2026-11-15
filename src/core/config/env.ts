@@ -89,6 +89,12 @@ if (isProd && emailDriver === 'ses') {
   }
 }
 
+const smsDriver = process.env.SMS_DRIVER ?? 'stub';
+if (isProd && smsDriver === 'msg91') {
+  requireProd('MSG91_AUTH_KEY', process.env.MSG91_AUTH_KEY ?? '', 'SMS_DRIVER=msg91');
+  requireProd('MSG91_OTP_TEMPLATE_ID', process.env.MSG91_OTP_TEMPLATE_ID ?? '', 'SMS_DRIVER=msg91');
+}
+
 const accessSecret = secret('JWT_SECRET', 'dev_access_secret_change_me');
 const refreshSecret = secret('REFRESH_TOKEN_SECRET', 'dev_refresh_secret_change_me');
 if (isProd && accessSecret === refreshSecret) {
@@ -154,6 +160,22 @@ export const env = {
     // Public HTTPS URL to the brand logo, shown in the SES email header. Falls
     // back to a plain text wordmark (fromName) in the template when unset.
     logoUrl: process.env.LOGO_URL ?? '',
+  },
+
+  // SMS (phone-verification OTP only). `stub` logs a masked number; `msg91` needs a DLT-registered template.
+  sms: {
+    driver: smsDriver,
+    msg91: {
+      authKey: process.env.MSG91_AUTH_KEY ?? '',
+      senderId: process.env.MSG91_SENDER_ID ?? '',
+      otpTemplateId: process.env.MSG91_OTP_TEMPLATE_ID ?? '',
+    },
+  },
+
+  // Two-factor auth. encKey = 32 bytes, base64 (AES-256-GCM key for TOTP secrets); empty = 2FA setup unavailable.
+  twoFactor: {
+    encKey: process.env.TOTP_ENC_KEY ?? '',
+    requireAdmin: process.env.REQUIRE_ADMIN_2FA === 'true',
   },
 
   app: {

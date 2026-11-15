@@ -1,5 +1,6 @@
 import { prisma } from '@/core/prisma/client';
 import { AppError } from '@/core/errors/AppError';
+import { refreshSellerVerification } from '@/modules/members/verification.service';
 import type { CreateAccountInput } from './payouts.validation';
 
 const select = {
@@ -76,5 +77,6 @@ export async function createAccount(memberId: string, input: CreateAccountInput,
     update: data,
     select,
   });
+  await refreshSellerVerification(memberId, now);
   return { account };
 }

@@ -84,6 +84,7 @@ Schemas defined inline in their route file (still through `validate()`):
 | `admin/commissions/admin-commissions.routes.ts` | `listQuerySchema` | `status` `due` (default) \| `paid` \| `waived` \| `all`, paging |
 | `admin/payments/admin-payments.routes.ts` | `listQuerySchema` | `status` `created` \| `paid` \| `failed`, paging |
 | `admin/settings/admin-settings.routes.ts` | `deviceLimitSchema` | `memberLimit`, `superAdminLimit`, each 1-20, both required |
+| `admin/reports/admin-reports.routes.ts` | `adminListReportsQuery` / `resolveReportBody` (`reports.validation.ts`) | `status`, `targetType`, paging; `status` ACTION_TAKEN \| DISMISSED, `note` <= 500, `applyToAllOpenForTarget` |
 | `notifications/notifications.routes.ts` | `listQuerySchema` | Paging only |
 | `leaderboard/leaderboard.routes.ts` | `leaderboardQuerySchema` (exported) | `by` `spent` (default) \| `won`, `limit` 1-50 (default 20) |
 

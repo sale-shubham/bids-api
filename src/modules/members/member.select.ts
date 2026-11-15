@@ -13,6 +13,9 @@ export const memberProfileSelect = {
   role: true,
   isActive: true,
   emailVerifiedAt: true,
+  phoneVerifiedAt: true,
+  twoFactorEnabledAt: true,
+  verifiedAt: true,
   unpaidCommissionPaise: true,
   auctionsWon: true,
   moneySpentPaise: true,
@@ -27,8 +30,17 @@ export const memberPublicSelect = {
   role: true,
   ratingCount: true,
   ratingSum: true,
+  verifiedAt: true,
   createdAt: true,
 } as const;
+
+type MemberTrust = { twoFactorEnabledAt: Date | null; verifiedAt: Date | null };
+
+/** Turns the internal 2FA / verification timestamps into the client booleans (never expose twoFactorEnabledAt). */
+export function withMemberTrust<T extends MemberTrust>(m: T): Omit<T, keyof MemberTrust> & { twoFactorEnabled: boolean; verified: boolean } {
+  const { twoFactorEnabledAt, verifiedAt, ...rest } = m;
+  return { ...rest, twoFactorEnabled: !!twoFactorEnabledAt, verified: !!verifiedAt };
+}
 
 type MemberMoney = { unpaidCommissionPaise: bigint | number; moneySpentPaise: bigint | number };
 

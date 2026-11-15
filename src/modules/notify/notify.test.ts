@@ -186,6 +186,9 @@ describe('formatInr + templates', () => {
       payout: 'Rs 1,900',
       shipping: 'Courier: BlueDart.',
       reason: 'Not as described',
+      targetType: 'auction',
+      targetLabel: 'Vintage Watch',
+      reportsUrl: 'https://app.test/admin/reports',
     });
     expect(out.html).toContain('Vintage Watch');
     expect(out.text).toContain('Vintage Watch');

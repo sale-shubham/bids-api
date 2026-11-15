@@ -116,6 +116,13 @@ provider:
     # Only the dev stage sets them (see deploy_serverless.yml).
     RATE_LIMIT_AUTH_MAX: ${env:RATE_LIMIT_AUTH_MAX, ''}
     RATE_LIMIT_OTP_IP_MAX: ${env:RATE_LIMIT_OTP_IP_MAX, ''}
+    # SMS (phone verification only) and two-factor auth.
+    SMS_DRIVER: ${env:SMS_DRIVER, 'stub'}
+    MSG91_AUTH_KEY: ${env:MSG91_AUTH_KEY, ''}
+    MSG91_SENDER_ID: ${env:MSG91_SENDER_ID, ''}
+    MSG91_OTP_TEMPLATE_ID: ${env:MSG91_OTP_TEMPLATE_ID, ''}
+    TOTP_ENC_KEY: ${env:TOTP_ENC_KEY, ''}
+    REQUIRE_ADMIN_2FA: ${env:REQUIRE_ADMIN_2FA, 'false'}
     EMAIL_FROM: ${env:EMAIL_FROM, 'noreply@example.com'}
     EMAIL_FROM_NAME: ${env:EMAIL_FROM_NAME, 'NobleBid'}
     LOGO_URL: ${env:LOGO_URL, ''}

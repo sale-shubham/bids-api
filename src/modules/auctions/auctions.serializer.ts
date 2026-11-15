@@ -23,7 +23,7 @@ export function effectiveStatus(a: StatusInput, now: Date = new Date()): Effecti
   return 'LIVE';
 }
 
-export const sellerSelect = { id: true, name: true, avatarUrl: true, ratingCount: true, ratingSum: true } as const;
+export const sellerSelect = { id: true, name: true, avatarUrl: true, ratingCount: true, ratingSum: true, verifiedAt: true } as const;
 export const auctionInclude = { seller: { select: sellerSelect } } as const;
 export type AuctionRow = Prisma.AuctionGetPayload<{ include: typeof auctionInclude }>;
 
@@ -54,6 +54,7 @@ export function toCard(a: AuctionRow, now: Date = new Date()) {
       avatarUrl: a.seller.avatarUrl,
       ratingAvg: ratingAvg(a.seller.ratingSum, a.seller.ratingCount),
       ratingCount: a.seller.ratingCount,
+      verified: !!a.seller.verifiedAt,
     },
   };
 }

@@ -15,11 +15,12 @@ async function startSession(
   req: Request,
   res: Response,
   member: { id: string; role: Role },
+  deviceInfo?: Record<string, unknown>,
 ) {
   const authService = await import('./auth.service');
   const { getOrCreateDeviceId, buildDeviceMeta } = await import('./device.service');
   const deviceId = getOrCreateDeviceId(req, res);
-  const meta = buildDeviceMeta(req, req.body?.deviceInfo);
+  const meta = buildDeviceMeta(req, deviceInfo ?? req.body?.deviceInfo);
   const r = await authService.issueSession(member, deviceId, meta);
   setAuthCookies(res, r.accessToken, r.refreshToken, r.refreshExpiresAt);
 }
@@ -54,6 +55,11 @@ export async function login(req: Request, res: Response) {
   const { ok } = await import('@/core/http/response');
   const authService = await import('./auth.service');
   const member = await authService.login(req.body.email, req.body.password);
+  if (member.twoFactorEnabledAt) {
+    // Password OK but 2FA is on: no session, no cookies until /auth/2fa/verify.
+    const { signTwoFactorChallenge } = await import('./token.service');
+    return ok(res, { twoFactorRequired: true, challengeToken: signTwoFactorChallenge(member.id, req.body.deviceInfo) });
+  }
   await startSession(req, res, member);
   return ok(res, { member: await memberDto(member.id) });
 }
@@ -161,4 +167,41 @@ export async function revokeSession(req: Request, res: Response) {
   const revoked = await sessionService.revokeSession(req.user!.sub, param(req, 'id'));
   if (!revoked) throw NotFound('Device session not found');
   return ok(res, { message: 'Device removed' });
+}
+
+// POST /auth/2fa/verify: second login step; same session + body as a normal login.
+export async function twoFactorVerify(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const twoFactor = await import('./two-factor.service');
+  const { member, deviceInfo } = await twoFactor.verifyLogin(req.body);
+  await startSession(req, res, member, deviceInfo);
+  return ok(res, { member: await memberDto(member.id) });
+}
+
+// POST /auth/2fa/setup -> { secret, otpauthUrl }
+export async function twoFactorSetup(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const twoFactor = await import('./two-factor.service');
+  return ok(res, await twoFactor.setup(req.user!.sub));
+}
+
+// POST /auth/2fa/enable -> { recoveryCodes } (shown once)
+export async function twoFactorEnable(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const twoFactor = await import('./two-factor.service');
+  return ok(res, await twoFactor.enable(req.user!.sub, req.body.code));
+}
+
+export async function twoFactorDisable(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const twoFactor = await import('./two-factor.service');
+  await twoFactor.disable(req.user!.sub, req.body.password, req.body.code);
+  return ok(res, { message: 'Two-factor authentication disabled.' });
+}
+
+// POST /auth/2fa/recovery-codes -> { recoveryCodes }
+export async function twoFactorRecoveryCodes(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const twoFactor = await import('./two-factor.service');
+  return ok(res, await twoFactor.regenerateRecoveryCodes(req.user!.sub, req.body.code));
 }

@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import ms, { type StringValue } from 'ms';
 import { env } from '@/core/config/env';
-import { Unauthorized } from '@/core/errors/AppError';
+import { AppError, Unauthorized } from '@/core/errors/AppError';
 import type { AuthUser } from '@/core/middleware/auth';
 import type { Member } from '@prisma/client';
 
@@ -60,5 +60,34 @@ export function verifyRefreshToken(token: string): { sub: string; sid: string } 
     return { sub: payload.sub, sid: payload.sid };
   } catch {
     throw Unauthorized('Invalid refresh token');
+  }
+}
+
+const CHALLENGE_TTL = '5m' as StringValue;
+
+export interface TwoFactorChallenge {
+  sub: string;
+  deviceInfo?: Record<string, unknown>;
+}
+
+// Short-lived proof that the password step passed; only /auth/2fa/verify accepts it.
+export function signTwoFactorChallenge(memberId: string, deviceInfo?: Record<string, unknown>): string {
+  return jwt.sign({ typ: '2fa', sub: memberId, ...(deviceInfo ? { di: deviceInfo } : {}) }, env.jwt.accessSecret, {
+    algorithm: 'HS256',
+    expiresIn: CHALLENGE_TTL,
+  });
+}
+
+export function verifyTwoFactorChallenge(token: string): TwoFactorChallenge {
+  try {
+    const p = jwt.verify(token, env.jwt.accessSecret, { algorithms: ['HS256'] }) as {
+      typ?: string;
+      sub?: string;
+      di?: Record<string, unknown>;
+    };
+    if (p.typ !== '2fa' || !p.sub) throw new Error('not a 2fa challenge');
+    return { sub: p.sub, deviceInfo: p.di };
+  } catch {
+    throw new AppError(401, 'TWO_FACTOR_CHALLENGE_INVALID', 'Sign-in expired. Please log in again.');
   }
 }
