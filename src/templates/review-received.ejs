@@ -1,0 +1,6 @@
+<%- include('_head', { heading: 'New review received', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  A buyer rated you <strong><%= rating %> out of 5</strong> for <strong><%= auctionTitle %></strong>.
+                </p>
+<%- include('_foot', { ctaUrl: sellerUrl, ctaLabel: 'View your reviews', frontendUrl }) %>

@@ -4,6 +4,8 @@ import { authenticate, optionalAuthenticate, requireActiveMember, requireRole } 
 import { validate } from '@/core/middleware/validate';
 import { auctionWriteLimiter } from '@/core/middleware/rateLimit';
 import { auctionBidsRouter, auctionBuyNowRouter } from '@/modules/bids/bids.routes';
+import { auctionReviewRouter } from '@/modules/reviews/reviews.routes';
+import { auctionQuestionsRouter } from '@/modules/questions/questions.routes';
 import * as ctrl from './auctions.controller';
 import {
   createAuctionSchema,
@@ -26,6 +28,8 @@ router.post('/', ...seller, auctionWriteLimiter, validate(createAuctionSchema), 
 
 router.use('/:id/bids', auctionBidsRouter);
 router.use('/:id/buy-now', auctionBuyNowRouter);
+router.use('/:id/review', auctionReviewRouter);
+router.use('/:id/questions', auctionQuestionsRouter);
 router.get('/:id', optionalAuthenticate, asyncHandler(ctrl.detail));
 router.patch('/:id', ...seller, auctionWriteLimiter, validate(updateAuctionSchema), asyncHandler(ctrl.update));
 router.delete('/:id', ...seller, asyncHandler(ctrl.remove));

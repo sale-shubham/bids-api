@@ -23,7 +23,7 @@ PostgreSQL via Prisma 7 with the `pg` driver adapter. Runtime uses the pooled `D
 The daily `retentionPurge` (also `POST /admin/retention/purge`) deletes OTP challenges expired more than 30 days, sessions idle longer than the refresh-token lifetime (`REFRESH_TTL_MS`, default 30 days), `WsTicket` rows expired or older than 1 day, `WsConnection` rows older than 2 h, and rate-limit buckets reset more than 1 day ago.
 
 ## Integrations
-- Email: SES (or the stub driver) with EJS templates in `src/templates/`: otp-code, welcome, outbid, auction-won, auction-sold, auction-unsold, ending-soon, commission-due, commission-paid, contact-message. Email OTP is used only for signup email verification and forgot-password; login is email + password.
+- Email: SES (or the stub driver) with EJS templates in `src/templates/`: otp-code, welcome, outbid, auction-won, auction-sold, auction-unsold, ending-soon, commission-due, commission-paid, review-received, question-asked, question-answered, saved-search-match, contact-message. Email OTP is used only for signup email verification and forgot-password; login is email + password.
 - Payments: Razorpay Orders API called with `fetch` (no SDK), stub driver for local dev. Webhook is HMAC-verified on the raw body and idempotent via `WebhookEvent`. See `flows/payments.md`.
 - Storage: S3 presigned PUT for auction images and avatars. Served through CloudFront when `ENABLE_CDN=true`, otherwise straight from the bucket.
 - Realtime: API Gateway WebSocket (single-use ticket handshake, guests allowed) and Web Push (VAPID). See `flows/websocket.md`.

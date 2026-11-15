@@ -1,6 +1,7 @@
 import { prisma } from '@/core/prisma/client';
 import { BadRequest } from '@/core/errors/AppError';
 import { env } from '@/core/config/env';
+import { ratingAvg } from '@/modules/reviews/reviews.rules';
 import { memberProfileSelect, memberPublicSelect, withMemberMoney } from './member.select';
 
 export { memberProfileSelect, memberPublicSelect };
@@ -33,7 +34,8 @@ export async function getPublicProfile(memberId: string, now = new Date()) {
     }),
     prisma.auction.count({ where: { AND: [{ sellerId: memberId }, statusWhere('live', now)] } }),
   ]);
-  return { ...member, auctionsSold, activeAuctions };
+  const { ratingSum, ratingCount, ...publicFields } = member;
+  return { ...publicFields, ratingAvg: ratingAvg(ratingSum, ratingCount), ratingCount, auctionsSold, activeAuctions };
 }
 
 // Base URLs an avatar may come from: our CloudFront, or the bucket's S3 URL.

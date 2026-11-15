@@ -129,6 +129,36 @@ describe('formatInr + templates', () => {
     expect(buildContent({ ...ctx, type: 'reserve-not-met', data: {} })).toMatchObject({ template: 'reserve-not-met' });
   });
 
+  it('builds content for the review / question / saved-search types', () => {
+    const ctx = { auctionId: 'a1', auctionTitle: 'Vintage Watch', memberName: 'Ramesh' };
+    expect(buildContent({ ...ctx, type: 'review-received', data: { rating: 4, sellerId: 's1' } })).toMatchObject({
+      template: 'review-received',
+      url: '/sellers/s1',
+      title: 'New review received',
+    });
+    const asked = buildContent({ ...ctx, type: 'question-asked', data: { question: 'Works?' } });
+    expect(asked).toMatchObject({ template: 'question-asked', url: '/auctions/a1' });
+    expect(asked.body).toContain('Works?');
+    const answered = buildContent({ ...ctx, type: 'question-answered', data: { answer: 'Yes' } });
+    expect(answered).toMatchObject({ template: 'question-answered', url: '/auctions/a1' });
+    expect(answered.body).toContain('Yes');
+    const named = buildContent({ ...ctx, type: 'saved-search-match', data: { searchName: 'Watches' } });
+    expect(named).toMatchObject({ template: 'saved-search-match', url: '/auctions/a1' });
+    expect(named.body).toContain('"Watches"');
+    expect(buildContent({ ...ctx, type: 'saved-search-match', data: { searchName: '' } }).body).toContain('one of your saved searches');
+  });
+
+  it('escapes user text in the question email', async () => {
+    const out = await renderEmail('question-asked', {
+      name: 'R',
+      auctionTitle: 'T',
+      auctionUrl: 'https://app.test/auctions/a1',
+      question: '<script>alert(1)</script>',
+    });
+    expect(out.html).not.toContain('<script>alert(1)</script>');
+    expect(out.html).toContain('&lt;script&gt;');
+  });
+
   it.each(NOTIFY_TYPES)('renders %s (html + text)', async (type) => {
     const person = { name: 'Asha', email: 'a@example.com', phone: null };
     const out = await renderEmail(type, {
@@ -144,6 +174,11 @@ describe('formatInr + templates', () => {
       commissionUrl: 'https://app.test/sell/commissions',
       seller: person,
       winner: person,
+      rating: 5,
+      sellerUrl: 'https://app.test/sellers/s1',
+      question: 'Does it come with the box?',
+      answer: 'Yes, with the original box.',
+      searchName: 'Cheap watches',
     });
     expect(out.html).toContain('Vintage Watch');
     expect(out.text).toContain('Vintage Watch');

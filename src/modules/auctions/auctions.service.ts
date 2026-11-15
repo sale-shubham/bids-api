@@ -168,6 +168,23 @@ export async function listMine(sellerId: string, q: MineQuery, now = new Date())
 
 // ---------------------------------------------------------------- writes
 
+/** Best-effort saved-search alerts for a newly published auction; never fails the request. */
+async function notifySavedSearches(row: AuctionRow) {
+  try {
+    const { onAuctionPublished } = await import('@/modules/saved-searches/saved-search.matcher');
+    await onAuctionPublished({
+      id: row.id,
+      title: row.title,
+      category: row.category,
+      condition: row.condition,
+      startingBidPaise: toPaise(row.startingBidPaise),
+      sellerId: row.sellerId,
+    });
+  } catch (err) {
+    logger.error({ err, auctionId: row.id }, 'saved-search: matcher failed');
+  }
+}
+
 async function assertCategory(category: string) {
   const names = await getCategoryNames();
   if (!names.includes(category)) throw invalid('category must be one of the configured categories');
@@ -217,6 +234,7 @@ export async function createAuction(memberId: string, input: CreateAuctionInput,
     },
     include: auctionInclude,
   });
+  await notifySavedSearches(row as AuctionRow);
   return withReserve(row as AuctionRow, toDetail(row as AuctionRow, now));
 }
 
@@ -323,5 +341,6 @@ export async function republishAuction(
   }
   await resetEndingSoon(id);
   const row = (await prisma.auction.findUnique({ where: { id }, include: auctionInclude })) as AuctionRow;
+  await notifySavedSearches(row);
   return withReserve(row, toDetail(row, now));
 }

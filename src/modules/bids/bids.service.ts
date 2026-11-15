@@ -10,6 +10,7 @@ import { buildAuctionDetail } from '@/modules/auctions/auction-detail.service';
 import { auctionNotFound } from '@/modules/auctions/auctions.service';
 import { publishAuctionEvent } from '@/modules/auctions/auction-events';
 import { afterClose, closeOneTx, commissionRateBps } from '@/modules/auctions/auction-close.service';
+import { isReviewWindowOpen } from '@/modules/reviews/reviews.rules';
 import { enqueueNotification } from '@/modules/notify/notify.queue';
 import {
   antiSnipedEndTime,
@@ -335,8 +336,18 @@ export async function listMyBids(memberId: string, q: MyBidsQuery, now = new Dat
   );
 
   const { skip, take } = offsetArgs(q);
-  const items = matched.slice(skip, skip + take).map(({ a, g, state }) => ({
+  const pageRows = matched.slice(skip, skip + take);
+  const reviewCandidates = pageRows.filter(({ a }) => isReviewWindowOpen(a, memberId, now)).map(({ a }) => a.id);
+  const reviewed = reviewCandidates.length
+    ? new Set(
+        (await prisma.review.findMany({ where: { auctionId: { in: reviewCandidates } }, select: { auctionId: true } })).map(
+          (r) => r.auctionId,
+        ),
+      )
+    : new Set<string>();
+  const items = pageRows.map(({ a, g, state }) => ({
     auction: toCard(a, now),
+    canReview: reviewCandidates.includes(a.id) && !reviewed.has(a.id),
     myHighestBidPaise: toPaiseOrNull(g._max.amountPaise) ?? 0,
     myBidCount: g._count._all,
     myMaxBidPaise: myMax.get(a.id) ?? null,

@@ -1,6 +1,6 @@
 # Admin (SUPER_ADMIN only)
 
-All routes are under `/admin` and require `authenticate` + `requireRole('SUPER_ADMIN')`. Code: `src/modules/admin/{dashboard,members,auctions,commissions,payments,settings,retention}`. Lists use `paginated()` (`meta: { total, page, pageSize, totalPages }`, `page` / `pageSize` max 100).
+All routes are under `/admin` and require `authenticate` + `requireRole('SUPER_ADMIN')`. Code: `src/modules/admin/{dashboard,members,auctions,commissions,payments,reviews,settings,retention}`. Lists use `paginated()` (`meta: { total, page, pageSize, totalPages }`, `page` / `pageSize` max 100).
 
 | Method | Path | Notes |
 |---|---|---|
@@ -8,6 +8,8 @@ All routes are under `/admin` and require `authenticate` + `requireRole('SUPER_A
 | GET | `/admin/members` | `q` (name/email/phone), `role`, `status=active\|inactive`, `sortBy`, `sortOrder`, paging -> `{ id, name, email, phone, role, isActive, emailVerifiedAt, createdAt, unpaidCommissionPaise, auctionsWon, moneySpentPaise }[]` + top-level `stats { total, active, inactive }` |
 | PATCH | `/admin/members/:id` | `{ isActive?, role? }` (at least one) -> `{ member }`. 409 `CANNOT_MODIFY_SELF` if the target is the caller and the body changes role or sets `isActive: false`. Deactivation deletes the member's Sessions and force-disconnects their sockets. 404 for unknown id. |
 | GET | `/admin/auctions` | `status=live\|upcoming\|ended\|cancelled` (omit = all), `q` (title, seller name/email) -> `AuctionCard & { sellerEmail }`, newest first. Cancel with `DELETE /auctions/:id` (admin may cancel auctions that have bids; no refund/notify, logged). |
+| GET | `/admin/reviews` | `hidden=true\|false` (omit = all), `q` (comment, reviewer or seller name/email), `page`, `limit` (alias `pageSize`, max 100) -> `AdminReviewDTO[]` newest first: ReviewDTO + `hiddenAt`, `reviewer { id, name, email }`, `seller { id, name }` |
+| PATCH | `/admin/reviews/:id` | `{ hidden: boolean }` -> `{ review }`. Hiding subtracts the rating from the seller's `ratingCount` / `ratingSum`, unhiding adds it back; repeating the same value changes nothing. 404 `REVIEW_NOT_FOUND`. See `reviews.md` |
 | GET | `/admin/commissions` | `status=due\|paid\|waived\|all` (default due) -> `CommissionDTO & { seller: { id, name, email } }` |
 | POST | `/admin/commissions/:id/waive` | `waiveCommission` -> `{ commission }`; 404 `COMMISSION_NOT_FOUND`, 409 `COMMISSION_NOT_DUE`; reduces the seller `unpaidCommissionPaise` (never below 0) |
 | GET | `/admin/payments` | `status=created\|paid\|failed` (omit = all) -> `{ id, member: { id, name, email }, amountPaise, status (CREATED\|PAID\|FAILED), gatewayOrderId, gatewayPaymentId, referenceType, referenceId, createdAt }[]` |

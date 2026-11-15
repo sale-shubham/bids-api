@@ -2,11 +2,12 @@ import { prisma } from '@/core/prisma/client';
 import { toPaise, toPaiseOrNull } from '@/core/money';
 import { effectiveStatus, toDetail, type AuctionContact, type AuctionRow } from './auctions.serializer';
 import { provisionalWinnerId, toBidDTO } from './bidding.rules';
+import { isReviewWindowOpen, reviewInclude, toReviewDTO } from '@/modules/reviews/reviews.rules';
 
 const RECENT_BIDS = 5;
 const contactSelect = { name: true, email: true, phone: true } as const;
 
-type Db = Pick<typeof prisma, 'bid' | 'member' | 'watchlist' | 'maxBid'>;
+type Db = Pick<typeof prisma, 'bid' | 'member' | 'watchlist' | 'maxBid' | 'review'>;
 
 /**
  * AuctionDetail with the viewer-specific extras: latest 5 bids (masked),
@@ -21,7 +22,7 @@ export async function buildAuctionDetail(
   db: Db = prisma,
   viewerRole: string | null = null,
 ) {
-  const [bids, mine, myMax, contact, watcherCount, watching] = await Promise.all([
+  const [bids, mine, myMax, contact, watcherCount, watching, reviewRow] = await Promise.all([
     db.bid.findMany({
       where: { auctionId: row.id },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -45,6 +46,7 @@ export async function buildAuctionDetail(
           select: { memberId: true },
         })
       : Promise.resolve(null),
+    db.review.findUnique({ where: { auctionId: row.id }, include: reviewInclude }),
   ]);
   const seesReserve = !!viewerId && (viewerId === row.sellerId || viewerRole === 'SUPER_ADMIN');
   return {
@@ -56,6 +58,8 @@ export async function buildAuctionDetail(
     contact,
     isWatching: !!watching,
     watcherCount,
+    review: reviewRow && !reviewRow.hiddenAt ? toReviewDTO(reviewRow) : null,
+    canReview: !reviewRow && isReviewWindowOpen(row, viewerId, now),
   };
 }
 

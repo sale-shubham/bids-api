@@ -85,6 +85,9 @@ model Member {
   // Bidder stats.
   auctionsWon           Int       @default(0)
   moneySpentPaise       BigInt    @default(0)
+  // Seller rating totals; only non-hidden reviews count.
+  ratingCount           Int       @default(0)
+  ratingSum             Int       @default(0)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -102,6 +105,11 @@ model Member {
   watchlist       Watchlist[]
   commissions     Commission[]
   notifications   Notification[]
+
+  reviewsReceived Review[]          @relation("ReviewsReceived")
+  reviewsWritten  Review[]          @relation("ReviewsWritten")
+  questions       AuctionQuestion[]
+  savedSearches   SavedSearch[]
 
   @@index([role])
 }
@@ -185,6 +193,8 @@ model Auction {
   maxBids    MaxBid[]
   watchlist  Watchlist[]
   commission Commission?
+  review     Review?
+  questions  AuctionQuestion[]
 
   @@index([status, endTime])
   @@index([status, startTime])
@@ -372,4 +382,57 @@ model AppSetting {
   key       String   @id
   value     String?
   updatedAt DateTime @updatedAt
+}
+
+// One review per ended auction, written by the winner about the seller.
+model Review {
+  id              String    @id @default(cuid())
+  auction         Auction   @relation(fields: [auctionId], references: [id])
+  auctionId       String    @unique
+  seller          Member    @relation("ReviewsReceived", fields: [sellerId], references: [id])
+  sellerId        String
+  reviewer        Member    @relation("ReviewsWritten", fields: [reviewerId], references: [id])
+  reviewerId      String
+  rating          Int
+  comment         String?
+  sellerReply     String?
+  sellerRepliedAt DateTime?
+  hiddenAt        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([sellerId, hiddenAt, createdAt])
+}
+
+// A public question on a lot, answered once by the seller.
+model AuctionQuestion {
+  id         String    @id @default(cuid())
+  auction    Auction   @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  auctionId  String
+  asker      Member    @relation(fields: [askerId], references: [id])
+  askerId    String
+  question   String
+  answer     String?
+  answeredAt DateTime?
+  hiddenAt   DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([auctionId, createdAt])
+}
+
+// A bidder's saved browse filter; matching new listings notify the member.
+model SavedSearch {
+  id            String         @id @default(cuid())
+  member        Member         @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId      String
+  name          String?
+  q             String?
+  category      String?
+  condition     ItemCondition?
+  minPricePaise BigInt?
+  maxPricePaise BigInt?
+  createdAt     DateTime       @default(now())
+
+  @@index([memberId])
+  @@index([category])
 }

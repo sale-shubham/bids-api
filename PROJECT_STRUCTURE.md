@@ -21,7 +21,7 @@ bids-api/
 │   │                         #   logger, middleware (auth, rateLimit, validate, errorHandler), prisma client
 │   ├── providers/            # email (SES + stub, render.ts), payment (Razorpay + stub), storage (S3)
 │   ├── templates/            # EJS email templates, HTML + .txt pairs (otp-code, welcome, outbid, auction-won, auction-sold,
-│                             #   auction-unsold, reserve-not-met, ending-soon, commission-due, commission-paid, contact-message + _head/_foot/_contact partials)
+│                             #   auction-unsold, reserve-not-met, ending-soon, commission-due, commission-paid, review-received, question-asked, question-answered, saved-search-match, contact-message + _head/_foot/_contact partials)
 │   └── modules/
 │       ├── auth/             # signup/verify/login/password flows, token, session, device, otp-challenge, password rule
 │       ├── members/          # GET/PATCH /members/me, GET /members/:id/public, member.select.ts
@@ -38,10 +38,13 @@ bids-api/
 │       ├── commissions/      # GET /commissions/mine + /summary, POST /commissions/:id/checkout; markCommissionPaid, waiveCommission, runCommissionReminders
 │       ├── payments/         # POST /payments/verify, POST /payments/webhook (Razorpay, HMAC + WebhookEvent dedupe)
 │       ├── watchlist/        # GET /watchlist, /watchlist/ids, POST|DELETE /watchlist/:auctionId, runEndingSoon job
+│       ├── reviews/          # POST /auctions/:id/review, POST /reviews/:id/reply, GET /members/:id/reviews; reviews.rules (ratingAvg, 60-day window)
+│       ├── questions/        # GET|POST /auctions/:id/questions, POST /questions/:id/answer|hide
+│       ├── saved-searches/   # GET|POST /saved-searches, DELETE /saved-searches/:id; saved-search.matcher (onAuctionPublished)
 │       ├── leaderboard/      # GET /leaderboard (spent|won)
 │       ├── contact/          # POST /contact (rate limited, emails ADMIN_EMAIL with reply-to)
-│       └── admin/            # dashboard, members (PATCH), auctions, commissions (+waive), payments, settings (+legal), retention
-├── readme/                   # ARCHITECTURE.md, methods/, flows/ (auth, auctions, bidding, notifications, payments, websocket, watchlist, leaderboard, admin, legal-pages, deployment)
+│       └── admin/            # dashboard, members (PATCH), auctions, commissions (+waive), payments, reviews (list, hide), settings (+legal), retention
+├── readme/                   # ARCHITECTURE.md, methods/, flows/ (auth, auctions, bidding, notifications, payments, websocket, watchlist, reviews, questions, saved-searches, leaderboard, admin, legal-pages, deployment)
 ├── docs/DOC_SYNC.md
 └── .claude/ .husky/ .github/workflows/
 ```

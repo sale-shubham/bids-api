@@ -1,0 +1,9 @@
+<%- include('_head', { heading: 'Your question was answered', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  The seller answered your question about <strong><%= auctionTitle %></strong>:
+                </p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  <em><%= answer %></em>
+                </p>
+<%- include('_foot', { ctaUrl: auctionUrl, ctaLabel: 'View auction', frontendUrl }) %>

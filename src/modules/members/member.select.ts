@@ -25,6 +25,8 @@ export const memberPublicSelect = {
   name: true,
   avatarUrl: true,
   role: true,
+  ratingCount: true,
+  ratingSum: true,
   createdAt: true,
 } as const;
 

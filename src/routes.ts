@@ -19,6 +19,10 @@ import adminPaymentsRoutes from '@/modules/admin/payments/admin-payments.routes'
 import watchlistRoutes from '@/modules/watchlist/watchlist.routes';
 import leaderboardRoutes from '@/modules/leaderboard/leaderboard.routes';
 import contactRoutes from '@/modules/contact/contact.routes';
+import { reviewsRouter } from '@/modules/reviews/reviews.routes';
+import { questionsRouter } from '@/modules/questions/questions.routes';
+import savedSearchRoutes from '@/modules/saved-searches/saved-searches.routes';
+import adminReviewsRoutes from '@/modules/admin/reviews/admin-reviews.routes';
 import adminSettingsRoutes from '@/modules/admin/settings/admin-settings.routes';
 
 const router = Router();
@@ -39,12 +43,16 @@ router.use('/notifications', notificationRoutes);
 router.use('/watchlist', watchlistRoutes);
 router.use('/leaderboard', leaderboardRoutes);
 router.use('/contact', contactRoutes);
+router.use('/reviews', reviewsRouter);
+router.use('/questions', questionsRouter);
+router.use('/saved-searches', savedSearchRoutes);
 router.use('/admin/auctions', adminAuctionsRoutes);
 router.use('/admin/commissions', adminCommissionsRoutes);
 router.use('/admin/payments', adminPaymentsRoutes);
 router.use('/admin/members', adminMembersRoutes);
 router.use('/admin/retention', adminRetentionRoutes);
 router.use('/admin/settings', adminSettingsRoutes);
+router.use('/admin/reviews', adminReviewsRoutes);
 router.use('/admin', adminDashboardRoutes);
 
 export default router;

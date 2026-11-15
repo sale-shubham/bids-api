@@ -15,7 +15,7 @@ Coverage is report-only: `vitest.config.ts` sets no thresholds, so it never fail
 
 ## Layout
 
-- `src/**/*.test.ts` next to the code: unit / service tests (mocked prisma, pure rules such as `bidding.rules.test.ts`, middleware in isolation, e.g. `auth.test.ts`, `errorHandler.test.ts`, `rateLimit.test.ts`).
+- `src/**/*.test.ts` next to the code: unit / service tests (mocked prisma, pure rules such as `bidding.rules.test.ts`, feature suites `reviews/reviews.test.ts`, `questions/questions.test.ts`, `saved-searches/saved-searches.test.ts`, middleware in isolation, e.g. `auth.test.ts`, `errorHandler.test.ts`, `rateLimit.test.ts`).
 - `scripts/**/*.test.ts`: tests for the repo scripts (`github-env-sync.test.ts`). Both globs are the `include` list in `vitest.config.ts`.
 - `src/__tests__/http/*.http.test.ts`: black-box HTTP tests through the real Express app (routing, middleware order, guards, Joi schemas, controllers, error envelope, CORS, cookies).
   - `harness.ts` - shared setup (see below).

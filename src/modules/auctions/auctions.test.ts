@@ -14,6 +14,8 @@ const db = vi.hoisted(() => ({
   watchlist: { count: vi.fn(async () => 0), findUnique: vi.fn(async () => null), updateMany: vi.fn(async () => ({ count: 0 })) },
   bid: { findMany: vi.fn(async () => []), aggregate: vi.fn(async () => ({ _max: { amountPaise: null } })) },
   maxBid: { findUnique: vi.fn(async () => null as unknown) },
+  review: { findUnique: vi.fn(async () => null as unknown) },
+  savedSearch: { findMany: vi.fn(async () => []) },
 }));
 vi.mock('@/core/prisma/client', () => ({ prisma: db }));
 vi.mock('@/core/config/env', () => ({
@@ -153,7 +155,7 @@ describe('service ownership / 409 rules', () => {
     startTime: at(H),
     endTime: at(5 * H),
     images: [],
-    seller: { id: 'seller', name: 'S', avatarUrl: null },
+    seller: { id: 'seller', name: 'S', avatarUrl: null, ratingCount: 0, ratingSum: 0 },
     createdAt: now,
     updatedAt: now,
     ...over,

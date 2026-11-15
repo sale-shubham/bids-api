@@ -25,7 +25,7 @@ const row = {
   winnerId: null,
   createdAt: now,
   updatedAt: now,
-  seller: { id: 's1', name: 'S', avatarUrl: null },
+  seller: { id: 's1', name: 'S', avatarUrl: null, ratingCount: 0, ratingSum: 0 },
 } as unknown as AuctionRow;
 
 describe('serializers with bigint rows', () => {

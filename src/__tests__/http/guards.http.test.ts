@@ -40,6 +40,14 @@ const AUTHED: Route[] = [
   ['get', '/watchlist/ids'],
   ['post', '/watchlist/a1'],
   ['delete', '/watchlist/a1'],
+  ['post', '/auctions/a1/review'],
+  ['post', '/reviews/r1/reply'],
+  ['post', '/auctions/a1/questions'],
+  ['post', '/questions/q1/answer'],
+  ['post', '/questions/q1/hide'],
+  ['get', '/saved-searches'],
+  ['post', '/saved-searches'],
+  ['delete', '/saved-searches/ss1'],
 ];
 
 const ADMIN: Route[] = [
@@ -57,6 +65,8 @@ const ADMIN: Route[] = [
   ['put', '/admin/settings/legal/terms-conditions'],
   ['get', '/admin/settings/device-limit'],
   ['put', '/admin/settings/device-limit'],
+  ['get', '/admin/reviews'],
+  ['patch', '/admin/reviews/r1'],
 ];
 
 const SELLER_ONLY: Route[] = [
@@ -65,6 +75,9 @@ const SELLER_ONLY: Route[] = [
   ['patch', '/auctions/a1'],
   ['delete', '/auctions/a1'],
   ['post', '/auctions/a1/republish'],
+  ['post', '/reviews/r1/reply'],
+  ['post', '/questions/q1/answer'],
+  ['post', '/questions/q1/hide'],
   ['get', '/commissions/mine'],
   ['get', '/commissions/summary'],
   ['post', '/commissions/c1/checkout'],
@@ -74,6 +87,11 @@ const BIDDER_ONLY: Route[] = [
   ['post', '/auctions/a1/bids'],
   ['post', '/auctions/a1/buy-now'],
   ['get', '/bids/mine'],
+  ['post', '/auctions/a1/review'],
+  ['post', '/auctions/a1/questions'],
+  ['get', '/saved-searches'],
+  ['post', '/saved-searches'],
+  ['delete', '/saved-searches/ss1'],
 ];
 
 const PUBLIC: Route[] = [
@@ -86,6 +104,8 @@ const PUBLIC: Route[] = [
   ['get', '/auctions/a1'],
   ['get', '/auctions/a1/bids'],
   ['get', '/members/m1/public'],
+  ['get', '/members/m1/reviews'],
+  ['get', '/auctions/a1/questions'],
   ['get', '/push/vapid-public-key'],
   ['post', '/ws/guest-ticket'],
   ['post', '/contact'],

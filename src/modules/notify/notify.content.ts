@@ -36,6 +36,11 @@ const timeText = (v: unknown) =>
   typeof v === 'string' && !Number.isNaN(Date.parse(v))
     ? new Date(v).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) + ' IST'
     : '';
+const str = (v: unknown) => (typeof v === 'string' ? v : '');
+const clip = (v: unknown, max = 200) => {
+  const t = str(v).trim();
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+};
 const dateText = (v: unknown) =>
   typeof v === 'string' && !Number.isNaN(Date.parse(v))
     ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
@@ -124,6 +129,53 @@ export function buildContent(c: ContentCtx): Content {
         template: 'reserve-not-met',
         templateData: base,
       };
+    case 'review-received': {
+      const rating = num(c.data.rating);
+      const sellerPath = `/sellers/${str(c.data.sellerId)}`;
+      return {
+        title: 'New review received',
+        body: `A buyer rated you ${rating}/5 for "${c.auctionTitle}".`,
+        url: sellerPath,
+        subject: `New ${rating}-star review for "${c.auctionTitle}"`,
+        template: 'review-received',
+        templateData: { ...base, rating, sellerUrl: `${env.app.url}${sellerPath}` },
+      };
+    }
+    case 'question-asked': {
+      const question = clip(c.data.question);
+      return {
+        title: 'New question on your lot',
+        body: `A bidder asked about "${c.auctionTitle}": ${question}`,
+        url: auctionPath,
+        subject: `New question on "${c.auctionTitle}"`,
+        template: 'question-asked',
+        templateData: { ...base, question },
+      };
+    }
+    case 'question-answered': {
+      const answer = clip(c.data.answer);
+      return {
+        title: 'Your question was answered',
+        body: `The seller answered your question on "${c.auctionTitle}": ${answer}`,
+        url: auctionPath,
+        subject: `Your question on "${c.auctionTitle}" was answered`,
+        template: 'question-answered',
+        templateData: { ...base, answer },
+      };
+    }
+    case 'saved-search-match': {
+      const searchName = str(c.data.searchName).trim();
+      return {
+        title: 'New listing matches your saved search',
+        body: searchName
+          ? `"${c.auctionTitle}" matches your saved search "${searchName}".`
+          : `"${c.auctionTitle}" matches one of your saved searches.`,
+        url: auctionPath,
+        subject: `New listing: "${c.auctionTitle}"`,
+        template: 'saved-search-match',
+        templateData: { ...base, searchName },
+      };
+    }
     case 'commission-paid': {
       const commission = formatInr(num(c.data.commissionPaise));
       const commissionPath = '/sell/commissions';

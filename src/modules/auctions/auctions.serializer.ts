@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { toPaise, toPaiseOrNull } from '@/core/money';
 import { reserveMet, type BidDTO } from './bidding.rules';
+import { ratingAvg, type ReviewDTO } from '@/modules/reviews/reviews.rules';
 
 export type EffectiveStatus = 'SCHEDULED' | 'LIVE' | 'ENDED' | 'CANCELLED';
 
@@ -22,7 +23,7 @@ export function effectiveStatus(a: StatusInput, now: Date = new Date()): Effecti
   return 'LIVE';
 }
 
-export const sellerSelect = { id: true, name: true, avatarUrl: true } as const;
+export const sellerSelect = { id: true, name: true, avatarUrl: true, ratingCount: true, ratingSum: true } as const;
 export const auctionInclude = { seller: { select: sellerSelect } } as const;
 export type AuctionRow = Prisma.AuctionGetPayload<{ include: typeof auctionInclude }>;
 
@@ -47,7 +48,13 @@ export function toCard(a: AuctionRow, now: Date = new Date()) {
     startTime: a.startTime.toISOString(),
     endTime: a.endTime.toISOString(),
     status: effectiveStatus(a, now),
-    seller: { id: a.seller.id, name: a.seller.name, avatarUrl: a.seller.avatarUrl },
+    seller: {
+      id: a.seller.id,
+      name: a.seller.name,
+      avatarUrl: a.seller.avatarUrl,
+      ratingAvg: ratingAvg(a.seller.ratingSum, a.seller.ratingCount),
+      ratingCount: a.seller.ratingCount,
+    },
   };
 }
 
@@ -72,5 +79,7 @@ export function toDetail(a: AuctionRow, now: Date = new Date()) {
     contact: null as AuctionContact | null,
     isWatching: false,
     watcherCount: 0,
+    review: null as ReviewDTO | null,
+    canReview: false,
   };
 }

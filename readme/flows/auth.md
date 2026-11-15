@@ -19,7 +19,7 @@ Code: `src/modules/auth/*`, `src/modules/members/*`, `src/modules/uploads/*`, `s
 | GET / DELETE | `/auth/sessions`, `/auth/sessions/:id` | member | unchanged |
 | GET | `/members/me` | member | `{ member: { id, email, name, phone, avatarUrl, address, role, isActive, emailVerifiedAt, unpaidCommissionPaise, auctionsWon, moneySpentPaise, createdAt, deviceLimit } }` |
 | PATCH | `/members/me` | member | `{ name?, phone?, address?, avatarUrl? }` -> `{ member }`; avatarUrl must start with our CloudFront/S3 base |
-| GET | `/members/:id/public` | public | `{ id, name, avatarUrl, role, createdAt }` |
+| GET | `/members/:id/public` | public | `{ id, name, avatarUrl, role, createdAt, ratingAvg: number\|null, ratingCount, auctionsSold, activeAuctions }`; reviews at `GET /members/:id/reviews` (`reviews.md`) |
 | POST | `/uploads/presign` | member | `{ folder: auctions\|avatars, contentType: image/jpeg\|png\|webp, size <= 5 MB }` -> `{ uploadUrl, key, url }`; 503 when S3 is not configured |
 
 `passwordHash` is never returned: all member reads go through `member.select.ts`.

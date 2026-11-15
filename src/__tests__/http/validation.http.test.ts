@@ -300,3 +300,55 @@ describe('contact, leaderboard, watchlist, notifications, push, uploads, commiss
     expect(res.body.error.code).toBe('AUCTION_NOT_FOUND');
   });
 });
+
+describe('reviews, questions and saved searches', () => {
+  it('POST /auctions/:id/review bounds rating and comment', async () => {
+    const url = '/auctions/a1/review';
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: {} }), 'rating');
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: { rating: 0 } }), 'rating');
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: { rating: 6 } }), 'rating');
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: { rating: 4.5 } }), 'rating');
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: { rating: 5, comment: 'x'.repeat(1001) } }), 'comment');
+  });
+
+  it('POST /reviews/:id/reply needs a non-empty reply up to 1000 chars', async () => {
+    expectInvalid(await send('post', '/reviews/r1/reply', { as: 'AUCTIONEER', body: {} }), 'reply');
+    expectInvalid(await send('post', '/reviews/r1/reply', { as: 'AUCTIONEER', body: { reply: '   ' } }), 'reply');
+    expectInvalid(await send('post', '/reviews/r1/reply', { as: 'AUCTIONEER', body: { reply: 'x'.repeat(1001) } }), 'reply');
+  });
+
+  it('GET /members/:id/reviews bounds paging', async () => {
+    expectInvalid(await send('get', '/members/m2/reviews?limit=101'), 'limit');
+    expectInvalid(await send('get', '/members/m2/reviews?page=0'), 'page');
+  });
+
+  it('POST /auctions/:id/questions needs 5..500 chars', async () => {
+    const url = '/auctions/a1/questions';
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: {} }), 'question');
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: { question: 'abcd' } }), 'question');
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: { question: 'x'.repeat(501) } }), 'question');
+  });
+
+  it('POST /questions/:id/answer needs 1..1000 chars', async () => {
+    expectInvalid(await send('post', '/questions/q1/answer', { as: 'AUCTIONEER', body: {} }), 'answer');
+    expectInvalid(await send('post', '/questions/q1/answer', { as: 'AUCTIONEER', body: { answer: 'x'.repeat(1001) } }), 'answer');
+  });
+
+  it('POST /saved-searches needs a criterion, min <= max and sane bounds', async () => {
+    const url = '/saved-searches';
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: {} }));
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: { name: 'only a name' } }));
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: { minPricePaise: 500, maxPricePaise: 100 } }));
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: { q: 'watch', maxPricePaise: HARD_MAX_PRICE_PAISE + 1 } }), 'maxPricePaise');
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: { q: 'watch', minPricePaise: 1.5 } }), 'minPricePaise');
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: { q: 'x'.repeat(101) } }), 'q');
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: { q: 'watch', condition: 'BROKEN' } }), 'condition');
+  });
+
+  it('admin reviews: list filter and PATCH body', async () => {
+    expectInvalid(await send('get', '/admin/reviews?hidden=maybe', { as: 'SUPER_ADMIN' }), 'hidden');
+    expectInvalid(await send('get', '/admin/reviews?limit=101', { as: 'SUPER_ADMIN' }), 'limit');
+    expectInvalid(await send('patch', '/admin/reviews/r1', { as: 'SUPER_ADMIN', body: {} }), 'hidden');
+    expectInvalid(await send('patch', '/admin/reviews/r1', { as: 'SUPER_ADMIN', body: { hidden: 'nope' } }), 'hidden');
+  });
+});

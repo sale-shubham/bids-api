@@ -44,6 +44,7 @@ All three use `path: '/'` (the web app's middleware needs `nb_rt` on every page 
 | `bidMemberLimiter` | `POST /auctions/:id/bids` (after `bidAuctionLimiter`) | 60 / 60 s per member | Postgres |
 | `wsGuestLimiter` | `POST /ws/guest-ticket` | 30 / 60 s per IP | Postgres |
 | `contactLimiter` | `POST /contact` | 5 / hour per IP (each message sends an email) | Postgres |
+| `qaLimiter` | `POST /auctions/:id/questions` | 10 / hour per member (IP fallback) | Postgres (`rl:qa:`) |
 | `apiLimiter` | `POST /ws/ticket`, `POST /push/subscribe`, `POST /push/unsubscribe` | 60 / 60 s, keyed by `req.user?.sub` (falls back to per-IP) | in-memory |
 | `auctionWriteLimiter` | `POST /auctions`, `PATCH /auctions/:id`, `POST /auctions/:id/republish` | 10 / 60 s per member (IP fallback) | in-memory |
 

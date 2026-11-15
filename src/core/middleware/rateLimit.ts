@@ -156,3 +156,15 @@ export const contactLimiter = rateLimit({
   keyGenerator: (req) => ipKeyGenerator(req.ip ?? 'unknown'),
   message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many messages, try again later' } },
 });
+
+// Lot Q&A: 10 questions per hour per member (authenticated, so keyed by member id).
+export const qaLimiter = rateLimit({
+  store: new PgRateLimitStore('rl:qa:'),
+  passOnStoreError: true,
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.sub ?? ipKeyGenerator(req.ip ?? 'unknown'),
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many questions, try again later' } },
+});
