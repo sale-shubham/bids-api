@@ -179,6 +179,13 @@ describe('formatInr + templates', () => {
       question: 'Does it come with the box?',
       answer: 'Yes, with the original box.',
       searchName: 'Cheap watches',
+      checkout: false,
+      payBy: '18 Nov 2026',
+      saleUrl: 'https://app.test/purchases/s1',
+      amount: 'Rs 2,000',
+      payout: 'Rs 1,900',
+      shipping: 'Courier: BlueDart.',
+      reason: 'Not as described',
     });
     expect(out.html).toContain('Vintage Watch');
     expect(out.text).toContain('Vintage Watch');

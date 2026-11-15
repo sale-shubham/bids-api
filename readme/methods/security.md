@@ -39,7 +39,7 @@ All three use `path: '/'` (the web app's middleware needs `nb_rt` on every page 
 | `loginEmailLimiter` | `POST /auth/login` (after `authLimiter`) | 10 / 15 min per email, across all IPs — login brute-force guard | Postgres |
 | `otpIpLimiter` | `POST /auth/signup`, `/auth/signup/resend`, `/auth/password/forgot` | 20 / hour per IP across **all** emails (`RATE_LIMIT_OTP_IP_MAX` overrides, dev only) — stops one IP pumping OTP emails to many addresses | Postgres |
 | `otpLimiter` | same three routes (after `otpIpLimiter`) | 5 / hour, keyed by IP + email (trimmed, lower-cased) | Postgres |
-| `sensitiveLimiter` | `POST /uploads/presign` | 30 / 60 s per IP | Postgres |
+| `sensitiveLimiter` | `POST /uploads/presign`, `POST /payouts/account` | 30 / 60 s per IP | Postgres |
 | `bidAuctionLimiter` | `POST /auctions/:id/bids` | 10 / 10 s per member per auction | Postgres |
 | `bidMemberLimiter` | `POST /auctions/:id/bids` (after `bidAuctionLimiter`) | 60 / 60 s per member | Postgres |
 | `wsGuestLimiter` | `POST /ws/guest-ticket` | 30 / 60 s per IP | Postgres |
@@ -113,6 +113,10 @@ Flat, non-env-configurable values live in `src/core/config/constants.ts`, not `e
 
 - Razorpay payment + webhook signature verification (`src/providers/payment/razorpay.payment.ts`, `safeEqualHex`) use `crypto.timingSafeEqual`, wrapped in try/catch so an attacker-controlled wrong-length signature fails closed (`false`) instead of throwing a `RangeError`/500. The webhook HMAC is computed over the raw request bytes (`req.rawBody`, captured by `express.json()`'s `verify` in `app.ts`).
 - Login with an unknown email still runs `bcrypt.compare` against a dummy hash, so a miss costs the same time as a wrong password (no timing-based account enumeration). Signup resend and forgot-password answer the same whether or not the email exists.
+
+## Payout data (PAN, bank account)
+
+Seller onboarding (`POST /payouts/account`) forwards the PAN and the full bank account number to Razorpay and stores neither: `SellerPayoutAccount` keeps only the Razorpay ids, status, legal / beneficiary name, IFSC and the last 4 digits of the account. The pino logger redacts `pan` and `accountNumber` (`src/core/logger/logger.ts`), and the payouts code never logs request bodies. See `flows/payouts.md`.
 
 ## Uploads
 

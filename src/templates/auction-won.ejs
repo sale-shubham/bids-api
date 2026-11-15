@@ -3,8 +3,11 @@
                 <p style="font-size: 14px; margin: 0 0 12px 0">
                   You won <strong><%= auctionTitle %></strong> with a winning bid of <strong><%= finalBid %></strong>.
                 </p>
+                <% if (checkout) { %>
+                  <p style="font-size: 14px; margin: 0 0 12px 0">Pay in the app by <strong><%= payBy %></strong> (within 3 days) to secure your item. Your payment is held safely until you confirm delivery.</p>
+                <% } %>
                 <% if (seller) { %>
                   <p style="font-size: 14px; margin: 0 0 4px 0">Get in touch with the seller to arrange payment and delivery:</p>
                   <%- include('_contact', { label: 'Seller', person: seller }) %>
                 <% } %>
-<%- include('_foot', { ctaUrl: auctionUrl, ctaLabel: 'View auction', frontendUrl }) %>
+<%- include('_foot', { ctaUrl: checkout ? saleUrl : auctionUrl, ctaLabel: checkout ? 'Pay now' : 'View auction', frontendUrl }) %>

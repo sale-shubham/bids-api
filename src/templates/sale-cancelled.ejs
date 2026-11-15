@@ -1,0 +1,6 @@
+<%- include('_head', { heading: 'Sale cancelled', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  The sale of <strong><%= auctionTitle %></strong> was cancelled because it was not paid in time.
+                </p>
+<%- include('_foot', { ctaUrl: saleUrl, ctaLabel: 'View details', frontendUrl }) %>

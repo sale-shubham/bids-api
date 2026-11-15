@@ -1,4 +1,5 @@
 import { prisma } from '@/core/prisma/client';
+import { CHECKOUT_MODE_KEY, DEFAULT_CHECKOUT_MODE, parseCheckoutMode, type CheckoutMode } from './checkout-mode.constants';
 import { DEFAULT_MAX_PRICE_PAISE, HARD_MAX_PRICE_PAISE, MAX_PRICE_SETTING_KEY, MIN_MAX_PRICE_PAISE } from '@/core/money';
 
 // Admin-managed app settings live in the AppSetting key/value table
@@ -26,6 +27,7 @@ export const SETTING_KEYS = {
   antiSnipingMinutes: 'auction.antiSnipingMinutes',
   maxPricePaise: MAX_PRICE_SETTING_KEY,
   categories: 'auction.categories',
+  checkoutMode: CHECKOUT_MODE_KEY,
 } as const;
 
 export interface PlatformSettings {
@@ -34,6 +36,7 @@ export interface PlatformSettings {
   antiSnipingMinutes: number;
   maxPricePaise: number;
   categories: string[];
+  checkoutMode: CheckoutMode;
 }
 
 export const SETTING_DEFAULTS = {
@@ -41,6 +44,7 @@ export const SETTING_DEFAULTS = {
   minIncrementPaise: 10_000,
   antiSnipingMinutes: 2,
   maxPricePaise: DEFAULT_MAX_PRICE_PAISE,
+  checkoutMode: DEFAULT_CHECKOUT_MODE,
 } as const;
 
 const intOr = (raw: string | null | undefined, fallback: number, min: number, max: number) => {
@@ -67,11 +71,14 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
     antiSnipingMinutes: intOr(map.get(SETTING_KEYS.antiSnipingMinutes), SETTING_DEFAULTS.antiSnipingMinutes, 0, 30),
     maxPricePaise: intOr(map.get(SETTING_KEYS.maxPricePaise), SETTING_DEFAULTS.maxPricePaise, MIN_MAX_PRICE_PAISE, HARD_MAX_PRICE_PAISE),
     categories: parseCategories(map.get(SETTING_KEYS.categories)),
+    checkoutMode: parseCheckoutMode(map.get(SETTING_KEYS.checkoutMode)),
   };
 }
 
-// maxPricePaise is optional on write: old admin clients omit it and the stored value stays.
-export async function setPlatformSettings(input: Omit<PlatformSettings, 'maxPricePaise'> & { maxPricePaise?: number }): Promise<PlatformSettings> {
+// maxPricePaise and checkoutMode are optional on write: old admin clients omit them and the stored value stays.
+export async function setPlatformSettings(
+  input: Omit<PlatformSettings, 'maxPricePaise' | 'checkoutMode'> & { maxPricePaise?: number; checkoutMode?: CheckoutMode },
+): Promise<PlatformSettings> {
   const entries: [string, string][] = [
     [SETTING_KEYS.commissionRateBps, String(input.commissionRateBps)],
     [SETTING_KEYS.minIncrementPaise, String(input.minIncrementPaise)],
@@ -79,6 +86,7 @@ export async function setPlatformSettings(input: Omit<PlatformSettings, 'maxPric
     [SETTING_KEYS.categories, JSON.stringify(input.categories)],
   ];
   if (input.maxPricePaise !== undefined) entries.push([SETTING_KEYS.maxPricePaise, String(input.maxPricePaise)]);
+  if (input.checkoutMode !== undefined) entries.push([SETTING_KEYS.checkoutMode, input.checkoutMode]);
   await prisma.$transaction(
     entries.map(([key, value]) => prisma.appSetting.upsert({ where: { key }, create: { key, value }, update: { value } })),
   );

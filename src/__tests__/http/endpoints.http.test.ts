@@ -191,6 +191,7 @@ describe('public reads', () => {
         antiSnipingMinutes: 2,
         maxPricePaise: 10_000_000_000,
         categories: ['Art', 'Cars'],
+        checkoutMode: 'optional',
       },
     });
   });
@@ -281,6 +282,7 @@ describe('admin dashboard', () => {
       { role: 'AUCTIONEER', createdAt: new Date('2026-02-01T05:00:00Z') },
     ]);
     prismaMock.auction.findMany.mockResolvedValue([]);
+    prismaMock.sale.groupBy.mockResolvedValue([]);
 
     const res = await request(await getApp()).get('/admin/dashboard').set('Authorization', await bearer('SUPER_ADMIN', 'admin1'));
     expect(res.status).toBe(200);
@@ -303,6 +305,7 @@ describe('admin dashboard', () => {
       commissionRateBps: 600, minIncrementPaise: 20_000, antiSnipingMinutes: 3,
       maxPricePaise: 5_000_000_000,
       categories: ['Art'],
+      checkoutMode: 'required',
     };
     prismaMock.appSetting.findMany.mockResolvedValue([
       { key: 'commission.rateBps', value: '600' },
@@ -310,6 +313,7 @@ describe('admin dashboard', () => {
       { key: 'auction.antiSnipingMinutes', value: '3' },
       { key: 'auction.maxPricePaise', value: '5000000000' },
       { key: 'auction.categories', value: '["Art"]' },
+      { key: 'checkout.mode', value: 'required' },
     ]);
     prismaMock.appSetting.upsert.mockResolvedValue({});
     const app = await getApp();

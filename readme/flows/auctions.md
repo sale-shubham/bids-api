@@ -39,6 +39,8 @@ List filters (`auctions.query.ts` `statusWhere`) mirror this in SQL: live = `sta
 
 Fixed paths (`home`, `categories`, `sitemap`, `mine`) are declared before `/:id`.
 
+`AuctionDetail` also has `sale: { id, status, payBy } | null` (set for the sale's buyer, its seller and SUPER_ADMIN; see `checkout.md`).
+
 ### GET /auctions query
 
 `status=live|upcoming|ended` (default `live`), `category`, `sellerId` (seller page), `condition=NEW|USED`, `q` (case-insensitive title contains, max 100), `minPrice`, `maxPrice` (paise, `minPrice <= maxPrice`), `sort=endingSoon|newest|priceAsc|priceDesc|mostBids`, `page` (default 1), `pageSize` (default 20, max 100).
@@ -90,6 +92,7 @@ Stored `status` on create/republish: `LIVE` if `startTime <= now`, else `SCHEDUL
 | 400 | `VALIDATION_ERROR` | Joi failure, unknown category, time window broken against stored times |
 | 403 | `FORBIDDEN` | role is not AUCTIONEER / SUPER_ADMIN on create / mine / write routes |
 | 403 | `COMMISSION_UNPAID` | create while `unpaidCommissionPaise > 0` |
+| 403 | `PAYOUT_ACCOUNT_REQUIRED` | create when `checkout.mode = required` and the seller has no ACTIVE payout account (`checkout.md`) |
 | 404 | `AUCTION_NOT_FOUND` | missing; cancelled for non-privileged viewers; PATCH / republish by a non-owner (even SUPER_ADMIN); DELETE by a non-owner non-admin |
 | 409 | `AUCTION_HAS_BIDS` | PATCH or seller DELETE when `bidCount > 0` (checked first on PATCH) |
 | 409 | `AUCTION_ENDED` | PATCH when effective status is ENDED / CANCELLED |

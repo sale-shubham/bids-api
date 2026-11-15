@@ -2,12 +2,17 @@
 
 Hi <%= name %>,
 
-"<%= auctionTitle %>" sold for <%= finalBid %>. The platform commission for this sale is <%= commission %>.
+"<%= auctionTitle %>" sold for <%= finalBid %>.
+<% if (checkout) { -%>
+The buyer has until <%= payBy %> to pay in the app. You will be notified when the payment arrives; the platform commission of <%= commission %> is deducted from your payout.
+<% } else { -%>
+The platform commission for this sale is <%= commission %>.
+<% } -%>
 <% if (winner) { -%>
 Contact the winner to arrange payment and delivery:
 <%- include('_contact.txt.ejs', { label: 'Winner', person: winner }) -%>
 <% } -%>
 
-View auction: <%= auctionUrl %>
+View <%= checkout ? 'sale' : 'auction' %>: <%= checkout ? saleUrl : auctionUrl %>
 
 Support: <%= websiteUrl %>/contact

@@ -1,5 +1,7 @@
 # Payments flow (seller commissions via Razorpay)
 
+> Winner checkout (`PaymentOrder.referenceType = 'SALE'`, Razorpay Route held transfers) is documented in `checkout.md`; this file covers the commission path and the shared verify / webhook plumbing.
+
 Code: `src/modules/commissions/` (list, summary, checkout, settlement, reminders), `src/modules/payments/` (verify + webhook), `src/providers/payment/` (Razorpay + stub drivers).
 
 ## Business rule
@@ -37,7 +39,7 @@ The browser callback and the webhook race on purpose: whichever arrives first se
 | GET | `/commissions/summary` | AUCTIONEER / SUPER_ADMIN | `{ unpaidPaise, dueCount, overdueCount }` |
 | GET | `/commissions/:id` | owner (AUCTIONEER / SUPER_ADMIN) | `CommissionDTO`; 404 `COMMISSION_NOT_FOUND` if missing or not the caller's (the app polls this while Razorpay Checkout is open) |
 | POST | `/commissions/:id/checkout` | owner | `{ orderId, amountPaise, currency: 'INR', keyId, description, prefill: { name, email, contact } }` |
-| POST | `/payments/verify` | any authenticated member who owns the order | `{ commission: CommissionDTO }` |
+| POST | `/payments/verify` | any authenticated member who owns the order | `{ referenceType: 'COMMISSION', commission: CommissionDTO }` or, for a sale order, `{ referenceType: 'SALE', sale: SaleDTO }` |
 | POST | `/payments/webhook` | none (Razorpay, `X-Razorpay-Signature`) | `{ processed: true }` or `{ skipped: true }` |
 
 `CommissionDTO` = `{ id, auctionId, auction: { id, title, coverImage, finalBidPaise, endedAt }, rateBps, amountPaise, status: 'DUE'|'PAID'|'WAIVED', dueAt, paidAt, createdAt, isOverdue }` (`isOverdue` = DUE and past `dueAt`).
@@ -52,12 +54,17 @@ The browser callback and the webhook race on purpose: whichever arrives first se
 | 400 | `INVALID_SIGNATURE` | verify: HMAC (order_id\|payment_id) mismatch |
 | 409 | `PAYMENT_NOT_CAPTURED` | verify: gateway payment is not `captured` / `authorized` |
 | 409 | `AMOUNT_MISMATCH` | verify: gateway amount differs from the order amount |
+| 409 | `ORDER_REFERENCE_UNKNOWN` | verify: the order pays for neither a commission nor a sale |
 | 400 | `BAD_REQUEST` | webhook: bad signature or unparsable body |
 
 ## Checkout details
 
 - A `PaymentOrder` (`referenceType = 'COMMISSION'`, `referenceId = commissionId`, `status CREATED`) is stored per Razorpay order. A CREATED order for the same commission and amount younger than 30 min is returned again (no order spam).
 - Razorpay order: amount in paise, `INR`, `receipt` = `c_<last 12 of commission id>_<base36 time>` (<= 40 chars), `notes = { commissionId, memberId }`.
+
+## Settlement dispatch
+
+`verifyPayment` and the webhook `processEvent` read `PaymentOrder.referenceType`: `COMMISSION` -> `markCommissionPaid` (unchanged), `SALE` -> `markSalePaid` (`checkout.md`; for the webhook also `storeTransferId`). Extra webhook events: `transfer.processed` (stores a missing `Sale.transferId`) and `product.route.*` (updates `SellerPayoutAccount.status`, `payouts.md`). With `checkout.mode` `off`, or sellers without an ACTIVE payout account, nothing changes: sold auctions still create DUE commissions.
 
 ## Idempotency
 
@@ -78,9 +85,9 @@ No real gateway: checkout returns `orderId = stub_order_<uuid>` and `keyId = 'st
 ## Razorpay dashboard setup
 
 1. Settings -> API Keys: generate keys; set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `PAYMENT_DRIVER=razorpay`.
-2. Settings -> Webhooks -> Add: URL `https://<api-domain>/payments/webhook`, a secret (-> `RAZORPAY_WEBHOOK_SECRET`), events `payment.captured`, `payment.failed`, `order.paid`.
+2. Settings -> Webhooks -> Add: URL `https://<api-domain>/payments/webhook`, a secret (-> `RAZORPAY_WEBHOOK_SECRET`), events `payment.captured`, `payment.failed`, `order.paid`, plus `transfer.processed` and the Route product events (`product.route.activated`, `product.route.needs_clarification`, `product.route.under_review`) for checkout.
 3. Use Test mode keys/webhook on dev; live keys only in prod. Payment capture should be automatic (otherwise payments stay `authorized`, which verify accepts but the webhook events will not fire until captured).
 
 ## Tests
 
-`src/modules/commissions/commissions.service.test.ts` (checkout reuse/new/errors, settlement idempotency + clamp, waive, reminders) and `src/modules/payments/payments.service.test.ts` (verify rules, stub signature, webhook paths). The provider is always mocked; the real Razorpay API is never called.
+`src/modules/commissions/commissions.service.test.ts` (checkout reuse/new/errors, settlement idempotency + clamp, waive, reminders) and `src/modules/payments/payments.service.test.ts` (verify rules, stub signature, webhook paths). The provider is always mocked; the real Razorpay API is never called. Provider Route methods: `payment.provider.test.ts`.

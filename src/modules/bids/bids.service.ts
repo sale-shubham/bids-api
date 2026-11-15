@@ -9,6 +9,7 @@ import { auctionInclude, effectiveStatus, toCard, type AuctionRow } from '@/modu
 import { buildAuctionDetail } from '@/modules/auctions/auction-detail.service';
 import { auctionNotFound } from '@/modules/auctions/auctions.service';
 import { publishAuctionEvent } from '@/modules/auctions/auction-events';
+import { getCheckoutMode } from '@/modules/settings/checkout-mode';
 import { afterClose, closeOneTx, commissionRateBps } from '@/modules/auctions/auction-close.service';
 import { isReviewWindowOpen } from '@/modules/reviews/reviews.rules';
 import { enqueueNotification } from '@/modules/notify/notify.queue';
@@ -211,6 +212,7 @@ export async function placeBid(memberId: string, auctionId: string, maxPaise: nu
  */
 export async function buyNow(memberId: string, auctionId: string) {
   const rateBps = await commissionRateBps();
+  const checkoutMode = await getCheckoutMode();
 
   const tx = await prisma.$transaction(
     async (db) => {
@@ -233,7 +235,7 @@ export async function buyNow(memberId: string, auctionId: string) {
         where: { id: auctionId },
         data: { currentBidPaise: pricePaise, highestBidderId: memberId, bidCount: 1, status: 'LIVE', endTime: now },
       });
-      const closed = await closeOneTx(db, auctionId, now, rateBps);
+      const closed = await closeOneTx(db, auctionId, now, rateBps, checkoutMode);
       if (!closed) throw new Error('buyNow: auction did not close');
       const updated = (await db.auction.findUniqueOrThrow({ where: { id: auctionId }, include: auctionInclude })) as AuctionRow;
       return { bid, bidder, closed, updated, pricePaise, reservePaise: bidAuction.reservePricePaise, now };
@@ -337,7 +339,17 @@ export async function listMyBids(memberId: string, q: MyBidsQuery, now = new Dat
 
   const { skip, take } = offsetArgs(q);
   const pageRows = matched.slice(skip, skip + take);
-  const reviewCandidates = pageRows.filter(({ a }) => isReviewWindowOpen(a, memberId, now)).map(({ a }) => a.id);
+  const pageIds = pageRows.map(({ a }) => a.id);
+  const sales = pageIds.length
+    ? await prisma.sale.findMany({
+        where: { auctionId: { in: pageIds } },
+        select: { id: true, auctionId: true, status: true, deliveredAt: true, releasedAt: true },
+      })
+    : [];
+  const saleByAuction = new Map(sales.map((s) => [s.auctionId, s]));
+  const reviewCandidates = pageRows
+    .filter(({ a }) => isReviewWindowOpen(a, memberId, now, saleByAuction.get(a.id)))
+    .map(({ a }) => a.id);
   const reviewed = reviewCandidates.length
     ? new Set(
         (await prisma.review.findMany({ where: { auctionId: { in: reviewCandidates } }, select: { auctionId: true } })).map(
@@ -348,6 +360,8 @@ export async function listMyBids(memberId: string, q: MyBidsQuery, now = new Dat
   const items = pageRows.map(({ a, g, state }) => ({
     auction: toCard(a, now),
     canReview: reviewCandidates.includes(a.id) && !reviewed.has(a.id),
+    saleId: saleByAuction.get(a.id)?.id ?? null,
+    saleStatus: saleByAuction.get(a.id)?.status ?? null,
     myHighestBidPaise: toPaiseOrNull(g._max.amountPaise) ?? 0,
     myBidCount: g._count._all,
     myMaxBidPaise: myMax.get(a.id) ?? null,

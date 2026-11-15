@@ -5,6 +5,9 @@ import { logger } from '@/core/logger/logger';
 import { getSetting } from '@/modules/settings/settings.service';
 import { enqueueNotification } from '@/modules/notify/notify.queue';
 import { publishAuctionEvent } from './auction-events';
+import { getCheckoutMode } from '@/modules/settings/checkout-mode';
+import type { CheckoutMode } from '@/modules/settings/checkout-mode.constants';
+import { payByFrom } from '@/modules/sales/sales.rules';
 import { COMMISSION_DUE_DAYS, commissionAmountPaise, reserveMet } from './bidding.rules';
 
 const BATCH_SIZE = 50;
@@ -18,7 +21,7 @@ export async function commissionRateBps(): Promise<number> {
   return Number.isFinite(n) && n >= 0 && n <= 10_000 ? n : env.commission.rateBps;
 }
 
-export type CloseTx = Pick<typeof prisma, 'auction' | 'commission' | 'member'>;
+export type CloseTx = Pick<typeof prisma, 'auction' | 'commission' | 'member' | 'sale' | 'sellerPayoutAccount'>;
 
 export type Closed = {
   auctionId: string;
@@ -35,6 +38,9 @@ export type Closed = {
   commissionPaise: number;
   rateBps: number;
   dueAt: Date | null;
+  /** Set when the sale went through in-app checkout (no Commission row, no unpaid counter). */
+  saleId: string | null;
+  payBy: Date | null;
 };
 
 /**
@@ -42,8 +48,16 @@ export type Closed = {
  * AND endTime <= now` guard is the idempotency mechanism: a concurrent or repeated
  * run (or a bid that anti-sniped the end past `now`) matches 0 rows and is a no-op.
  * Returns null on no-op. Sold = bids exist AND the reserve (if any) was met.
+ * With checkoutMode other than 'off' and an ACTIVE payout account the sale becomes a `Sale`
+ * (the winner pays in-app) instead of a DUE Commission.
  */
-export async function closeOneTx(tx: CloseTx, auctionId: string, now: Date, rateBps: number): Promise<Closed | null> {
+export async function closeOneTx(
+  tx: CloseTx,
+  auctionId: string,
+  now: Date,
+  rateBps: number,
+  checkoutMode: CheckoutMode = 'off',
+): Promise<Closed | null> {
   const { count } = await tx.auction.updateMany({
     where: { id: auctionId, status: { in: [...OPEN] }, endTime: { lte: now }, deletedAt: null },
     data: { status: 'ENDED', endedAt: now },
@@ -76,25 +90,50 @@ export async function closeOneTx(tx: CloseTx, auctionId: string, now: Date, rate
     commissionPaise: 0,
     rateBps,
     dueAt: null,
+    saleId: null,
+    payBy: null,
   };
 
   if (sold && winnerId) {
     closed.commissionPaise = commissionAmountPaise(currentBidPaise, rateBps);
-    closed.dueAt = new Date(now.getTime() + COMMISSION_DUE_DAYS * 24 * 3600_000);
-    await tx.commission.create({
-      data: {
-        auctionId,
-        sellerId: a.sellerId,
-        rateBps,
-        amountPaise: closed.commissionPaise,
-        status: 'DUE',
-        dueAt: closed.dueAt,
-      },
-    });
-    await tx.member.update({
-      where: { id: a.sellerId },
-      data: { unpaidCommissionPaise: { increment: closed.commissionPaise } },
-    });
+    const payout =
+      checkoutMode === 'off'
+        ? null
+        : await tx.sellerPayoutAccount.findUnique({ where: { sellerId: a.sellerId }, select: { status: true } });
+    if (payout?.status === 'ACTIVE') {
+      closed.payBy = payByFrom(now);
+      const sale = await tx.sale.create({
+        data: {
+          auctionId,
+          buyerId: winnerId,
+          sellerId: a.sellerId,
+          itemPaise: currentBidPaise,
+          shippingFeePaise: 0,
+          amountPaise: currentBidPaise,
+          commissionPaise: closed.commissionPaise,
+          rateBps,
+          payBy: closed.payBy,
+        },
+        select: { id: true },
+      });
+      closed.saleId = sale.id;
+    } else {
+      closed.dueAt = new Date(now.getTime() + COMMISSION_DUE_DAYS * 24 * 3600_000);
+      await tx.commission.create({
+        data: {
+          auctionId,
+          sellerId: a.sellerId,
+          rateBps,
+          amountPaise: closed.commissionPaise,
+          status: 'DUE',
+          dueAt: closed.dueAt,
+        },
+      });
+      await tx.member.update({
+        where: { id: a.sellerId },
+        data: { unpaidCommissionPaise: { increment: closed.commissionPaise } },
+      });
+    }
     await tx.member.update({
       where: { id: winnerId },
       data: { auctionsWon: { increment: 1 }, moneySpentPaise: { increment: currentBidPaise } },
@@ -103,8 +142,8 @@ export async function closeOneTx(tx: CloseTx, auctionId: string, now: Date, rate
   return closed;
 }
 
-async function closeOne(auctionId: string, now: Date, rateBps: number): Promise<Closed | null> {
-  return prisma.$transaction((tx) => closeOneTx(tx, auctionId, now, rateBps));
+async function closeOne(auctionId: string, now: Date, rateBps: number, mode: CheckoutMode): Promise<Closed | null> {
+  return prisma.$transaction((tx) => closeOneTx(tx, auctionId, now, rateBps, mode));
 }
 
 export async function afterClose(c: Closed) {
@@ -122,20 +161,27 @@ export async function afterClose(c: Closed) {
   }
 
   if (c.sold && c.winnerId) {
-    const common = { auctionId: c.auctionId, data: { finalBidPaise: c.finalBidPaise } };
+    const sale = c.saleId ? { saleId: c.saleId, payBy: c.payBy?.toISOString() } : {};
     await enqueueNotification({
       type: 'auction-won',
       memberId: c.winnerId,
-      ...common,
+      auctionId: c.auctionId,
+      data: { finalBidPaise: c.finalBidPaise, ...sale },
       dedupeKey: `auction-won:${c.auctionId}`,
     });
     await enqueueNotification({
       type: 'auction-sold',
       memberId: c.sellerId,
       auctionId: c.auctionId,
-      data: { finalBidPaise: c.finalBidPaise, commissionPaise: c.commissionPaise, rateBps: c.rateBps },
+      data: {
+        finalBidPaise: c.finalBidPaise,
+        commissionPaise: c.commissionPaise,
+        rateBps: c.rateBps,
+        ...(c.saleId ? { ...sale, checkout: true } : {}),
+      },
       dedupeKey: `auction-sold:${c.auctionId}`,
     });
+    if (c.saleId) return; // checkout: the commission is deducted from the transfer, so no commission-due
     await enqueueNotification({
       type: 'commission-due',
       memberId: c.sellerId,
@@ -174,6 +220,7 @@ export async function runAuctionClose(now: Date = new Date()): Promise<CloseCoun
   counts.started = started.count;
 
   const rateBps = await commissionRateBps();
+  const mode = await getCheckoutMode();
   for (let batch = 0; batch < MAX_BATCHES; batch++) {
     const due = await prisma.auction.findMany({
       where: { status: { in: [...OPEN] }, endTime: { lte: now }, deletedAt: null },
@@ -186,7 +233,7 @@ export async function runAuctionClose(now: Date = new Date()): Promise<CloseCoun
     let closedInBatch = 0;
     for (const { id } of due) {
       try {
-        const closed = await closeOne(id, now, rateBps);
+        const closed = await closeOne(id, now, rateBps, mode);
         if (!closed) continue;
         closedInBatch++;
         counts.ended++;

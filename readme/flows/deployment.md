@@ -10,14 +10,14 @@ Region `ap-south-1`. Stages: `dev` (push to branch `dev`) and `prod` (push to `m
 ```
 Browser --> Amplify (Next.js app) ----(NEXT_PUBLIC_API_URL or Next.js rewrite)----> API Gateway HTTP API --> Lambda `api` (Express)
         \--> wss://<ws-id>.execute-api... (API Gateway WebSocket) --> Lambda `api` ($connect/$disconnect/$default)
-EventBridge schedules --> closeAuctions (1 min), endingSoon (15 min), commissionReminder (1 day),
+EventBridge schedules --> closeAuctions (1 min), endingSoon (15 min), commissionReminder (1 day), salesMaintenance (1 hour),
                           retentionPurge (1 day), api warmer (5 min)
 Lambda `api` / jobs --> SQS NotifyQueue (+DLQ, 3 receives) --> Lambda notifyWorker (batch 10, ReportBatchItemFailures)
 Uploads: browser PUT via presigned URL --> S3 AppBucket <-- CloudFront (OAC, ENABLE_CDN=true) or S3 direct <-- images
 Postgres (managed, pooled URL for Lambda, direct URL for migrations)
 ```
 
-Everything under `serverless.yml`: functions (`api`, `closeAuctions`, `endingSoon`, `commissionReminder`,
+Everything under `serverless.yml`: functions (`api`, `closeAuctions`, `endingSoon`, `commissionReminder`, `salesMaintenance`,
 `retentionPurge`, `notifyWorker`), `NotifyQueue` + `NotifyDLQ`, `AppBucket` + bucket policy (+ OAC + CloudFront when `ENABLE_CDN=true`),
 optional alarms (`ALERT_EMAIL`), optional custom domain (`API_DOMAIN_NAME` + `API_CERTIFICATE_ARN`).
 IAM: S3 object/list on the bucket, `ses:SendEmail/SendRawEmail`, SQS send on NotifyQueue, X-Ray, and

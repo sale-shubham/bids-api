@@ -25,8 +25,8 @@ import { getPlatformSettings, setPlatformSettings } from './settings.service';
 import { getLegalPage, setLegalPage } from './legal-pages.service';
 import { sanitizeLegalHtml } from './legal-pages.sanitize';
 
-const valid = { commissionRateBps: 500, minIncrementPaise: 10000, antiSnipingMinutes: 2, maxPricePaise: 10_000_000_000, categories: ['Art', 'Books'] };
-const { maxPricePaise: _omit, ...legacy } = valid;
+const valid = { commissionRateBps: 500, minIncrementPaise: 10000, antiSnipingMinutes: 2, maxPricePaise: 10_000_000_000, categories: ['Art', 'Books'], checkoutMode: 'optional' as const };
+const { maxPricePaise: _omit, checkoutMode: _omit2, ...legacy } = valid;
 
 describe('platform settings validation', () => {
   it('accepts a valid object and enforces ranges', () => {
@@ -42,6 +42,22 @@ describe('platform settings validation', () => {
     expect(platformSettingsSchema.validate({ ...legacy, maxPricePaise: 99_999 }).error).toBeDefined();
     expect(platformSettingsSchema.validate({ ...legacy, maxPricePaise: 1_000_000_000_001 }).error).toBeDefined();
     expect(platformSettingsSchema.validate({ ...legacy, maxPricePaise: 1_000_000_000_000 }).error).toBeUndefined();
+  });
+  it('checkoutMode is optional on PUT and must be off | optional | required', () => {
+    expect(platformSettingsSchema.validate(legacy).error).toBeUndefined();
+    for (const m of ['off', 'optional', 'required']) {
+      expect(platformSettingsSchema.validate({ ...legacy, checkoutMode: m }).error).toBeUndefined();
+    }
+    expect(platformSettingsSchema.validate({ ...legacy, checkoutMode: 'always' }).error).toBeDefined();
+  });
+  it('checkoutMode: default optional, stored value kept when PUT omits it, invalid stored value falls back', async () => {
+    expect((await getPlatformSettings()).checkoutMode).toBe('optional');
+    await setPlatformSettings({ ...valid, checkoutMode: 'required' });
+    expect((await setPlatformSettings({ ...legacy, commissionRateBps: 600 })).checkoutMode).toBe('required');
+    store.rows.set('checkout.mode', { key: 'checkout.mode', value: 'bogus', updatedAt: new Date() });
+    expect((await getPlatformSettings()).checkoutMode).toBe('optional');
+    store.rows.delete('checkout.mode');
+    await setPlatformSettings(valid);
   });
   it('categories: 1-30, unique (case-insensitive), 2-40 chars', () => {
     expect(platformSettingsSchema.validate({ ...valid, categories: [] }).error).toBeDefined();

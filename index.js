@@ -74,6 +74,15 @@ export const endingSoonHandler = async () => {
   return res;
 };
 
+// Scheduled hourly (serverless.yml functions.salesMaintenance): cancel unpaid sales past their pay-by
+// date, auto-confirm shipped sales after 7 days and release the held funds, retry failed releases.
+export const salesMaintenanceHandler = async () => {
+  const { runSalesMaintenance } = await import('./src/modules/sales/sales.jobs.ts');
+  const res = await runSalesMaintenance();
+  if (res.cancelled || res.autoConfirmed || res.releaseRetried) logger.info(res, 'sales maintenance run');
+  return res;
+};
+
 // SQS NotifyQueue worker (ReportBatchItemFailures): returns the failed
 // messageIds so only those are retried / sent to the DLQ.
 export const notifyWorkerHandler = async (event) => {
@@ -137,11 +146,26 @@ if (env.nodeEnv !== 'production') {
     }
   }, 5 * 60 * 1000);
 
+  // No EventBridge locally: sales maintenance every 10 min.
+  let salesRunning = false;
+  const salesTimer = setInterval(async () => {
+    if (salesRunning) return;
+    salesRunning = true;
+    try {
+      await salesMaintenanceHandler();
+    } catch (err) {
+      logger.error({ err }, 'sales maintenance run failed');
+    } finally {
+      salesRunning = false;
+    }
+  }, 10 * 60 * 1000);
+
   const shutdown = async (signal) => {
     logger.info(`${signal} received, shutting down`);
     clearInterval(closeTimer);
     clearInterval(reminderTimer);
     clearInterval(endingSoonTimer);
+    clearInterval(salesTimer);
     server.close();
     await prisma.$disconnect();
     process.exit(0);

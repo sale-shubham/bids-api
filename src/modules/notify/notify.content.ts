@@ -68,25 +68,50 @@ export function buildContent(c: ContentCtx): Content {
     }
     case 'auction-won': {
       const finalBid = formatInr(num(c.data.finalBidPaise));
+      const saleId = str(c.data.saleId);
+      if (saleId) {
+        const payBy = dateText(c.data.payBy);
+        const salePath = `/purchases/${saleId}`;
+        return {
+          title: 'You won the auction',
+          body: `You won "${c.auctionTitle}" with a bid of ${finalBid}. Pay within 3 days${payBy ? ` (by ${payBy})` : ''} to secure the item.`,
+          url: salePath,
+          subject: `You won "${c.auctionTitle}" - pay within 3 days`,
+          template: 'auction-won',
+          templateData: { ...base, finalBid, seller: null, checkout: true, payBy, saleUrl: `${env.app.url}${salePath}` },
+        };
+      }
       return {
         title: 'You won the auction',
         body: `You won "${c.auctionTitle}" with a bid of ${finalBid}. Contact the seller to complete the deal.`,
         url: auctionPath,
         subject: `You won "${c.auctionTitle}"`,
         template: 'auction-won',
-        templateData: { ...base, finalBid, seller: c.counterparty ?? null },
+        templateData: { ...base, finalBid, seller: c.counterparty ?? null, checkout: false, payBy: '', saleUrl: '' },
       };
     }
     case 'auction-sold': {
       const finalBid = formatInr(num(c.data.finalBidPaise));
       const commission = formatInr(num(c.data.commissionPaise));
+      if (c.data.checkout === true) {
+        const salePath = `/sell/sales/${str(c.data.saleId)}`;
+        const payBy = dateText(c.data.payBy);
+        return {
+          title: 'Your auction sold',
+          body: `"${c.auctionTitle}" sold for ${finalBid}. The buyer has 3 days to pay; we will notify you when they do.`,
+          url: salePath,
+          subject: `Your auction "${c.auctionTitle}" sold for ${finalBid}`,
+          template: 'auction-sold',
+          templateData: { ...base, finalBid, commission, winner: null, checkout: true, payBy, saleUrl: `${env.app.url}${salePath}` },
+        };
+      }
       return {
         title: 'Your auction sold',
         body: `"${c.auctionTitle}" sold for ${finalBid}. Contact the winner to complete the deal.`,
         url: auctionPath,
         subject: `Your auction "${c.auctionTitle}" sold for ${finalBid}`,
         template: 'auction-sold',
-        templateData: { ...base, finalBid, commission, winner: c.counterparty ?? null },
+        templateData: { ...base, finalBid, commission, winner: c.counterparty ?? null, checkout: false, payBy: '', saleUrl: '' },
       };
     }
     case 'ending-soon': {
@@ -176,6 +201,14 @@ export function buildContent(c: ContentCtx): Content {
         templateData: { ...base, searchName },
       };
     }
+    case 'sale-receipt':
+    case 'sale-paid':
+    case 'sale-shipped':
+    case 'sale-released':
+    case 'sale-disputed':
+    case 'sale-refunded':
+    case 'sale-cancelled':
+      return saleContent({ ...c, type: c.type }, base);
     case 'commission-paid': {
       const commission = formatInr(num(c.data.commissionPaise));
       const commissionPath = '/sell/commissions';
@@ -201,4 +234,63 @@ export function buildContent(c: ContentCtx): Content {
       };
     }
   }
+}
+
+type SaleType = 'sale-receipt' | 'sale-paid' | 'sale-shipped' | 'sale-released' | 'sale-disputed' | 'sale-refunded' | 'sale-cancelled';
+
+/** Pure: copy for the checkout (sale-*) notifications. `data.role` picks the link (BUYER / SELLER / ADMIN). */
+function saleContent(c: ContentCtx & { type: SaleType }, base: { name: string; auctionTitle: string; auctionUrl: string }): Content {
+  const saleId = str(c.data.saleId);
+  const role = str(c.data.role);
+  const path = role === 'ADMIN' ? '/admin/sales' : role === 'SELLER' ? `/sell/sales/${saleId}` : `/purchases/${saleId}`;
+  const amount = formatInr(num(c.data.amountPaise));
+  const payout = formatInr(num(c.data.payoutPaise));
+  const courier = str(c.data.courier).trim();
+  const trackingNo = str(c.data.trackingNo).trim();
+  const shipping = [courier && `Courier: ${courier}.`, trackingNo && `Tracking no: ${trackingNo}.`].filter(Boolean).join(' ');
+  const reason = clip(c.data.reason, 300);
+  const t = c.auctionTitle;
+  const copy: Record<SaleType, { title: string; body: string; subject: string }> = {
+    'sale-receipt': {
+      title: 'Payment received',
+      body: `We received your payment of ${amount} for "${t}". It is held safely until you confirm delivery.`,
+      subject: `Payment of ${amount} received for "${t}"`,
+    },
+    'sale-paid': {
+      title: 'Buyer paid - ship the item',
+      body: `The buyer paid ${amount} for "${t}". Please ship the item and mark it as shipped.`,
+      subject: `Buyer paid for "${t}" - please ship`,
+    },
+    'sale-shipped': {
+      title: 'Your item has shipped',
+      body: `The seller shipped "${t}".${shipping ? ` ${shipping}` : ''} Confirm delivery when it arrives.`,
+      subject: `"${t}" has shipped`,
+    },
+    'sale-released': {
+      title: 'Payout released',
+      body: `Your payout of ${payout} for "${t}" was released to your linked account.`,
+      subject: `Payout of ${payout} released for "${t}"`,
+    },
+    'sale-disputed': {
+      title: 'Sale in dispute',
+      body: `A dispute was opened for "${t}".${reason ? ` Reason: ${reason}` : ''} The funds stay on hold.`,
+      subject: `Dispute opened for "${t}"`,
+    },
+    'sale-refunded': {
+      title: 'Payment refunded',
+      body: `The payment of ${amount} for "${t}" was refunded to the buyer.`,
+      subject: `Payment refunded for "${t}"`,
+    },
+    'sale-cancelled': {
+      title: 'Sale cancelled',
+      body: `The sale of "${t}" was cancelled because it was not paid in time.`,
+      subject: `Sale cancelled for "${t}"`,
+    },
+  };
+  return {
+    ...copy[c.type],
+    url: path,
+    template: c.type,
+    templateData: { ...base, amount, payout, shipping, reason, saleUrl: `${env.app.url}${path}` },
+  };
 }

@@ -1,0 +1,6 @@
+<%- include('_head', { heading: 'A sale is in dispute', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  A dispute was opened for <strong><%= auctionTitle %></strong>.<% if (reason) { %> Reason: <%= reason %><% } %> The funds stay on hold until it is resolved.
+                </p>
+<%- include('_foot', { ctaUrl: saleUrl, ctaLabel: 'View details', frontendUrl }) %>

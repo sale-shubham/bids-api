@@ -5,6 +5,7 @@ import { offsetArgs, pageMeta } from '@/core/http/pagination';
 import { buildAuctionDetail } from './auction-detail.service';
 import { resetEndingSoon } from '@/modules/watchlist/watchlist.service';
 import { getSetting } from '@/modules/settings/settings.service';
+import { getCheckoutMode } from '@/modules/settings/checkout-mode';
 import { assertWithinMaxPrice, getMaxPricePaise } from '@/modules/settings/max-price';
 import { toPaise, toPaiseOrNull } from '@/core/money';
 import { auctionInclude, effectiveStatus, toCard, toDetail, type AuctionRow } from './auctions.serializer';
@@ -201,6 +202,10 @@ export async function createAuction(memberId: string, input: CreateAuctionInput,
   if (!member) throw new AppError(401, 'UNAUTHORIZED', 'Unauthorized');
   if (toPaise(member.unpaidCommissionPaise) > 0) {
     throw new AppError(403, 'COMMISSION_UNPAID', 'Pay your outstanding commission before listing new auctions');
+  }
+  if ((await getCheckoutMode()) === 'required') {
+    const payout = await prisma.sellerPayoutAccount.findUnique({ where: { sellerId: memberId }, select: { status: true } });
+    if (payout?.status !== 'ACTIVE') throw new AppError(403, 'PAYOUT_ACCOUNT_REQUIRED', 'Set up payouts before listing');
   }
   await assertCategory(input.category);
   const timeError = checkTimeWindow(input.startTime, input.endTime, now);

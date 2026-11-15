@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const db = vi.hoisted(() => ({
   paymentOrder: { findFirst: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
+  sellerPayoutAccount: { updateMany: vi.fn() },
+  sale: { updateMany: vi.fn() },
   webhookEvent: { findUnique: vi.fn(), create: vi.fn() },
 }));
 const provider = vi.hoisted(() => ({
@@ -18,11 +20,14 @@ vi.mock('@/core/prisma/client', () => ({ prisma: db }));
 vi.mock('@/core/logger/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/providers/payment', () => ({ paymentProvider: provider }));
 vi.mock('@/modules/commissions/commissions.service', () => settle);
+const sales = vi.hoisted(() => ({ markSalePaid: vi.fn(), getSaleDTO: vi.fn(), storeTransferId: vi.fn() }));
+vi.mock('@/modules/sales/sales.service', () => sales);
 
 import { handleWebhook, verifyPayment } from './payments.service';
 import { StubPayment } from '@/providers/payment/stub.payment';
 
-const order = { id: 'po1', memberId: 'm1', gatewayOrderId: 'order_1', amountPaise: 50_000, status: 'CREATED' };
+const order = { id: 'po1', memberId: 'm1', gatewayOrderId: 'order_1', amountPaise: 50_000, status: 'CREATED', referenceType: 'COMMISSION' };
+const saleOrder = { ...order, id: 'po2', referenceType: 'SALE', referenceId: 'sale1' };
 const input = { orderId: 'order_1', paymentId: 'pay_1', signature: 'sig' };
 
 beforeEach(() => {
@@ -37,13 +42,32 @@ beforeEach(() => {
   provider.fetchPayment.mockResolvedValue({ status: 'captured', amountPaise: 50_000 });
   settle.markCommissionPaid.mockResolvedValue({ applied: true, commissionId: 'c1' });
   settle.getCommissionDTO.mockResolvedValue({ id: 'c1', status: 'PAID' });
+  sales.markSalePaid.mockResolvedValue({ applied: true, saleId: 'sale1' });
+  sales.getSaleDTO.mockResolvedValue({ id: 'sale1', status: 'PAID' });
+  db.sale.updateMany.mockResolvedValue({ count: 1 });
+  db.sellerPayoutAccount.updateMany.mockResolvedValue({ count: 1 });
 });
 
 describe('verifyPayment', () => {
   it('settles and returns the commission', async () => {
     const r = await verifyPayment('m1', input);
-    expect(r).toEqual({ commission: { id: 'c1', status: 'PAID' } });
+    expect(r).toEqual({ referenceType: 'COMMISSION', commission: { id: 'c1', status: 'PAID' } });
+    expect(sales.markSalePaid).not.toHaveBeenCalled();
     expect(settle.markCommissionPaid).toHaveBeenCalledWith({ paymentOrderId: 'po1', gatewayPaymentId: 'pay_1' });
+  });
+
+  it('dispatches a SALE order to markSalePaid and returns the sale for the buyer', async () => {
+    db.paymentOrder.findFirst.mockResolvedValue(saleOrder);
+    const r = await verifyPayment('m1', input);
+    expect(r).toEqual({ referenceType: 'SALE', sale: { id: 'sale1', status: 'PAID' } });
+    expect(sales.markSalePaid).toHaveBeenCalledWith({ paymentOrderId: 'po2', gatewayPaymentId: 'pay_1' });
+    expect(sales.getSaleDTO).toHaveBeenCalledWith('sale1', { id: 'm1' });
+    expect(settle.markCommissionPaid).not.toHaveBeenCalled();
+  });
+
+  it('409 ORDER_REFERENCE_UNKNOWN for an order that pays for nothing known', async () => {
+    db.paymentOrder.findFirst.mockResolvedValue({ ...order, referenceType: null });
+    await expect(verifyPayment('m1', input)).rejects.toMatchObject({ statusCode: 409, code: 'ORDER_REFERENCE_UNKNOWN' });
   });
 
   it('404 ORDER_NOT_FOUND for unknown / other member order', async () => {
@@ -118,6 +142,46 @@ describe('handleWebhook', () => {
     await handleWebhook(captured({ notes: { commissionId: 'c1' } }), 'sig', 'evt3');
     expect(db.paymentOrder.findFirst.mock.calls[0][0].where).toEqual({ referenceType: 'COMMISSION', referenceId: 'c1' });
     expect(settle.markCommissionPaid).toHaveBeenCalled();
+  });
+
+  it('payment.captured on a SALE order settles the sale (not the commission) and stores the transfer id', async () => {
+    db.paymentOrder.findUnique.mockResolvedValue(saleOrder);
+    await handleWebhook(captured(), 'sig', 'evt-s1');
+    expect(sales.markSalePaid).toHaveBeenCalledWith({ paymentOrderId: 'po2', gatewayPaymentId: 'pay_1' });
+    expect(sales.storeTransferId).toHaveBeenCalledWith('sale1', 'pay_1');
+    expect(settle.markCommissionPaid).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the saleId note when the order id is unknown', async () => {
+    db.paymentOrder.findUnique.mockResolvedValue(null);
+    db.paymentOrder.findFirst.mockResolvedValue(saleOrder);
+    await handleWebhook(captured({ notes: { saleId: 'sale1' } }), 'sig', 'evt-s2');
+    expect(db.paymentOrder.findFirst.mock.calls[0][0].where).toEqual({ referenceType: 'SALE', referenceId: 'sale1' });
+    expect(sales.markSalePaid).toHaveBeenCalled();
+  });
+
+  it('transfer.processed stores the transfer id on the sale that has none', async () => {
+    const raw = JSON.stringify({ event: 'transfer.processed', payload: { transfer: { entity: { id: 'trf_1', source: 'pay_1' } } } });
+    expect(await handleWebhook(raw, 'sig', 'evt-t1')).toEqual({ processed: true });
+    expect(db.sale.updateMany).toHaveBeenCalledWith({ where: { gatewayPaymentId: 'pay_1', transferId: null }, data: { transferId: 'trf_1' } });
+  });
+
+  it.each([
+    ['product.route.activated', { activation_status: 'activated' }, 'ACTIVE', null],
+    ['product.route.under_review', { activation_status: 'under_review' }, 'PENDING', null],
+    [
+      'product.route.needs_clarification',
+      { activation_status: 'needs_clarification', requirements: [{ reason_code: 'field_missing' }] },
+      'NEEDS_CLARIFICATION',
+      'field_missing',
+    ],
+  ])('%s updates the payout account status', async (event, entity, status, reason) => {
+    const raw = JSON.stringify({ event, account_id: 'acc_1', payload: { 'product.route': { entity: { id: 'acc_prd_1', ...entity } } } });
+    await handleWebhook(raw, 'sig', `evt-${event}`);
+    expect(db.sellerPayoutAccount.updateMany).toHaveBeenCalledWith({
+      where: { razorpayAccountId: 'acc_1' },
+      data: { status, statusReason: reason },
+    });
   });
 
   it('payment.failed marks a CREATED order FAILED and does not settle', async () => {

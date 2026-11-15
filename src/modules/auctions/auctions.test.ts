@@ -15,6 +15,8 @@ const db = vi.hoisted(() => ({
   bid: { findMany: vi.fn(async () => []), aggregate: vi.fn(async () => ({ _max: { amountPaise: null } })) },
   maxBid: { findUnique: vi.fn(async () => null as unknown) },
   review: { findUnique: vi.fn(async () => null as unknown) },
+  sale: { findUnique: vi.fn(async () => null as unknown) },
+  sellerPayoutAccount: { findUnique: vi.fn(async () => null as unknown) },
   savedSearch: { findMany: vi.fn(async () => []) },
 }));
 vi.mock('@/core/prisma/client', () => ({ prisma: db }));
@@ -259,6 +261,37 @@ describe('service ownership / 409 rules', () => {
     db.member.findUnique.mockResolvedValue({ unpaidCommissionPaise: 0 });
     expect(await code(svc.createAuction('seller', { ...input, category: 'Nope' }, now))).toBe('400:VALIDATION_ERROR');
     expect(db.auction.create).not.toHaveBeenCalled();
+  });
+  it('create in checkout mode required: no ACTIVE payout account -> 403 PAYOUT_ACCOUNT_REQUIRED (after COMMISSION_UNPAID)', async () => {
+    const input = {
+      title: 'Vintage camera',
+      description: '<p>A lovely vintage camera in fine shape.</p>',
+      category: 'Electronics',
+      condition: 'USED' as const,
+      images: ['https://cdn.example.com/a.png'],
+      startingBidPaise: 50000,
+      startTime: at(H),
+      endTime: at(5 * H),
+    };
+    settings.map['checkout.mode'] = 'required';
+    try {
+      db.member.findUnique.mockResolvedValue({ unpaidCommissionPaise: 1 });
+      expect(await code(svc.createAuction('seller', input, now))).toBe('403:COMMISSION_UNPAID');
+      db.member.findUnique.mockResolvedValue({ unpaidCommissionPaise: 0 });
+      for (const payout of [null, { status: 'PENDING' }, { status: 'SUSPENDED' }]) {
+        db.sellerPayoutAccount.findUnique.mockResolvedValue(payout);
+        expect(await code(svc.createAuction('seller', input, now))).toBe('403:PAYOUT_ACCOUNT_REQUIRED');
+      }
+      expect(db.auction.create).not.toHaveBeenCalled();
+      for (const mode of ['optional', 'off']) {
+        settings.map['checkout.mode'] = mode;
+        db.sellerPayoutAccount.findUnique.mockClear();
+        await code(svc.createAuction('seller', { ...input, category: 'Nope' }, now));
+        expect(db.sellerPayoutAccount.findUnique).not.toHaveBeenCalled();
+      }
+    } finally {
+      delete settings.map['checkout.mode'];
+    }
   });
   it('detail: cancelled hidden from the public, visible to seller / admin', async () => {
     db.auction.findUnique.mockResolvedValue(row({ status: 'CANCELLED' }));

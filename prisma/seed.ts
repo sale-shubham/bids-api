@@ -26,6 +26,7 @@ const SETTINGS: Record<string, string> = {
   'auction.minIncrementPaise': '10000',
   'auction.antiSnipingMinutes': '2',
   'auction.maxPricePaise': '10000000000',
+  'checkout.mode': 'optional',
   'auction.categories': JSON.stringify([
     'Electronics',
     'Fashion',

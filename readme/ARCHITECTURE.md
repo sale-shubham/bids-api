@@ -9,6 +9,7 @@
 | `closeAuctions` | `rate(1 minute)` | `closeAuctionsHandler`: starts SCHEDULED auctions, ends due ones, picks winner, creates commission |
 | `endingSoon` | `rate(15 minutes)` | `endingSoonHandler`: watchlist "ending soon" alerts |
 | `commissionReminder` | `rate(1 day)` | `commissionReminderHandler` |
+| `salesMaintenance` | `rate(1 hour)` | `salesMaintenanceHandler`: cancels unpaid sales, auto-confirms shipped sales after 7 days and releases held funds, retries failed releases (`flows/checkout.md`) |
 | `retentionPurge` | `rate(1 day)` | `retentionPurgeHandler` |
 | `notifyWorker` | SQS `NotifyQueue` (+ `NotifyDLQ`) | `notifyWorkerHandler`: email + push + WebSocket fan-out |
 
@@ -24,7 +25,7 @@ The daily `retentionPurge` (also `POST /admin/retention/purge`) deletes OTP chal
 
 ## Integrations
 - Email: SES (or the stub driver) with EJS templates in `src/templates/`: otp-code, welcome, outbid, auction-won, auction-sold, auction-unsold, ending-soon, commission-due, commission-paid, review-received, question-asked, question-answered, saved-search-match, contact-message. Email OTP is used only for signup email verification and forgot-password; login is email + password.
-- Payments: Razorpay Orders API called with `fetch` (no SDK), stub driver for local dev. Webhook is HMAC-verified on the raw body and idempotent via `WebhookEvent`. See `flows/payments.md`.
+- Payments: Razorpay Orders API called with `fetch` (no SDK), stub driver for local dev. Webhook is HMAC-verified on the raw body and idempotent via `WebhookEvent`. Razorpay Route (linked accounts, on-hold transfers, release, refund with reversal) is used for winner checkout: see `flows/checkout.md` and `flows/payouts.md`. See `flows/payments.md`.
 - Storage: S3 presigned PUT for auction images and avatars. Served through CloudFront when `ENABLE_CDN=true`, otherwise straight from the bucket.
 - Realtime: API Gateway WebSocket (single-use ticket handshake, guests allowed) and Web Push (VAPID). See `flows/websocket.md`.
 - Async: SQS `NotifyQueue` (+ `NotifyDLQ`); `NOTIFY_QUEUE_URL` empty locally means send inline. See `flows/notifications.md`.

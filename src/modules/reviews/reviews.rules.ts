@@ -44,12 +44,31 @@ type ReviewableAuction = {
   endedAt: Date | null;
 };
 
-/** Only the stamped winner of an ended auction, within 60 days of it ending. Review-exists is checked separately. */
-export function isReviewWindowOpen(a: ReviewableAuction, viewerId: string | null | undefined, now: Date): boolean {
+/** The checkout sale of an auction (if any); only DELIVERED / RELEASED sales can be reviewed. */
+export type ReviewableSale = { status: string; deliveredAt: Date | null; releasedAt: Date | null } | null | undefined;
+
+/**
+ * Only the stamped winner of an ended auction, within 60 days of it ending. Review-exists is checked separately.
+ * With a checkout sale: the sale must be DELIVERED or RELEASED and the window counts from `deliveredAt`
+ * (the release time when it was released without a delivery confirmation).
+ */
+export function isReviewWindowOpen(
+  a: ReviewableAuction,
+  viewerId: string | null | undefined,
+  now: Date,
+  sale?: ReviewableSale,
+): boolean {
   if (!viewerId || a.winnerId !== viewerId || !a.endedAt) return false;
   if (a.status === 'CANCELLED' || a.deletedAt) return false;
   if (a.status !== 'ENDED' && now.getTime() < a.endTime.getTime()) return false;
-  return now.getTime() - a.endedAt.getTime() <= REVIEW_WINDOW_DAYS * DAY_MS;
+  let from = a.endedAt;
+  if (sale) {
+    if (sale.status !== 'DELIVERED' && sale.status !== 'RELEASED') return false;
+    const base = sale.deliveredAt ?? sale.releasedAt;
+    if (!base) return false;
+    from = base;
+  }
+  return now.getTime() - from.getTime() <= REVIEW_WINDOW_DAYS * DAY_MS;
 }
 
 export function toReviewDTO(r: ReviewRow): ReviewDTO {

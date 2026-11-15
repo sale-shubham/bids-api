@@ -352,3 +352,62 @@ describe('reviews, questions and saved searches', () => {
     expectInvalid(await send('patch', '/admin/reviews/r1', { as: 'SUPER_ADMIN', body: { hidden: 'nope' } }), 'hidden');
   });
 });
+
+describe('checkout: sales, payouts, admin sales, checkout mode', () => {
+  const payout = {
+    legalName: 'Asha Rao',
+    businessType: 'individual',
+    phone: '9876543210',
+    pan: 'ABCDE1234F',
+    accountNumber: '123456789012',
+    ifsc: 'HDFC0001234',
+    beneficiaryName: 'Asha Rao',
+    address: { street1: '12 MG Road', city: 'Pune', state: 'Maharashtra', postalCode: '411001' },
+  };
+  const create = (over: Record<string, unknown>) => send('post', '/payouts/account', { as: 'AUCTIONEER', body: { ...payout, ...over } });
+
+  it.each([
+    ['pan', { pan: 'ABCDE12345' }],
+    ['ifsc', { ifsc: 'HDFC1001234' }],
+    ['accountNumber', { accountNumber: '12345678' }],
+    ['phone', { phone: '1234567890' }],
+    ['businessType', { businessType: 'company' }],
+    ['legalName', { legalName: 'x'.repeat(121) }],
+    ['address', { address: { ...payout.address, postalCode: '12' } }],
+  ])('POST /payouts/account rejects a bad %s', async (field, over) => {
+    expectInvalid(await create(over), field);
+  });
+
+  it('GET /sales/mine bounds role, status and paging', async () => {
+    expectInvalid(await send('get', '/sales/mine?role=admin', { as: 'BIDDER' }), 'role');
+    expectInvalid(await send('get', '/sales/mine?status=maybe', { as: 'BIDDER' }), 'status');
+    expectInvalid(await send('get', '/sales/mine?limit=101', { as: 'BIDDER' }), 'limit');
+    expectInvalid(await send('get', '/sales/mine?page=0', { as: 'BIDDER' }), 'page');
+  });
+
+  it('POST /sales/:id/ship needs a method, a courier for COURIER and <= 60 char fields', async () => {
+    const url = '/sales/s1/ship';
+    expectInvalid(await send('post', url, { as: 'AUCTIONEER', body: {} }), 'method');
+    expectInvalid(await send('post', url, { as: 'AUCTIONEER', body: { method: 'AIR' } }), 'method');
+    expectInvalid(await send('post', url, { as: 'AUCTIONEER', body: { method: 'COURIER' } }), 'courier');
+    expectInvalid(await send('post', url, { as: 'AUCTIONEER', body: { method: 'PICKUP', trackingNo: 'x'.repeat(61) } }), 'trackingNo');
+  });
+
+  it('POST /sales/:id/dispute needs a 10..1000 char reason', async () => {
+    const url = '/sales/s1/dispute';
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: {} }), 'reason');
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: { reason: 'too short' } }), 'reason');
+    expectInvalid(await send('post', url, { as: 'BIDDER', body: { reason: 'x'.repeat(1001) } }), 'reason');
+  });
+
+  it('admin sales: list filters and refund note are bounded', async () => {
+    expectInvalid(await send('get', '/admin/sales?status=bogus', { as: 'SUPER_ADMIN' }), 'status');
+    expectInvalid(await send('get', '/admin/sales?limit=0', { as: 'SUPER_ADMIN' }), 'limit');
+    expectInvalid(await send('post', '/admin/sales/s1/refund', { as: 'SUPER_ADMIN', body: { note: 'x'.repeat(501) } }), 'note');
+  });
+
+  it('PUT /admin/settings rejects an unknown checkoutMode', async () => {
+    const body = { commissionRateBps: 500, minIncrementPaise: 10_000, antiSnipingMinutes: 2, categories: ['Art', 'Cars'], checkoutMode: 'always' };
+    expectInvalid(await send('put', '/admin/settings', { as: 'SUPER_ADMIN', body }), 'checkoutMode');
+  });
+});

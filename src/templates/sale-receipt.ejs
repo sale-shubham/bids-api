@@ -1,0 +1,6 @@
+<%- include('_head', { heading: 'Payment received', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  We received your payment of <strong><%= amount %></strong> for <strong><%= auctionTitle %></strong>. The funds are held securely until you confirm delivery.
+                </p>
+<%- include('_foot', { ctaUrl: saleUrl, ctaLabel: 'View purchase', frontendUrl }) %>

@@ -5,6 +5,8 @@ import { logger } from '@/core/logger/logger';
 import { toPaise } from '@/core/money';
 import crypto from 'node:crypto';
 import { getCommissionDTO, markCommissionPaid } from '@/modules/commissions/commissions.service';
+import { getSaleDTO, markSalePaid, storeTransferId } from '@/modules/sales/sales.service';
+import { mapActivationStatus } from '@/providers/payment/route-status';
 
 // The payment provider is lazy-loaded inside each function (dynamic import) so
 // it only initializes when a payment path is hit — keeps Lambda cold start tight.
@@ -37,9 +39,17 @@ export async function verifyPayment(
     throw new AppError(409, 'AMOUNT_MISMATCH', 'Paid amount does not match the order');
   }
 
+  if (order.referenceType === 'SALE') {
+    const { saleId } = await markSalePaid({ paymentOrderId: order.id, gatewayPaymentId: input.paymentId });
+    if (!saleId) throw new AppError(404, 'SALE_NOT_FOUND', 'Sale not found');
+    return { referenceType: 'SALE' as const, sale: await getSaleDTO(saleId, { id: memberId }) };
+  }
+  if (order.referenceType !== 'COMMISSION') {
+    throw new AppError(409, 'ORDER_REFERENCE_UNKNOWN', 'This payment order cannot be settled');
+  }
   const { commissionId } = await markCommissionPaid({ paymentOrderId: order.id, gatewayPaymentId: input.paymentId });
   if (!commissionId) throw new AppError(404, 'COMMISSION_NOT_FOUND', 'Commission not found');
-  return { commission: await getCommissionDTO(commissionId) };
+  return { referenceType: 'COMMISSION' as const, commission: await getCommissionDTO(commissionId) };
 }
 
 type WebhookEvent = {
@@ -47,11 +57,24 @@ type WebhookEvent = {
   payload?: {
     payment?: { entity?: { id?: string; order_id?: string; notes?: unknown } };
     order?: { entity?: { id?: string; notes?: unknown } };
+    transfer?: { entity?: { id?: string; source?: string } };
+    'product.route'?: ProductEntity;
+    product?: ProductEntity;
+  };
+  account_id?: string;
+};
+
+type ProductEntity = {
+  entity?: {
+    id?: string;
+    account_id?: string;
+    activation_status?: string;
+    requirements?: { field_reference?: string; reason_code?: string; resolution_url?: string }[];
   };
 };
 
-const noteCommissionId = (notes: unknown): string | undefined => {
-  const v = (notes as { commissionId?: unknown } | null | undefined)?.commissionId;
+const noteString = (notes: unknown, key: 'commissionId' | 'saleId'): string | undefined => {
+  const v = (notes as Record<string, unknown> | null | undefined)?.[key];
   return typeof v === 'string' ? v : undefined;
 };
 
@@ -65,18 +88,55 @@ async function findOrderForEvent(event: WebhookEvent) {
     const byId = await prisma.paymentOrder.findUnique({ where: { gatewayOrderId } });
     if (byId) return byId;
   }
-  const commissionId = noteCommissionId(pay?.notes) ?? noteCommissionId(ord?.notes);
+  const commissionId = noteString(pay?.notes, 'commissionId') ?? noteString(ord?.notes, 'commissionId');
   if (commissionId) {
     return prisma.paymentOrder.findFirst({
       where: { referenceType: 'COMMISSION', referenceId: commissionId },
       orderBy: { createdAt: 'desc' },
     });
   }
+  const saleId = noteString(pay?.notes, 'saleId') ?? noteString(ord?.notes, 'saleId');
+  if (saleId) {
+    return prisma.paymentOrder.findFirst({
+      where: { referenceType: 'SALE', referenceId: saleId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
   return null;
+}
+
+// Route product events: keep SellerPayoutAccount.status in step with Razorpay's activation.
+// VERIFY in Razorpay test mode: exact event names, payload key ('product.route') and account_id location.
+async function processProductEvent(event: WebhookEvent) {
+  const type = event.event ?? '';
+  const entity = (event.payload?.['product.route'] ?? event.payload?.product)?.entity;
+  const accountId = event.account_id ?? entity?.account_id;
+  if (!accountId) {
+    logger.warn({ type }, 'webhook: product event without account id');
+    return;
+  }
+  const suffix = type.replace(/^product\.route\./, '');
+  const status = mapActivationStatus(entity?.activation_status ?? suffix);
+  const reasons = (entity?.requirements ?? []).map((r) => r.reason_code ?? r.field_reference).filter((r): r is string => !!r);
+  const statusReason = status === 'NEEDS_CLARIFICATION' && reasons.length ? reasons.join(', ').slice(0, 500) : null;
+  const { count } = await prisma.sellerPayoutAccount.updateMany({
+    where: { razorpayAccountId: accountId },
+    data: { status, statusReason },
+  });
+  if (count === 0) logger.warn({ type, accountId }, 'webhook: no payout account for product event');
+}
+
+async function processTransferProcessed(event: WebhookEvent) {
+  const t = event.payload?.transfer?.entity;
+  // VERIFY in Razorpay test mode: transfer.source is the payment id for payment-linked transfers.
+  if (!t?.id || !t.source) return;
+  await prisma.sale.updateMany({ where: { gatewayPaymentId: t.source, transferId: null }, data: { transferId: t.id } });
 }
 
 async function processEvent(event: WebhookEvent) {
   const type = event.event ?? 'unknown';
+  if (type.startsWith('product.route.')) return processProductEvent(event);
+  if (type === 'transfer.processed') return processTransferProcessed(event);
   if (type !== 'payment.captured' && type !== 'order.paid' && type !== 'payment.failed') {
     logger.info({ type }, 'Unhandled webhook event type');
     return;
@@ -90,6 +150,16 @@ async function processEvent(event: WebhookEvent) {
   if (type === 'payment.failed') {
     // Only an unsettled order may fail; a later successful retry still settles via captured.
     await prisma.paymentOrder.updateMany({ where: { id: order.id, status: 'CREATED' }, data: { status: 'FAILED' } });
+    return;
+  }
+  if (order.referenceType === 'SALE') {
+    const { saleId } = await markSalePaid({ paymentOrderId: order.id, gatewayPaymentId: paymentId });
+    // A redelivery after a failed transfer lookup still gets the transfer id stored.
+    if (saleId) await storeTransferId(saleId, paymentId);
+    return;
+  }
+  if (order.referenceType !== 'COMMISSION') {
+    logger.warn({ type, orderId: order.id, referenceType: order.referenceType }, 'webhook: order has an unknown reference type');
     return;
   }
   await markCommissionPaid({ paymentOrderId: order.id, gatewayPaymentId: paymentId });
@@ -115,7 +185,11 @@ export async function handleWebhook(rawBody: string, signature: string, eventId:
 
   const type = event.event ?? 'unknown';
   // Razorpay sends x-razorpay-event-id for dedup; fall back to type + entity id.
-  const entityId = event.payload?.payment?.entity?.id ?? event.payload?.order?.entity?.id;
+  const entityId =
+    event.payload?.payment?.entity?.id ??
+    event.payload?.order?.entity?.id ??
+    event.payload?.transfer?.entity?.id ??
+    (event.payload?.['product.route'] ?? event.payload?.product)?.entity?.id;
   const dedupId = eventId || (entityId ? `${type}:${entityId}` : `${type}:${crypto.randomUUID()}`);
 
   const seen = await prisma.webhookEvent.findUnique({ where: { gatewayEventId: dedupId } });

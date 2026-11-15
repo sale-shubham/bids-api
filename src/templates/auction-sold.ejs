@@ -2,10 +2,10 @@
                 <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
                 <p style="font-size: 14px; margin: 0 0 12px 0">
                   <strong><%= auctionTitle %></strong> sold for <strong><%= finalBid %></strong>.
-                  The platform commission for this sale is <strong><%= commission %></strong>.
+                  <% if (checkout) { %>The buyer has until <strong><%= payBy %></strong> to pay in the app. You will be notified when the payment arrives, and the platform commission of <strong><%= commission %></strong> is deducted from your payout.<% } else { %>The platform commission for this sale is <strong><%= commission %></strong>.<% } %>
                 </p>
                 <% if (winner) { %>
                   <p style="font-size: 14px; margin: 0 0 4px 0">Get in touch with the winner to arrange payment and delivery:</p>
                   <%- include('_contact', { label: 'Winner', person: winner }) %>
                 <% } %>
-<%- include('_foot', { ctaUrl: auctionUrl, ctaLabel: 'View auction', frontendUrl }) %>
+<%- include('_foot', { ctaUrl: checkout ? saleUrl : auctionUrl, ctaLabel: checkout ? 'View sale' : 'View auction', frontendUrl }) %>

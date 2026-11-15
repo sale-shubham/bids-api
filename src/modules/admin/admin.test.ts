@@ -6,6 +6,7 @@ const db = vi.hoisted(() => ({
   auction: { count: vi.fn(), findMany: vi.fn() },
   bid: { count: vi.fn() },
   commission: { aggregate: vi.fn(), findMany: vi.fn() },
+  sale: { groupBy: vi.fn(async () => [] as unknown[]) },
 }));
 const disconnect = vi.hoisted(() => vi.fn(async (_id: string) => undefined));
 vi.mock('@/core/prisma/client', () => ({ prisma: db }));
@@ -95,7 +96,14 @@ describe('dashboard zero-fill', () => {
     db.commission.findMany.mockResolvedValue([{ amountPaise: 3_000_000_000n, paidAt: new Date('2026-11-02T00:00:00Z') }]);
     db.member.findMany.mockResolvedValue([]);
     db.auction.findMany.mockResolvedValue([]);
+    db.sale.groupBy.mockResolvedValue([
+      { status: 'PAID', _count: { _all: 2 }, _sum: { amountPaise: 5_000_000_000n } },
+      { status: 'RELEASED', _count: { _all: 1 }, _sum: { amountPaise: 100n } },
+    ]);
     const d = await getDashboard(now);
+    expect(d.salesByStatus.PAID).toEqual({ count: 2, amountPaise: 5_000_000_000 });
+    expect(d.salesByStatus.RELEASED).toEqual({ count: 1, amountPaise: 100 });
+    expect(d.salesByStatus.DISPUTED).toEqual({ count: 0, amountPaise: 0 });
     expect(d.totals.commissionPaidPaise).toBe(3_000_000_000);
     expect(d.totals.commissionDuePaise).toBe(7);
     expect(d.revenueByMonth.at(-1)!.paidPaise).toBe(3_000_000_000);

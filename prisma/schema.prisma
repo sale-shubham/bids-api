@@ -97,14 +97,17 @@ model Member {
   wsTickets         WsTicket[]
   pushSubscriptions PushSubscription[]
 
-  auctionsSelling Auction[]      @relation("AuctionSeller")
-  auctionsLeading Auction[]      @relation("AuctionHighestBidder")
-  auctionsWonList Auction[]      @relation("AuctionWinner")
+  auctionsSelling Auction[]            @relation("AuctionSeller")
+  auctionsLeading Auction[]            @relation("AuctionHighestBidder")
+  auctionsWonList Auction[]            @relation("AuctionWinner")
   bids            Bid[]
   maxBids         MaxBid[]
   watchlist       Watchlist[]
   commissions     Commission[]
   notifications   Notification[]
+  payoutAccount   SellerPayoutAccount?
+  purchases       Sale[]               @relation("Purchases")
+  sales           Sale[]               @relation("Sales")
 
   reviewsReceived Review[]          @relation("ReviewsReceived")
   reviewsWritten  Review[]          @relation("ReviewsWritten")
@@ -194,6 +197,7 @@ model Auction {
   watchlist  Watchlist[]
   commission Commission?
   review     Review?
+  sale       Sale?
   questions  AuctionQuestion[]
 
   @@index([status, endTime])
@@ -435,4 +439,84 @@ model SavedSearch {
 
   @@index([memberId])
   @@index([category])
+}
+
+// ----------------------------------------------------------------------------
+// CHECKOUT (Razorpay Route): winner pays in-app, funds held, released to the seller
+// ----------------------------------------------------------------------------
+
+enum PayoutStatus {
+  PENDING
+  NEEDS_CLARIFICATION
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+// One Razorpay Route linked account per seller. PAN and the full bank account number are NEVER stored.
+model SellerPayoutAccount {
+  id                String       @id @default(cuid())
+  seller            Member       @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  sellerId          String       @unique
+  razorpayAccountId String       @unique
+  productId         String?
+  status            PayoutStatus @default(PENDING)
+  statusReason      String?
+  legalName         String
+  businessType      String
+  bankLast4         String
+  ifsc              String
+  beneficiaryName   String
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+}
+
+enum SaleStatus {
+  AWAITING_PAYMENT
+  PAID
+  SHIPPED
+  DELIVERED
+  RELEASED
+  DISPUTED
+  REFUNDED
+  CANCELLED
+}
+
+model Sale {
+  id               String     @id @default(cuid())
+  auction          Auction    @relation(fields: [auctionId], references: [id])
+  auctionId        String     @unique
+  buyer            Member     @relation("Purchases", fields: [buyerId], references: [id])
+  buyerId          String
+  seller           Member     @relation("Sales", fields: [sellerId], references: [id])
+  sellerId         String
+  itemPaise        BigInt
+  shippingFeePaise BigInt     @default(0)
+  amountPaise      BigInt
+  commissionPaise  BigInt
+  rateBps          Int
+  status           SaleStatus @default(AWAITING_PAYMENT)
+  payBy            DateTime
+  paidAt           DateTime?
+  gatewayPaymentId String?
+  transferId       String?
+  shippingMethod   String? // 'COURIER' | 'PICKUP'
+  courier          String?
+  trackingNo       String?
+  shippedAt        DateTime?
+  deliveredAt      DateTime?
+  releasedAt       DateTime?
+  disputedAt       DateTime?
+  disputeReason    String?
+  resolvedAt       DateTime?
+  resolution       String?
+  refundedAt       DateTime?
+  cancelledAt      DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([buyerId, status])
+  @@index([sellerId, status])
+  @@index([status, payBy])
+  @@index([status, shippedAt])
 }

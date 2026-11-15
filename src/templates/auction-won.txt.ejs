@@ -3,11 +3,14 @@
 Congratulations <%= name %>!
 
 You won "<%= auctionTitle %>" with a winning bid of <%= finalBid %>.
+<% if (checkout) { -%>
+Pay in the app by <%= payBy %> (within 3 days) to secure your item. Your payment is held safely until you confirm delivery.
+<% } -%>
 <% if (seller) { -%>
 Contact the seller to arrange payment and delivery:
 <%- include('_contact.txt.ejs', { label: 'Seller', person: seller }) -%>
 <% } -%>
 
-View auction: <%= auctionUrl %>
+<%= checkout ? 'Pay now' : 'View auction' %>: <%= checkout ? saleUrl : auctionUrl %>
 
 Support: <%= websiteUrl %>/contact

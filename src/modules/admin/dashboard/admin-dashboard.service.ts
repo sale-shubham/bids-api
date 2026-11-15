@@ -52,9 +52,19 @@ export function signupSeries(rows: { role: string; createdAt: Date }[], now: Dat
   return [...buckets.values()];
 }
 
+/** Sales count and amount per status; every status is present (zero-filled). */
+export function salesByStatus(rows: { status: string; _count: { _all: number }; _sum: { amountPaise: bigint | number | null } }[]) {
+  const out: Record<string, { count: number; amountPaise: number }> = {};
+  for (const s of ['AWAITING_PAYMENT', 'PAID', 'SHIPPED', 'DELIVERED', 'RELEASED', 'DISPUTED', 'REFUNDED', 'CANCELLED']) {
+    out[s] = { count: 0, amountPaise: 0 };
+  }
+  for (const r of rows) out[r.status] = { count: r._count._all, amountPaise: toPaiseOrNull(r._sum.amountPaise) ?? 0 };
+  return out;
+}
+
 export async function getDashboard(now = new Date()) {
   const since = windowStart(now);
-  const [members, bidders, auctioneers, live, upcoming, ended, bidsToday, paid, due, paidRows, signupRows, recent] =
+  const [members, bidders, auctioneers, live, upcoming, ended, bidsToday, paid, due, paidRows, signupRows, recent, saleRows] =
     await Promise.all([
       prisma.member.count(),
       prisma.member.count({ where: { role: 'BIDDER' } }),
@@ -79,6 +89,7 @@ export async function getDashboard(now = new Date()) {
         take: 5,
         include: auctionInclude,
       }),
+      prisma.sale.groupBy({ by: ['status'], _count: { _all: true }, _sum: { amountPaise: true } }),
     ]);
 
   return {
@@ -93,6 +104,7 @@ export async function getDashboard(now = new Date()) {
       commissionPaidPaise: toPaiseOrNull(paid._sum.amountPaise) ?? 0,
       commissionDuePaise: toPaiseOrNull(due._sum.amountPaise) ?? 0,
     },
+    salesByStatus: salesByStatus(saleRows),
     revenueByMonth: revenueSeries(paidRows, now),
     signupsByMonth: signupSeries(signupRows, now),
     recentAuctions: (recent as AuctionRow[]).map((a) => toCard(a, now)),

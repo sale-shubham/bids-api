@@ -1,0 +1,6 @@
+<%- include('_head', { heading: 'Your item has shipped', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  The seller shipped <strong><%= auctionTitle %></strong>.<% if (shipping) { %> <%= shipping %><% } %> Confirm delivery once it arrives so the seller can be paid.
+                </p>
+<%- include('_foot', { ctaUrl: saleUrl, ctaLabel: 'View purchase', frontendUrl }) %>

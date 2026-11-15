@@ -21,6 +21,7 @@ Code: `src/modules/reviews/reviews.{routes,controller,service,validation,rules}.
 ## Rules
 
 - Eligible (`isReviewWindowOpen`, pure, `reviews.rules.ts`): the auction is effectively ENDED (not cancelled), `winnerId === me` (stamped by the close job, so an auction not yet closed is not reviewable), `endedAt` within the last 60 days. Otherwise 403 `REVIEW_NOT_ALLOWED`.
+- **Checkout sales:** when the auction has a `Sale`, a review is allowed only when the sale is DELIVERED or RELEASED, and the 60-day window counts from `deliveredAt` (the release time when it was released without a delivery confirmation). `isReviewWindowOpen(auction, viewerId, now, sale?)` takes the sale; `createReview`, auction detail `canReview` and `GET /bids/mine` load it. Auctions without a Sale keep the rule above. See `checkout.md`.
 - An existing review for the auction -> 409 `ALREADY_REVIEWED` (the unique violation of a concurrent create maps to the same code).
 - One transaction: create the review and `ratingCount +1`, `ratingSum +rating` on the seller. Then notify the seller `review-received` (dedupe `review-received:<reviewId>`, url `/sellers/<sellerId>`).
 - Reply: only the review's seller (any other member, SUPER_ADMIN included, gets 403 `FORBIDDEN`), once (409 `ALREADY_REPLIED`, race-safe via `updateMany` with `sellerReply: null`). 404 `REVIEW_NOT_FOUND`.

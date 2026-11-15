@@ -5,6 +5,7 @@ const db = vi.hoisted(() => {
     auction: { findUnique: vi.fn() },
     review: { findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     member: { update: vi.fn() },
+    sale: { findUnique: vi.fn() },
   };
   d.$transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn(d));
   return d;
@@ -58,6 +59,7 @@ beforeEach(() => {
   db.auction.findUnique.mockResolvedValue(auction());
   db.review.findUnique.mockResolvedValue(null);
   db.review.create.mockResolvedValue(reviewRow());
+  db.sale.findUnique.mockResolvedValue(null);
 });
 
 describe('ratingAvg', () => {
@@ -82,6 +84,36 @@ describe('isReviewWindowOpen', () => {
 describe('toReviewDTO', () => {
   it('masks the reviewer name', () => {
     expect(toReviewDTO(reviewRow() as never)).toMatchObject({ reviewerLabel: 'R***h', auctionTitle: 'Watch', sellerReply: null });
+  });
+});
+
+describe('review eligibility with a checkout sale', () => {
+  const sale = (status: string, over: Record<string, unknown> = {}) => ({ status, deliveredAt: null, releasedAt: null, ...over });
+  it('needs the sale to be DELIVERED or RELEASED', () => {
+    for (const s of ['AWAITING_PAYMENT', 'PAID', 'SHIPPED', 'DISPUTED', 'REFUNDED', 'CANCELLED']) {
+      expect(isReviewWindowOpen(auction() as never, 'w1', now, sale(s, { deliveredAt: now }))).toBe(false);
+    }
+    expect(isReviewWindowOpen(auction() as never, 'w1', now, sale('DELIVERED', { deliveredAt: now }))).toBe(true);
+    expect(isReviewWindowOpen(auction() as never, 'w1', now, sale('RELEASED', { deliveredAt: now }))).toBe(true);
+  });
+  it('counts the 60 days from deliveredAt, not from the auction end', () => {
+    const old = auction({ endedAt: new Date(now.getTime() - 90 * DAY) });
+    expect(isReviewWindowOpen(old as never, 'w1', now)).toBe(false); // legacy rule: window passed
+    expect(isReviewWindowOpen(old as never, 'w1', now, sale('RELEASED', { deliveredAt: new Date(now.getTime() - 10 * DAY) }))).toBe(true);
+    expect(isReviewWindowOpen(old as never, 'w1', now, sale('RELEASED', { deliveredAt: new Date(now.getTime() - 61 * DAY) }))).toBe(false);
+  });
+  it('falls back to releasedAt when released without a delivery, and rejects when neither is set', () => {
+    expect(isReviewWindowOpen(auction() as never, 'w1', now, sale('RELEASED', { releasedAt: now }))).toBe(true);
+    expect(isReviewWindowOpen(auction() as never, 'w1', now, sale('RELEASED'))).toBe(false);
+  });
+  it('createReview is blocked until the sale is delivered, allowed after', async () => {
+    db.sale.findUnique.mockResolvedValue(sale('SHIPPED'));
+    expect(await code(createReview('w1', 'a1', { rating: 5 }, now))).toBe('403:REVIEW_NOT_ALLOWED');
+    db.sale.findUnique.mockResolvedValue(sale('DELIVERED', { deliveredAt: now }));
+    expect(await code(createReview('w1', 'a1', { rating: 5 }, now))).toBe('ok');
+  });
+  it('legacy auctions without a Sale keep the current rule', () => {
+    expect(isReviewWindowOpen(auction() as never, 'w1', now, null)).toBe(true);
   });
 });
 

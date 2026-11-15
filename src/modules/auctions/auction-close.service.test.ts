@@ -18,13 +18,16 @@ const state = vi.hoisted(() => ({
   auctions: [] as any[],
   commissions: [] as any[],
   members: {} as Record<string, any>,
+  sales: [] as any[],
+  payout: {} as Record<string, string>,
+  mode: null as string | null,
 }));
 const enqueue = vi.hoisted(() => vi.fn(async (_m: unknown) => undefined));
 const publish = vi.hoisted(() => vi.fn(async (_e: unknown) => undefined));
 
 vi.mock('@/core/config/env', () => ({ env: { commission: { rateBps: 500 } } }));
 vi.mock('@/core/logger/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock('@/modules/settings/settings.service', () => ({ getSetting: async () => null }));
+vi.mock('@/modules/settings/settings.service', () => ({ getSetting: async (k: string) => (k === 'checkout.mode' ? state.mode : null) }));
 vi.mock('@/modules/notify/notify.queue', () => ({ enqueueNotification: enqueue }));
 vi.mock('./auction-events', () => ({ publishAuctionEvent: publish }));
 vi.mock('@/core/prisma/client', () => {
@@ -54,6 +57,17 @@ vi.mock('@/core/prisma/client', () => {
         Object.assign(state.auctions.find((a: A) => a.id === where.id), data),
     },
     commission: { create: async ({ data }: { data: any }) => void state.commissions.push(data) },
+    sale: {
+      create: async ({ data }: { data: any }) => {
+        const row = { id: `sale${state.sales.length + 1}`, ...data };
+        state.sales.push(row);
+        return { id: row.id };
+      },
+    },
+    sellerPayoutAccount: {
+      findUnique: async ({ where }: { where: { sellerId: string } }) =>
+        state.payout[where.sellerId] ? { status: state.payout[where.sellerId] } : null,
+    },
     member: {
       update: async ({ where, data }: { where: { id: string }; data: Record<string, { increment: number }> }) => {
         const m = state.members[where.id];
@@ -87,6 +101,9 @@ beforeEach(() => {
   enqueue.mockClear();
   publish.mockClear();
   state.commissions = [];
+  state.sales = [];
+  state.payout = {};
+  state.mode = null;
   state.members = {
     s1: { unpaidCommissionPaise: 0, auctionsWon: 0, moneySpentPaise: 0 },
     w1: { unpaidCommissionPaise: 0, auctionsWon: 0, moneySpentPaise: 0 },
@@ -177,5 +194,80 @@ describe('runAuctionClose', () => {
       expect(sent.map((m) => m.type)).toEqual(['auction-unsold']);
       expect(sent[0].data).toBeUndefined();
     });
+  });
+});
+
+describe('checkout (sale) mode', () => {
+  const soldOnly = () => {
+    state.auctions = [mk('sold', { highestBidderId: 'w1', bidCount: 3, currentBidPaise: 12_350 })];
+  };
+  const types = () => enqueue.mock.calls.map((c) => (c[0] as { type: string }).type).sort();
+
+  it("optional + ACTIVE payout account: a Sale replaces the Commission and the unpaid counter", async () => {
+    soldOnly();
+    state.mode = 'optional';
+    state.payout = { s1: 'ACTIVE' };
+    expect(await runAuctionClose(now)).toEqual({ started: 0, ended: 1, sold: 1, unsold: 0 });
+    expect(state.commissions).toHaveLength(0);
+    expect(state.members.s1.unpaidCommissionPaise).toBe(0);
+    expect(state.members.w1).toMatchObject({ auctionsWon: 1, moneySpentPaise: 12_350 });
+    expect(state.sales).toHaveLength(1);
+    expect(state.sales[0]).toMatchObject({
+      auctionId: 'sold',
+      buyerId: 'w1',
+      sellerId: 's1',
+      itemPaise: 12_350,
+      shippingFeePaise: 0,
+      amountPaise: 12_350,
+      commissionPaise: 618,
+      rateBps: 500,
+      payBy: new Date(now.getTime() + 3 * 86_400_000),
+    });
+    expect(types()).toEqual(['auction-sold', 'auction-won']);
+    const sent = enqueue.mock.calls.map((c) => c[0] as { type: string; data: Record<string, unknown> });
+    expect(sent.find((m) => m.type === 'auction-won')!.data).toMatchObject({ saleId: 'sale1', payBy: new Date(now.getTime() + 3 * 86_400_000).toISOString() });
+    expect(sent.find((m) => m.type === 'auction-sold')!.data).toMatchObject({ checkout: true, saleId: 'sale1' });
+  });
+
+  it('required behaves like optional at close time', async () => {
+    soldOnly();
+    state.mode = 'required';
+    state.payout = { s1: 'ACTIVE' };
+    await runAuctionClose(now);
+    expect(state.sales).toHaveLength(1);
+    expect(state.commissions).toHaveLength(0);
+  });
+
+  it('off: legacy commission flow even with an ACTIVE payout account', async () => {
+    soldOnly();
+    state.mode = 'off';
+    state.payout = { s1: 'ACTIVE' };
+    await runAuctionClose(now);
+    expect(state.sales).toHaveLength(0);
+    expect(state.commissions).toHaveLength(1);
+    expect(state.members.s1.unpaidCommissionPaise).toBe(618);
+  });
+
+  it.each(['PENDING', 'NEEDS_CLARIFICATION', 'SUSPENDED', 'REJECTED', undefined])(
+    'optional + payout account %s: legacy commission flow',
+    async (status) => {
+      soldOnly();
+      state.mode = 'optional';
+      if (status) state.payout = { s1: status };
+      await runAuctionClose(now);
+      expect(state.sales).toHaveLength(0);
+      expect(state.commissions).toHaveLength(1);
+      expect(types()).toEqual(['auction-sold', 'auction-won', 'commission-due']);
+    },
+  );
+
+  it('a Buy It Now style close (closeOneTx with a mode) uses the same path', async () => {
+    soldOnly();
+    state.payout = { s1: 'ACTIVE' };
+    const { prisma } = await import('@/core/prisma/client');
+    const { closeOneTx } = await import('./auction-close.service');
+    const closed = await (prisma as any).$transaction((tx: any) => closeOneTx(tx, 'sold', now, 500, 'optional'));
+    expect(closed).toMatchObject({ sold: true, saleId: 'sale1' });
+    expect(state.commissions).toHaveLength(0);
   });
 });

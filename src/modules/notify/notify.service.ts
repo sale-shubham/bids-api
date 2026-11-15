@@ -58,8 +58,10 @@ export async function processNotification(
         },
       });
       auctionTitle = a?.title ?? '';
-      if (msg.type === 'auction-won') counterparty = a?.seller ?? null;
-      if (msg.type === 'auction-sold') counterparty = a?.winner ?? a?.highestBidder ?? null;
+      // Checkout (sale) mode: contact details are only shared after payment, via the sale.
+      const saleMode = typeof msg.data?.saleId === 'string';
+      if (msg.type === 'auction-won' && !saleMode) counterparty = a?.seller ?? null;
+      if (msg.type === 'auction-sold' && !saleMode) counterparty = a?.winner ?? a?.highestBidder ?? null;
     }
 
     const content = buildContent({

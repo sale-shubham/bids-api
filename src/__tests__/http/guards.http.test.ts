@@ -48,6 +48,14 @@ const AUTHED: Route[] = [
   ['get', '/saved-searches'],
   ['post', '/saved-searches'],
   ['delete', '/saved-searches/ss1'],
+  ['get', '/sales/mine'],
+  ['get', '/sales/sale1'],
+  ['post', '/sales/sale1/checkout'],
+  ['post', '/sales/sale1/ship'],
+  ['post', '/sales/sale1/confirm'],
+  ['post', '/sales/sale1/dispute'],
+  ['get', '/payouts/account'],
+  ['post', '/payouts/account'],
 ];
 
 const ADMIN: Route[] = [
@@ -67,6 +75,9 @@ const ADMIN: Route[] = [
   ['put', '/admin/settings/device-limit'],
   ['get', '/admin/reviews'],
   ['patch', '/admin/reviews/r1'],
+  ['get', '/admin/sales'],
+  ['post', '/admin/sales/sale1/release'],
+  ['post', '/admin/sales/sale1/refund'],
 ];
 
 const SELLER_ONLY: Route[] = [
@@ -81,6 +92,9 @@ const SELLER_ONLY: Route[] = [
   ['get', '/commissions/mine'],
   ['get', '/commissions/summary'],
   ['post', '/commissions/c1/checkout'],
+  ['post', '/sales/sale1/ship'],
+  ['get', '/payouts/account'],
+  ['post', '/payouts/account'],
 ];
 
 const BIDDER_ONLY: Route[] = [
@@ -92,6 +106,9 @@ const BIDDER_ONLY: Route[] = [
   ['get', '/saved-searches'],
   ['post', '/saved-searches'],
   ['delete', '/saved-searches/ss1'],
+  ['post', '/sales/sale1/checkout'],
+  ['post', '/sales/sale1/confirm'],
+  ['post', '/sales/sale1/dispute'],
 ];
 
 const PUBLIC: Route[] = [

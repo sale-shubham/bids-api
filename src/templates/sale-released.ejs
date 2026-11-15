@@ -1,0 +1,6 @@
+<%- include('_head', { heading: 'Your payout was released', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  The payout of <strong><%= payout %></strong> for <strong><%= auctionTitle %></strong> was released to your linked account. It will reach your bank in the next settlement.
+                </p>
+<%- include('_foot', { ctaUrl: saleUrl, ctaLabel: 'View sale', frontendUrl }) %>

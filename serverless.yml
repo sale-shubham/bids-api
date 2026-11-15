@@ -266,6 +266,13 @@ functions:
     timeout: 60
     events:
       - schedule: rate(1 day)
+  salesMaintenance:
+    name: ${self:service}${sls:stage}-sales-maintenance
+    handler: dist/index.salesMaintenanceHandler
+    description: Hourly - cancel unpaid sales, auto-confirm shipped sales after 7 days and release held funds, retry failed releases.
+    timeout: 120
+    events:
+      - schedule: rate(1 hour)
 
 resources:
   Conditions:

@@ -11,4 +11,8 @@ export type {
   GatewayPayment,
   CreatedGatewayOrder,
   VerifyPaymentInput,
+  OrderTransfer,
+  GatewayTransfer,
+  RouteAccountInput,
+  CreatedRouteAccount,
 } from './payment.provider';
