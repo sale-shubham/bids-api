@@ -11,5 +11,5 @@
 
 ## Deployment
 - `.github/workflows/pr_checks.yml`: `npm ci` -> `prisma generate` -> `npm run check`.
-- `.github/workflows/deploy_serverless.yml`: branch `dev` -> stage dev, `main` -> stage prod; `prisma migrate deploy`, `npm run build:lambda`, `serverless deploy`; stack outputs go to the job summary. Full secret/variable table: `readme/flows/deployment.md`; sync them with `npm run env:sync`. Secrets (JWT, DB, Razorpay, VAPID private) come from GitHub `secrets.*`.
+- `.github/workflows/deploy_serverless.yml`: branch `dev` -> stage dev (the live deployment, `https://bidsapi.shubsale.in`), `main` -> stage prod (not deployed yet, optional); `prisma migrate deploy`, `npm run build:lambda`, `serverless deploy`; stack outputs go to the job summary. Full secret/variable table: `readme/flows/deployment.md`; sync them with `npm run env:sync`. Secrets (JWT, DB, Razorpay, VAPID private) come from GitHub `secrets.*`.
 - Runtime env: pooled `DATABASE_URL`; `DIRECT_URL` only for migrations. Lambda env is declared in `serverless.yml`.

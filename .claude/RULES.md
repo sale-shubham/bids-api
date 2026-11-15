@@ -21,7 +21,7 @@ These rules apply to every task in this repository without exception.
 
 - Never add two packages that solve the same problem.
   - Validation: use **Joi** only (not zod, not yup — zod was removed).
-  - HTTP client: no axios — backend makes no outbound HTTP (except Razorpay SDK).
+  - HTTP client: no axios — use native `fetch` (the only outbound HTTP is the Razorpay REST API in `src/providers/payment/razorpay.payment.ts`; AWS calls go through the AWS SDK).
   - Date/time: native `Date` only.
   - ORM: Prisma only.
 - Do not modify `package.json` without explicit instruction.
@@ -80,7 +80,7 @@ When asked to create a ticket (GitHub issue):
 - TypeScript: no `any` unless unavoidable; use explicit types.
 - No commented-out code left in commits.
 - No per-file docstrings or multi-line comment blocks — one short line max.
-- **Reuse before creating.** Before writing a new helper, middleware, or service function, search `src/core/` (`http/`, `middleware/`, `errors/`, `prisma/`, `config/`) and sibling modules under `src/modules/` for one that already does the job (e.g. `ok`/`paginated`, `AppError`/`Conflict`/`NotFound`, `asyncHandler`, `validate`, `offsetArgs`, key-generation like `generateKey`/`slugify`). Only write a new one if nothing fits — and if the need is generic (not one-module-specific), add it to `src/core/` rather than duplicating it inline in a module. Never copy-paste an existing helper's logic under a new name.
+- **Reuse before creating.** Before writing a new helper, middleware, or service function, search `src/core/` (`http/`, `middleware/`, `errors/`, `prisma/`, `config/`) and sibling modules under `src/modules/` for one that already does the job (e.g. `ok`/`paginated`, `AppError`/`Conflict`/`NotFound`, `asyncHandler`, `validate`, `offsetArgs`, `param`). Only write a new one if nothing fits — and if the need is generic (not one-module-specific), add it to `src/core/` rather than duplicating it inline in a module. Never copy-paste an existing helper's logic under a new name.
 
 ---
 
@@ -95,11 +95,11 @@ When asked to create a ticket (GitHub issue):
 ## 8. API-specific hard rules
 
 - **Validation** — every route body/query uses `validate(schema, source)` (`src/core/middleware/validate.ts`) with Joi schema from the module's `*.validation.ts`.
-- **Auth** — protected routes use `authenticate` + `requireRole`/`requireApprovedMember` from `src/core/middleware/auth.ts`.
+- **Auth** — protected routes use `authenticate` + `requireRole` / `requireActiveMember` from `src/core/middleware/auth.ts`; public routes that personalise for a signed-in viewer use `optionalAuthenticate`.
 - **Error handling** — throw `AppError` for known errors. `asyncHandler` wraps all route handlers.
 - **Response** — use `ok(res, data)` and `paginated(res, items, meta)` from `src/core/http/response.ts`.
 - **Prisma client** — singleton from `src/core/prisma/client.ts`. Never `new PrismaClient()` elsewhere.
-- **Machine keys/slugs** — any unique machine identifier (`key`, `slug`, etc.) on a model that also has a human label (`name`/`label`) is **always generated server-side** from that label (see `generateKey` in `specifications.service.ts`, `slugify` in `plans.routes.ts`). Never accept it in the create Joi schema, never accept it on update, never require the frontend to send or display it. Collision → `Conflict` (409).
+- **Money** — integer paise everywhere (DB, services, API). Money-moving paths must be idempotent (`PaymentOrder.idempotencyKey`, `WebhookEvent` dedupe).
 
 ---
 
@@ -115,10 +115,10 @@ If something close already exists, extend or parameterize it instead of adding a
 
 ---
 
-## 10. Session bootstrap (mandatory)
+## 10. Session bootstrap
 
-RULES.md is auto-injected at the start of every session via the `SessionStart` hook in `.claude/settings.local.json`.
+`CLAUDE.md` points here; read this file at the start of every session. The only hook in `.claude/settings.json` is the `Stop` quality gate (`.claude/hooks/quality-gate.sh`: `npm run typecheck` + `npm test`).
 
 ---
 
-*Last updated: 2026-07-17*
+*Last updated: 2026-11-15*

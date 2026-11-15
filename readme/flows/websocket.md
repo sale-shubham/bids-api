@@ -44,4 +44,4 @@ In the non-production branch of `index.js` (and only if `WS_API_ENDPOINT` is emp
 
 ## Limits
 
-API Gateway: 10 min idle timeout (clients ping about every 5 min), 2 h max connection (clients reconnect with a fresh ticket). The daily retention purge deletes `WsConnection` rows older than 2 h and expired/old `WsTicket` rows.
+API Gateway: 10 min idle timeout (clients ping every 4.5 min), 2 h max connection (clients reconnect with a fresh ticket). The daily retention purge deletes `WsConnection` rows older than 2 h and expired/old `WsTicket` rows.

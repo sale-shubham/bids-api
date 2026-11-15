@@ -11,7 +11,7 @@ const push = vi.hoisted(() => vi.fn(async () => undefined));
 vi.mock('@/core/prisma/client', () => ({ prisma: db }));
 vi.mock('@/core/logger/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/core/config/env', () => ({
-  env: { app: { url: 'https://app.test' }, email: { fromName: 'NobleBid', logoUrl: '' } },
+  env: { app: { url: 'https://app.test', websiteUrl: 'https://www.test' }, email: { fromName: 'NobleBid', logoUrl: '' } },
 }));
 vi.mock('@/providers/email', () => ({ emailProvider: { send } }));
 const wsPush = vi.hoisted(() => vi.fn(async () => undefined));
@@ -135,6 +135,9 @@ describe('formatInr + templates', () => {
     });
     expect(out.html).toContain('Vintage Watch');
     expect(out.text).toContain('Vintage Watch');
+    expect(out.text).toContain('Support: https://www.test/contact');
+    expect(out.html).toContain('https://www.test/contact');
+    expect(out.html).not.toContain('https://app.test/contact');
     if (type === 'auction-won') expect(out.text).toContain('Seller: Asha, a@example.com, phone not provided');
   });
 });
