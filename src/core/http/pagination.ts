@@ -19,7 +19,7 @@ export function buildPage<T extends { id: string }>(rows: T[], limit: number) {
 
 // ---- Offset pagination (page-numbers) ----
 // For admin/member list tables that want jump-to-page + a free-text `q` search
-// bar. Keyset (buildPage above) stays the default for the buyer catalog/FTS.
+// bar. Keyset (buildPage above) stays the default for the public auction catalog/search.
 export const offsetSchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   pageSize: Joi.number().integer().min(1).max(100).default(20),

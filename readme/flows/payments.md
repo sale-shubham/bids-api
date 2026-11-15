@@ -68,7 +68,7 @@ The browser callback and the webhook race on purpose: whichever arrives first se
 
 ## Waive and reminders
 
-- `waiveCommission(commissionId, adminId)` (service only; the admin route lands in Phase 6): DUE -> WAIVED, unpaid decremented with the same clamp; 409 `COMMISSION_NOT_DUE` otherwise.
+- `waiveCommission(commissionId, adminId)` (admin route `POST /admin/commissions/:id/waive`, see `admin.md`): DUE -> WAIVED, unpaid decremented with the same clamp; 409 `COMMISSION_NOT_DUE` otherwise.
 - `runCommissionReminders(now)`: DUE commissions past `dueAt` or older than 3 days -> `commission-due` notification with `dedupeKey commission-reminder:<id>:<YYYY-MM-DD>` (UTC date), so at most one per commission per day. Lambda: `commissionReminder` (`rate(1 day)`, `index.commissionReminderHandler`). Local dev server: once at startup, then every 6 h.
 
 ## Stub mode (`PAYMENT_DRIVER=stub`, the default)

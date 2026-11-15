@@ -50,10 +50,7 @@ custom domain).
 
 ## CORS
 
-Handled by the Express `cors()` middleware (`src/app.ts`), origin list from `CORS_ORIGINS` (comma separated, no
-trailing slash, falls back to `APP_URL`), `credentials: true`, preflight cached 2h. API Gateway-level CORS is
-deliberately off: Serverless v4 variables cannot split a comma string into a list. The catch-all route forwards
-`OPTIONS` to the Lambda. Add every app origin (prod, dev, `http://localhost:3002`) to `CORS_ORIGINS`.
+Deployed stages: API Gateway answers CORS (`serverless.yml` `provider.httpApi.cors`) with an explicit origin list in `cors.allowedOrigins` (a YAML list, because Serverless v4 variables cannot split a comma string; same pattern as P2X), `allowCredentials: true`, preflight cached 2h. API Gateway answers `OPTIONS` itself (no Lambda invoke) and ignores CORS headers from Express. Local dev (`npm run dev`): the Express `cors()` middleware (`src/app.ts`) uses `CORS_ORIGINS` (comma separated, no trailing slash, falls back to `APP_URL`, exact match per origin). To add a browser origin (app, marketing website, `http://localhost:3002`), edit `provider.httpApi.cors.allowedOrigins` in `serverless.yml` AND `CORS_ORIGINS`, then deploy. Live (`dev` stage): `https://bidsapp.shubsale.in` and `https://noblebids.shubsale.in` (the website's contact form POSTs `/contact`).
 
 ## Cookies: two deploy modes
 
@@ -61,8 +58,8 @@ Auth cookies (`nb_at`, `nb_rt`, `dvid`) are built by `src/core/http/cookie-optio
 
 | Mode | App | API | `COOKIE_DOMAIN` | `COOKIE_SAMESITE` |
 |---|---|---|---|---|
-| (a) custom domain | `app.<domain>` | `api.<domain>` | `.<domain>` | `lax` |
-| (b) temporary, no domain | Amplify default URL | called through a Next.js rewrite on the app origin | empty (host-only cookie, no `domain` attribute) | `lax` |
+| (a) custom domain (live on the `dev` stage) | `bidsapp.shubsale.in` | `bidsapi.shubsale.in` | `.shubsale.in` | `lax` |
+| (b) no domain (proxy; optional, not what dev uses) | Amplify default URL | called through a Next.js rewrite on the app origin | empty (host-only cookie, no `domain` attribute) | `lax` |
 
 `COOKIE_SAMESITE=none` forces `Secure`; only for genuinely cross-site setups. In mode (b) the browser only
 talks to the app origin, so the cookie is first-party; set `APP_URL` to the Amplify URL and `CORS_ORIGINS` to it too.
@@ -83,9 +80,10 @@ the same name with `_PROD`. Shared names have no `_PROD` twin. Empty optional va
 | `VAPID_PRIVATE_KEY` | secret | shared | one pair, never rotate |
 | `AWS_REGION` | var | yes | `ap-south-1` |
 | `AWS_BUCKET_NAME` | var | yes | globally unique |
-| `APP_URL` | var | prod yes | links in emails |
-| `CORS_ORIGINS` | var | recommended | comma list; empty -> `APP_URL` |
-| `COOKIE_DOMAIN` | var | optional | empty = host-only; `.example.com` in mode (a) |
+| `APP_URL` | var | prod yes | auction/commission links in emails; live `https://bidsapp.shubsale.in` |
+| `WEBSITE_URL` | var | optional | marketing site origin, support `/contact` links in emails; empty -> `APP_URL`; live value `https://noblebids.shubsale.in` (set 2026-11-15) |
+| `CORS_ORIGINS` | var | recommended | comma list; empty -> `APP_URL`. Express (local dev) only; deployed CORS comes from `provider.httpApi.cors.allowedOrigins` in `serverless.yml`, keep both in sync |
+| `COOKIE_DOMAIN` | var | optional | empty = host-only (no-domain mode); live `.shubsale.in` |
 | `COOKIE_SAMESITE` | var | optional | `lax` (default) / `none` |
 | `PAYMENT_DRIVER` | var | yes | `stub` / `razorpay` |
 | `EMAIL_DRIVER` | var | optional | default `stub` dev, `ses` prod |
@@ -114,7 +112,7 @@ passed to `gh` on stdin, never on the command line or in output. Empty values ar
 
 ## First deploy
 
-1. Create the managed Postgres DB (pooled + direct URLs), an IAM deploy user (CloudFormation, Lambda, API Gateway,
+1. Create the managed Postgres DBs (`noblebid_dev`, `noblebid_prod`; pooled + direct URLs each; local dev uses Docker Postgres or a dev-branch DB), an IAM deploy user (CloudFormation, Lambda, API Gateway,
    S3, SQS, CloudFront, IAM role/pass-role, SNS, CloudWatch, Logs, Events), and a Serverless access key
    (app.serverless.com > Access Keys; org/app must allow service `bids-api`).
 2. Generate secrets: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"` (x2) and
@@ -122,15 +120,23 @@ passed to `gh` on stdin, never on the command line or in output. Empty values ar
 3. Fill `deploy/dev.env`, run `env:sync` (see above).
 4. Push to `dev` (or Actions > Run workflow on `dev`). Read the API/WS/media URLs in the job summary.
 5. Seed the Super Admin once: `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` + `npm run prisma:seed` against the DB.
-6. Point the app (`NEXT_PUBLIC_API_URL` or the Next.js rewrite target) at `HttpApiUrl`; `NEXT_PUBLIC_WS_URL`
-   style settings at `WebSocketUrl`.
+6. Point the app (`NEXT_PUBLIC_API_URL` or the Next.js rewrite target `API_PROXY_TARGET`) at `HttpApiUrl`. The app
+   needs no WebSocket setting: the ticket endpoint returns the `WebSocketUrl` to connect to.
 
-## Custom domain (optional, switched on by variables)
+## Custom domain (live: bidsapi.shubsale.in on the dev stage)
 
-1. Request an ACM certificate for `api.<domain>` in **ap-south-1** (DNS validation: add the CNAME ACM shows).
-2. Set `API_DOMAIN_NAME=api.<domain>`, `API_CERTIFICATE_ARN=<arn>` (per stage), redeploy.
-3. Read output `CustomDomainTarget` and create DNS `CNAME api.<domain> -> <that value>`.
-4. Switch the app to `https://api.<domain>`, set `COOKIE_DOMAIN=.<domain>`, `CORS_ORIGINS=https://app.<domain>`, redeploy.
+The `dev` stage (stack `bids-api-dev`) is the live deployment. Hosts: website `https://noblebids.shubsale.in`, app `https://bidsapp.shubsale.in`, API `https://bidsapi.shubsale.in`. DNS is in Route 53 (hosted zone `shubsale.in`, which also hosts unrelated sites). Live GitHub variables use the plain names: `APP_URL`, `CORS_ORIGINS`, `COOKIE_DOMAIN=.shubsale.in`, `API_DOMAIN_NAME=bidsapi.shubsale.in`, `AWS_REGION=ap-south-1`. `WEBSITE_URL=https://noblebids.shubsale.in` (set 2026-11-15; used from the first deploy that includes the `WEBSITE_URL` code).
+
+1. Request an ACM certificate for `bidsapi.shubsale.in` in **ap-south-1**, DNS validation through Route 53 ("Create records in Route 53").
+2. Set `API_DOMAIN_NAME=bidsapi.shubsale.in` (and `API_CERTIFICATE_ARN` if the workflow needs it), then deploy `dev`.
+3. Read output `CustomDomainTarget` and create a Route 53 record `bidsapi.shubsale.in -> <that value>`.
+4. Set `COOKIE_DOMAIN=.shubsale.in`, `APP_URL=https://bidsapp.shubsale.in`, `CORS_ORIGINS=https://bidsapp.shubsale.in`; point the app at `https://bidsapi.shubsale.in`; redeploy.
+   Done 2026-11-15: `CORS_ORIGINS` includes `https://noblebids.shubsale.in`, so the website contact form works. `WEBSITE_URL=https://noblebids.shubsale.in` is set too; it takes effect on the first deploy that includes the `WEBSITE_URL` code.
+
+`COOKIE_DOMAIN=.shubsale.in` is the owner's choice: `nb_at` / `nb_rt` reach every `*.shubsale.in` host, including unrelated sites, so no other app there may use those cookie names.
+
+A `prod` stage (branch `main`, `_PROD` names) has not been deployed; it is an optional future stage and would need its own hostnames and cookie scope. No-domain (proxy) mode remains documented above as an option.
+
 5. Only now optionally set `DISABLE_DEFAULT_ENDPOINT=true` (resolved with `strToBool`, default false) so the raw
    `execute-api` URL stops working. Doing it earlier locks you out.
 6. The WebSocket keeps its `wss://<id>.execute-api...` URL (no cookie needed; clients use a REST ticket).

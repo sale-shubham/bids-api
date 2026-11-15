@@ -84,6 +84,8 @@ provider:
 
     # App
     APP_URL: ${env:APP_URL, 'https://app.example.com'}
+    # Public marketing website origin (support links in emails). Falls back to APP_URL.
+    WEBSITE_URL: ${env:WEBSITE_URL, env:APP_URL, 'https://app.example.com'}
     ADMIN_EMAIL: ${env:ADMIN_EMAIL, ''}
     COMMISSION_RATE_BPS: ${env:COMMISSION_RATE_BPS, '500'}
 

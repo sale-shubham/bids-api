@@ -41,6 +41,6 @@ Run every minute by the `closeAuctions` Lambda (EventBridge), by a 60 s `setInte
 3. With bids: `Commission` (`rateBps` from AppSetting `commission.rateBps`, fallback `COMMISSION_RATE_BPS`; `amountPaise = round(currentBidPaise * rateBps / 10000)`; `DUE`; `dueAt = now + 7 days`), seller `unpaidCommissionPaise += amount`, winner `auctionsWon + 1`, `moneySpentPaise += currentBidPaise`.
 4. After each commit: `publishAuctionEvent(auction.ended)` and notifications `auction-won`, `auction-sold`, `commission-due` (or `auction-unsold`). Returns `{ started, ended, sold, unsold }`.
 
-## Real-time hook (Phase 4)
+## Real-time events
 
-`publishAuctionEvent(event)` in `auction-events.ts` is a no-op now. Events: `bid.placed { auctionId, currentBidPaise, bidCount, endTime, highestBidderId, previousHighestBidderId, bid: { id, amountPaise, createdAt, bidderLabel } }`, `auction.extended { auctionId, endTime }`, `auction.ended { auctionId, winnerId, finalBidPaise, bidCount, endedAt }`.
+`publishAuctionEvent(event)` in `auction-events.ts` fans each event out over WebSocket (auction room + member-targeted outbid / won frames; never throws, see `websocket.md`). Events: `bid.placed { auctionId, currentBidPaise, bidCount, endTime, highestBidderId, previousHighestBidderId, bid: { id, amountPaise, createdAt, bidderLabel } }`, `auction.extended { auctionId, endTime }`, `auction.ended { auctionId, winnerId, finalBidPaise, bidCount, endedAt }`.

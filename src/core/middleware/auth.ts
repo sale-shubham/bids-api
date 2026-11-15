@@ -24,7 +24,7 @@ export const ACCESS_COOKIE = 'nb_at';
 export const REFRESH_COOKIE = 'nb_rt';
 
 // Checks the Session row on every call (not just the JWT signature) so a
-// device evicted by the 2-device cap (src/modules/auth/session.service.ts)
+// device evicted by the device cap (default 3, admin-configurable; src/modules/auth/session.service.ts)
 // is rejected on its very next request, instead of staying valid until the
 // access token's natural 15-min expiry.
 export async function authenticate(req: Request, _res: Response, next: NextFunction) {

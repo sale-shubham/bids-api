@@ -253,7 +253,7 @@ model Notification {
 
 // One row per open socket. `id` IS the API Gateway connectionId. memberId is
 // optional (guests may connect); auctionId is the auction room the socket
-// subscribed to (no relation until the Auction model exists).
+// subscribed to (plain column, no foreign key).
 model WsConnection {
   id          String   @id
   member      Member?  @relation(fields: [memberId], references: [id], onDelete: Cascade)
@@ -317,7 +317,7 @@ model PaymentOrder {
   gatewayOrderId String        @unique // razorpay order id (or stub id)
   amountPaise    Int
   status         PaymentStatus @default(CREATED)
-  // What the order pays for (e.g. 'COMMISSION' + its id) — set in Phase 1.
+  // What the order pays for (e.g. 'COMMISSION' + its id) — set when the order is created.
   referenceType  String?
   referenceId    String?
   // Razorpay payment id that settled the order (set when marked PAID).
