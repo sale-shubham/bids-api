@@ -92,7 +92,7 @@ export class S3Storage implements StorageProvider {
     );
   }
 
-  // Short-lived READ URL for private objects (KYC/verification documents).
+  // Short-lived READ URL for private objects (private uploads such as ID documents).
   // Never use url() for those — it returns a permanent, unauthenticated link.
   async presignGet(key: string, expiresIn = 15 * 60): Promise<string> {
     const { sdk } = await this.sdk();

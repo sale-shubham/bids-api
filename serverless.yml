@@ -34,11 +34,31 @@ provider:
     # API_CERTIFICATE_ARN are deployed. strToBool is the boolean-safe resolver:
     # a bare ${env:...} would yield the STRING 'false', not a CFN boolean.
     disableDefaultEndpoint: ${strToBool(${env:DISABLE_DEFAULT_ENDPOINT, 'false'})}
-    # No API Gateway-level CORS on purpose. CORS_ORIGINS is a comma-separated
-    # string and Serverless v4 variables cannot split it into a list, so CORS is
-    # handled by the Express cors() middleware (src/app.ts: origin list from
-    # CORS_ORIGINS, credentials, 2h preflight cache). The catch-all route
-    # (/{proxy+}, method '*') forwards OPTIONS to the Lambda.
+    # CORS is answered by API Gateway, not Express: it answers preflights itself
+    # (no Lambda invoke) and ignores CORS headers returned by Express. Origins are
+    # listed explicitly because '*' is invalid with allowCredentials. Serverless
+    # cannot split the comma-separated CORS_ORIGINS, so keep this list in sync with
+    # it (Express uses CORS_ORIGINS for local dev only).
+    cors:
+      allowedOrigins:
+        - https://bidsapp.shubsale.in
+        - https://noblebids.shubsale.in
+      allowedMethods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      allowedHeaders:
+        - content-type
+        - authorization
+        - accept
+        - x-requested-with
+      exposedResponseHeaders:
+        - content-disposition
+      allowCredentials: true
+      maxAge: 7200
     payload: '2.0'
   environment:
     NODE_ENV: ${env:NODE_ENV, 'production'}
@@ -64,6 +84,8 @@ provider:
 
     # App
     APP_URL: ${env:APP_URL, 'https://app.example.com'}
+    # Public marketing website origin (support links in emails). Falls back to APP_URL.
+    WEBSITE_URL: ${env:WEBSITE_URL, env:APP_URL, 'https://app.example.com'}
     ADMIN_EMAIL: ${env:ADMIN_EMAIL, ''}
     COMMISSION_RATE_BPS: ${env:COMMISSION_RATE_BPS, '500'}
 

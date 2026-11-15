@@ -6,6 +6,8 @@ Read a named route param with `param(req, 'id')`, never `req.params.id`. Express
 
 Express 5 route patterns (path-to-regexp v8): wildcards must be named (`/*splat`), optional segments use braces (`/items{/:id}`), and regex/`?`/`+` patterns are gone. `req.query` is a read-only getter — `validate()` replaces it with `Object.defineProperty`, never assignment.
 
+Fixed paths are declared before `/:id` so they are never read as an id: `/auctions/home`, `/categories`, `/sitemap` and `/mine` come before `/auctions/:id`; `/watchlist/ids` before `/watchlist/:auctionId`; `/members/me` before `/members/:id/public`. Bids are mounted as a child router (`auctionBidsRouter`, `mergeParams: true`) at `/auctions/:id/bids`, so `param(req, 'id')` there is the auction id.
+
 ## AppError
 
 `src/core/errors/AppError.ts`
@@ -13,47 +15,91 @@ Express 5 route patterns (path-to-regexp v8): wildcards must be named (`/*splat`
 ```typescript
 class AppError extends Error {
   constructor(
-    public statusCode: number,
-    public code: string,
+    public readonly statusCode: number,
+    public readonly code: string,
     message: string,
-    public details?: unknown,
+    public readonly details?: unknown,
   ) { ... }
 }
 ```
 
-Throw for expected, user-facing errors. `errorHandler` converts to JSON response. Factory helpers: `BadRequest` (400), `Unauthorized` (401), `Forbidden` (403), `NotFound` (404), `Conflict` (409), `UnprocessableEntity` (422), `TooManyRequests` (429).
+Throw for expected, user-facing errors. `errorHandler` converts to JSON response. Factory helpers: `BadRequest` (400 `BAD_REQUEST`), `Unauthorized` (401 `UNAUTHORIZED`), `Forbidden` (403 `FORBIDDEN`), `NotFound` (404 `NOT_FOUND`), `Conflict` (409 `CONFLICT`), `UnprocessableEntity` (422 `UNPROCESSABLE_ENTITY`), `TooManyRequests` (429 `TOO_MANY_REQUESTS`), `ServiceUnavailable` (503 `SERVICE_UNAVAILABLE`). Only `BadRequest`, `Conflict` and `UnprocessableEntity` take `details`.
+
+When the frontend needs to tell one failure from another, throw `new AppError(status, 'SPECIFIC_CODE', message)` instead of a generic helper. Examples in the code: `AUCTION_NOT_FOUND` (404), `BID_TOO_LOW` (400, `details` carries the minimum acceptable bid), `ALREADY_HIGHEST`, `AUCTION_ENDED`, `AUCTION_HAS_BIDS` (409), `OWN_AUCTION`, `COMMISSION_UNPAID`, `ACCOUNT_SUSPENDED`, `EMAIL_NOT_VERIFIED` (403), `COMMISSION_NOT_DUE`, `CANNOT_MODIFY_SELF` (409), `INVALID_CREDENTIALS` (401).
 
 ## Response helpers
 
 `src/core/http/response.ts`
 
 ```typescript
-ok(res, data, statusCode = 200)
+ok(res, data, status = 200)
 // → { success: true, data }
 
-paginated(res, items, meta)
-// → { success: true, data: items, meta: { nextCursor?: string | null, total?: number } }
+paginated(res, items, meta, extra?)
+// meta: { nextCursor?, total?, page?, pageSize?, totalPages? }
+// → { success: true, data: items, meta, ...extra }
 ```
 
-Always use these — never `res.json()` directly in route handlers.
+`extra` adds top-level siblings of `data` / `meta`: `GET /auctions`, `/auctions/mine`, `/watchlist` and `/admin/auctions` add `serverTime` (ISO string, so the client can run countdowns against server time); `GET /admin/members` adds `stats` (`{ total, active, inactive }`). Created resources answer `ok(res, data, 201)` (e.g. `POST /auctions`, `POST /auctions/:id/bids`).
+
+Always use these — never `res.json()` directly in route handlers. The one exception is `GET /health` in `src/routes.ts`, which writes the same envelope by hand.
 
 ## asyncHandler
 
 `src/core/middleware/asyncHandler.ts`
 
 ```typescript
-asyncHandler(fn: AsyncRequestHandler): RequestHandler
+asyncHandler(fn: (req, res, next) => Promise<unknown>): RequestHandler
 ```
 
 Wraps async route handler. Forwards thrown errors to Express `next`. Use on every async handler.
+
+Handlers lazy-load their service and the response helpers with dynamic `import()` inside the handler body (Lambda cold start), e.g.:
+
+```typescript
+export async function list(req: Request, res: Response) {
+  const { paginated } = await import('@/core/http/response');
+  const svc = await import('./auctions.service');
+  const { items, meta } = await svc.listAuctions(req.query as unknown as ListQuery);
+  return paginated(res, items, meta, { serverTime: new Date().toISOString() });
+}
+```
 
 ## Pagination
 
 `src/core/http/pagination.ts`
 
-Two strategies live side by side. Keyset (cursor) is the default; offset (page-numbers + `q` search) is used by admin/member list tables that want jump-to-page.
+Every list endpoint uses **offset** paging (page numbers). The file also holds a keyset helper and opt-in "options" helpers that no endpoint uses yet.
 
-### Keyset (cursor)
+### Offset (page-numbers)
+
+```typescript
+offsetSchema  // Joi: { page: int>=1 (default 1), pageSize: int 1-100 (default 20), q?: string }
+offsetArgs({ page, pageSize })      // → { skip: (page-1)*pageSize, take: pageSize }
+pageMeta(total, { page, pageSize }) // → { total, page, pageSize, totalPages }  (totalPages >= 1)
+```
+
+Each module declares the same `page` / `pageSize` fields in its own Joi schema (min 1 / 1-100, defaults 1 / 20) next to its filters, rather than extending `offsetSchema`. The service runs `findMany({ where, orderBy, ...offsetArgs(q) })` + `count({ where })` in a `Promise.all` and returns `{ items, meta: pageMeta(total, q) }`; the controller responds `paginated(res, items, meta)`. Free-text `q` filters with `{ contains: q, mode: 'insensitive' }`: auction `title` on `GET /auctions`; title, seller email or seller name on `GET /admin/auctions`; name, email or phone on `GET /admin/members`.
+
+Where the order depends on a computed value Prisma cannot `ORDER BY`, the service sorts in memory and slices with `offsetArgs`, then builds `pageMeta` from the in-memory length: `GET /auctions?sort=priceAsc|priceDesc` (price = current bid if any, else starting bid), `GET /watchlist` (live and upcoming first, by computed status) and `GET /bids/mine` (grouped per auction, filtered by tab).
+
+Adopters: `GET /auctions`, `/auctions/mine`, `/auctions/:id/bids`, `/bids/mine`, `/watchlist`, `/notifications`, `/commissions/mine`, `/admin/auctions`, `/admin/members`, `/admin/commissions`, `/admin/payments`. `GET /leaderboard` is not paged: it takes `limit` (1-50, default 20).
+
+### Column sort (`sortBy`/`sortOrder`)
+
+```typescript
+sortOrderSchema  // Joi: 'asc' | 'desc', optional — the shared half; sortBy itself is validated per-module
+
+buildOrderBy(sortBy, sortOrder, sortMap, fallback)
+// sortMap: Record<string, (order: SortOrder) => PrismaOrderByFragment>
+// → sortMap[sortBy]?.(order) ?? fallback   (order defaults to 'asc')
+```
+
+Turns a table-header sort click into a real Prisma `orderBy` applied **before** the `offsetArgs` `skip`/`take` slice, so the sort is correct across page boundaries. `sortBy` is never accepted as a raw column name: the module's `*.validation.ts` declares a `.valid(...)` allowlist (Joi rejects anything else with 400), and `sortMap` maps each allowed key to its Prisma fragment. A key with no `sortMap` entry falls back to `fallback`.
+
+Adopter: `GET /admin/members` — `sortBy` one of `name`, `email`, `role`, `createdAt`, `isActive` (`MEMBER_SORT_MAP` in `admin-members.service.ts`), fallback `{ createdAt: 'desc' }`.
+
+### Keyset (cursor) — unused
 
 ```typescript
 paginationSchema  // Joi: { cursor?: string, limit: number (1-100, default 20) }
@@ -63,42 +109,18 @@ buildPage(rows, limit)
 // → { items: rows.slice(0, limit), nextCursor: lastItem.id | null }
 ```
 
-Fetch `limit + 1` rows, `buildPage` trims to `limit` and derives `nextCursor` from the last kept row's `id` (null when no more). Validate query with `paginationSchema` via `validate(paginationSchema, 'query')`. Used by the buyer catalog/FTS search. (Admin/member list tables — members, listings, member-edits — use **offset** below.)
+Fetch `limit + 1` rows; `buildPage` trims to `limit` and derives `nextCursor` from the last kept row's `id` (null when no more). No route uses it today.
 
-### Offset (page-numbers)
-
-```typescript
-offsetSchema  // Joi: { page: int>=1 (default 1), pageSize: int 1-100 (default 20), q?: string }
-offsetArgs({ page, pageSize })     // → { skip: (page-1)*pageSize, take: pageSize }
-pageMeta(total, { page, pageSize }) // → { total, page, pageSize, totalPages }
-```
-
-Service runs `findMany({ where, ...offsetArgs(p) })` + `count({ where })` in a `Promise.all`, returns `{ items, total }`. Controller responds `paginated(res, items, pageMeta(total, { page, pageSize }))`. Free-text `q` filters via `{ <field>: { contains: q, mode: 'insensitive' } }`. Extend `offsetSchema.keys({ status: ... })` to add per-list filters. Adopters: `GET /listings/mine`, `GET /admin/listings`, `GET /admin/members` (uses `search` not `q`), `GET /admin/subscriptions`.
-
-### Dropdown "options" endpoints — `q` + opt-in paging (2026-11-02)
-
-Every endpoint behind a searchable dropdown in the web app (server-side `q`, 25 rows per page, load-more on scroll, "x of N") shares these helpers from `src/core/http/pagination.ts` / `response.ts`:
+### Dropdown "options" helpers — unused
 
 ```typescript
 optionsQuerySchema        // Joi: { q?: string (trim, '' allowed), page?: int>=1, pageSize?: int 1-100 } — NO defaults
-optionalPaging({page,pageSize}) // → { page, pageSize } if EITHER was sent (page=1, pageSize=25 fill the other), else null
-excludeIdsSchema          // Joi: comma-separated or repeated ids → string[] (trimmed, max 500)
-optionsResult(res, items, total, paging) // paging null → ok(res, items) (legacy bare array); else paginated(res, items, pageMeta(total, paging))
+optionalPaging({page,pageSize}) // → { page, pageSize } if EITHER was sent (page=1, pageSize=DEFAULT_OPTIONS_PAGE_SIZE=25 fill the other), else null
+excludeIdsSchema          // Joi: comma-separated or repeated ids → string[] (trimmed, blanks dropped, max 500)
+optionsResult(res, items, total, paging) // paging null → ok(res, items) (bare array); else paginated(res, items, pageMeta(total, paging))
 ```
 
-**Opt-in rule:** a call with neither `page` nor `pageSize` returns exactly what it always did (bare array, or the endpoint's own legacy cap), so the deployed app keeps working. Sending either returns the standard paged shape `{ success, data: rows, meta: { total, page, pageSize, totalPages } }`, with no 200-row cap. Empty `q` is valid and means "no filter". Label lookups for a selected id that may be off the loaded page are per-endpoint `GET .../:id` routes (see the flow docs). Adopters: `GET /admin/businesses/members-options`, `/admin/listings/business-options`, `/admin/watchlist/members`, `/admin/inquiries/members`, `/admin/plans`, `/admin/features`, `/admin/specifications`, `/admin/quantities` (these two key off `page` only), `GET /products`. Covered by `pagination.options.test.ts`, `response.test.ts`, `modules/admin/options-endpoints.test.ts`.
-
-### Column sort (`sortBy`/`sortOrder`)
-
-```typescript
-sortOrderSchema  // Joi: 'asc' | 'desc', optional — the shared half; sortBy itself is validated per-module
-
-buildOrderBy(sortBy, sortOrder, sortMap, fallback)
-// sortMap: Record<string, (order: SortOrder) => PrismaOrderByFragment>
-// → sortMap[sortBy]?.(order) ?? fallback
-```
-
-Backs the web app's `SortableTableHead`/`useSortState` (`readme/ui/components.md` there) — a click sends `sortBy`/`sortOrder` as query params, this turns them into a real Prisma `orderBy` **before** the `offsetArgs` `skip`/`take` slice, so sort is correct across page boundaries (client-side re-sort alone can only ever reorder the one page already fetched). `sortBy` is never accepted as a raw column name: each module declares its own `.valid('name', 'createdAt', ...)` allowlist in its `*.validation.ts` (Joi rejects anything else with 400 before the handler runs), matching that page's actual `SortableTableHead` `sortKey`s. `sortMap` then maps each allowed key to the Prisma fragment — a direct column (`{ name: order }`), a to-one relation field (`{ member: { name: order } }`, for a frontend dot-path key like `'member.name'`), or a to-many relation's row count (`{ productSpecs: { _count: order } }`, Prisma's `_count` orderBy). A key computed in JS after the fetch (e.g. `admin-members.service.ts`'s `activeBusinessCount`/`activeWatchlistCount`/`activeSubscriptionCount`, counted per-status off an already-fetched relation — can't `_count` the same relation twice with different filters in one query) has no `sortMap` entry and silently falls back to `fallback` — the web app's client-side `useSortedItems` still reorders whatever page loads either way. Adopters: `GET /admin/members`, `GET /admin/listings`, `GET /admin/products`, `GET /admin/specifications`, `GET /admin/features`, `GET /admin/subscriptions`, `GET /admin/breach-incidents`, `GET /admin/watchlist/entries`.
+For a searchable dropdown that pages only when the caller asks: a call with neither `page` nor `pageSize` gets a bare array, sending either gets the standard paged shape. No endpoint uses these yet; they are covered by `pagination.options.test.ts` and `response.test.ts`.
 
 ## Error handler
 
@@ -109,18 +131,14 @@ All error responses share one envelope: `{ success: false, error: { code, messag
 | Scenario | Response |
 |---|---|
 | `AppError` | `statusCode` + `{ success: false, error: { code, message, details } }` |
-| Validation (`validate()`) | 400 + `error.code = 'VALIDATION_ERROR'`, `details = [{ field, message }]` |
-| Multer upload reject | 400 (bad type) / 413 (`LIMIT_FILE_SIZE`) — mapped to `AppError` in `uploads.routes.ts` |
-| Prisma P2002 | 409 + `error.code = 'CONFLICT'` |
+| Validation (`validate()`) | 400 + `error.code = 'VALIDATION_ERROR'`, `details = [{ field, message }]` (sent by the middleware itself, see `validation.md`) |
+| Rate limit (`express-rate-limit`) | 429 + `error.code = 'TOO_MANY_REQUESTS'` (sent by the limiter's `message`, see `security.md`) |
+| Prisma P2002 | 409 + `error.code = 'CONFLICT'`, message `<target> already exists` |
 | Body rejected by `express.json()` (http-errors with `type`, 4xx `status`, `expose`) | `entity.parse.failed` → 400 `INVALID_JSON`; `entity.too.large` → 413 `PAYLOAD_TOO_LARGE` (limit 2mb); any other exposed 4xx → that status + `BAD_REQUEST`. Covered by `errorHandler.test.ts` against a real `express.json()` |
-| Unknown | 500 + `error.code = 'INTERNAL_ERROR'` (no stack leaked) |
+| Unknown route (`notFoundHandler`) | 404 + `error.code = 'NOT_FOUND'`, message `Route not found` |
+| Unknown | 500 + `error.code = 'INTERNAL_ERROR'` (logged; no stack or message leaked) |
 
 Prisma error code handling only for P2002 — other codes propagate as 500.
 
 ---
-*Last updated: 2026-11-02 (dropdown options: `optionsQuerySchema`/`optionalPaging`/`excludeIdsSchema`/`optionsResult`)*
-*Previously: 2026-10-20 (malformed / oversized JSON bodies now 400 / 413 instead of 500; Express 5: `param(req, name)` for route params, v5 route-pattern rules)*
-*Previously: 2026-09-16 (added the `sortBy`/`sortOrder` column-sort convention — `sortOrderSchema` +
-`buildOrderBy()` in `src/core/http/pagination.ts` — to all 8 admin offset-paginated list endpoints, so
-the web app's admin table sort clicks now actually order the full dataset server-side before paginating,
-not just the client-side re-sort of whichever page loaded)*
+*Last updated: 2026-11-15 (rewritten against the NobleBid code: offset paging is the only strategy in use, `paginated()` `extra` argument, `ServiceUnavailable`, module error codes, `notFoundHandler`; keyset and options helpers marked unused)*

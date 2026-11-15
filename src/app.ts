@@ -10,7 +10,7 @@ export function createApp() {
   const app = express();
 
   // Single proxy hop (API Gateway / ALB) — needed for correct req.ip + rate limiting.
-  // Browsers call this API directly (the web app has no same-origin proxy), so that hop's client IP is the member's own.
+  // Browsers call this API directly (the live dev stage is https://bidsapi.shubsale.in); the app's optional Next.js /api rewrite (proxy mode) is unused.
   app.set('trust proxy', 1);
 
   app.use(helmet());
@@ -18,8 +18,9 @@ export function createApp() {
     cors({
       origin: env.corsOrigins,
       credentials: true,
-      // 2h preflight cache. CORS lives here (not API Gateway): CORS_ORIGINS is a
-      // comma list that Serverless variables cannot split.
+      // 2h preflight cache. Deployed stages get CORS from API Gateway
+      // (serverless.yml provider.httpApi.cors.allowedOrigins), which ignores
+      // these headers; this middleware covers local dev and reads CORS_ORIGINS.
       exposedHeaders: ['content-disposition'],
       maxAge: 7200,
     })

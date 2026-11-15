@@ -26,7 +26,7 @@ This file extends `.claude/RULES.md §1` with a concrete additions / modificatio
 | New Prisma model | `prisma/schema.prisma` + `readme/flows/<feature>.md` schema section |
 | New rate-limit tier | `src/core/middleware/rateLimit.ts` + `readme/methods/security.md` |
 | New deployment step | `readme/flows/deployment.md` |
-| New standalone skill | `.claude/skills/<skill>/SKILL.md` + skills table in `CLAUDE.md` |
+| New standalone skill | `.claude/skills/<skill>/SKILL.md` + skills list in `AGENTS.md` |
 | New / changed agent behavior | `AGENTS.md` |
 
 ## Modifications trigger
@@ -36,7 +36,8 @@ This file extends `.claude/RULES.md §1` with a concrete additions / modificatio
 | Behavior of an existing flow | `readme/flows/<feature>.md` |
 | Signature of a shared util | `readme/methods/<domain>.md` |
 | Auth/refresh token shape | `readme/flows/auth.md` |
-| Route mounting | `readme/flows/routing.md` |
+| Route mounting (`src/routes.ts`) | `readme/ARCHITECTURE.md` request path + the feature's endpoints table |
+| Lambda function / schedule (`serverless.yml`, `index.js`) | `readme/ARCHITECTURE.md` runtime table + `readme/flows/deployment.md` |
 
 ## Removals trigger
 

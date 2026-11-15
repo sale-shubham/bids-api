@@ -3,7 +3,9 @@
 REST API for NobleBid, an online auction platform (bidders, auctioneers, super admin).
 Stack: Express 5 + TypeScript + Prisma 7 (adapter `@prisma/adapter-pg`, generated client in `src/generated/prisma/`) + PostgreSQL, deployed to AWS Lambda (ap-south-1) via `@codegenie/serverless-express` + Serverless v4. Package manager: `npm` (Node 24).
 
-Current state: **Phase 6 backend (watchlist + ending-soon job, leaderboard, seller pages, admin API, contact, legal pages, public settings, sitemap)** on top of **Phase 5 backend (commission payments via Razorpay: `readme/flows/payments.md`)** on top of **Phase 3 backend (bidding, auction closing, notifications)** on top of Phase 2 (auctions) on top of Phase 1 — full schema (Auction/Bid/Watchlist/Commission), email+password auth, members, uploads. Auction/bid endpoints arrive next. Plan lives in `../plan/` (`02-bids-api.md`, `05-phases-checklist.md`).
+**Read first:** `.claude/RULES.md` (standing rules), `PROJECT_STRUCTURE.md`, `readme/ARCHITECTURE.md`.
+
+Current state: feature-complete and merged into `dev`: email + password auth, members, uploads, auctions, bidding with anti-sniping, scheduled auction closing, notifications (email, in-app inbox, Web Push), live updates over WebSocket, commission payments via Razorpay, watchlist + ending-soon alerts, leaderboard, seller pages, admin API, contact, legal pages, public settings and sitemap. The `dev` stage is the live deployment at `https://bidsapi.shubsale.in` (app `https://bidsapp.shubsale.in`, website `https://noblebids.shubsale.in`, cookie domain `.shubsale.in`); no `prod` stage (branch `main`, `_PROD` names) is deployed yet. What is left is in `docs/GO-LIVE.md` (SES production access, Razorpay live keys, load test).
 
 ## Rules
 
@@ -21,14 +23,16 @@ Current state: **Phase 6 backend (watchlist + ending-soon job, leaderboard, sell
 - Money is integer paise. Money paths are idempotent (`PaymentOrder.idempotencyKey`, `WebhookEvent`).
 - Path alias `@/*` → `src/*`.
 
-## Docs
+## Docs (README registry)
 
 | Path | Covers |
 |---|---|
-| `AGENTS.md` | Agent / deployment notes |
+| `AGENTS.md` | Agent / deployment notes, vendored skills |
 | `PROJECT_STRUCTURE.md` | Current file layout |
-| `readme/ARCHITECTURE.md` | Architecture overview |
-| `readme/methods/*.md` | validation, prisma, security, http conventions (partly carried over from the P2X codebase; sections that mention removed features are stale) |
+| `readme/ARCHITECTURE.md` | Lambdas, request path, data, integrations |
+| `readme/methods/*.md` | validation, prisma, security (env + rate limits), http, testing conventions |
 | `docs/DOC_SYNC.md` | Which docs to update for which change |
+| `docs/GO-LIVE.md` | Go-live checklist |
+| `docs/DECISIONS.md` | History (old MERN app, P2X scaffold), product decisions D1–D8 (D7 domains decided), known limits |
 
-Flow docs: `readme/flows/auth.md` (auth, members, uploads), `readme/flows/auctions.md` (auctions), `readme/flows/bidding.md` (bids, closing, anti-sniping), `readme/flows/notifications.md` (notify pipeline, in-app inbox), `readme/flows/payments.md` (commission payments), `readme/flows/websocket.md` (live updates), `readme/flows/watchlist.md`, `readme/flows/leaderboard.md`, `readme/flows/admin.md`, `readme/flows/legal-pages.md` (legal pages, public settings, contact). Others are deferred.
+Flow docs: `readme/flows/auth.md` (auth, members, uploads), `readme/flows/auctions.md` (auctions), `readme/flows/bidding.md` (bids, closing, anti-sniping), `readme/flows/notifications.md` (notify pipeline, in-app inbox), `readme/flows/payments.md` (commission payments), `readme/flows/websocket.md` (live updates), `readme/flows/watchlist.md`, `readme/flows/leaderboard.md`, `readme/flows/admin.md`, `readme/flows/legal-pages.md` (legal pages, public settings, contact), `readme/flows/deployment.md` (AWS, CI, env vars, domains).
