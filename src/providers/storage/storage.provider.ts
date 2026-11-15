@@ -1,4 +1,4 @@
-// S3 storage abstraction (hospital presigned-direct-to-S3 pattern).
+// S3 storage abstraction (presigned direct-to-S3 uploads).
 export interface StoredFile {
   key: string;
   url: string;

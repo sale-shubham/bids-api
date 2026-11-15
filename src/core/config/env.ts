@@ -53,7 +53,7 @@ function requireProd(key: string, value: string, reason: string): string {
 
 const paymentDriver = process.env.PAYMENT_DRIVER ?? 'stub';
 
-// Storage is S3-only (hospital presigned-direct-to-S3 pattern). These are required in prod.
+// Storage is S3-only (presigned direct-to-S3 uploads). These are required in prod.
 if (isProd) {
   requireProd('AWS_BUCKET_NAME', process.env.AWS_BUCKET_NAME ?? '', 'S3 storage');
   requireProd('AWS_REGION', process.env.AWS_REGION ?? '', 'S3 storage');
@@ -121,9 +121,8 @@ export const env = {
       // DPDP Act §16 (cross-border transfer) — default to an India region
       // (Mumbai) rather than an empty/ambiguous fallback, so a deploy that
       // forgets to set AWS_REGION doesn't silently end up storing member
-      // documents outside India. Still overridable — see gap #5 in
-      // DPDP_COMPLIANCE.md: overriding away from India is a deliberate,
-      // undocumented-by-default choice that belongs in the processor register.
+      // documents outside India. Still overridable, but
+      // overriding away from India is a deliberate choice for the processor register.
       region: process.env.AWS_REGION ?? 'ap-south-1',
       bucket: process.env.AWS_BUCKET_NAME ?? '',
     },
@@ -160,6 +159,8 @@ export const env = {
   app: {
     // Public web app base URL — used for links in emails.
     url: process.env.APP_URL ?? 'http://localhost:3002',
+    // Public marketing website origin (support/contact links in emails). Defaults to the app URL.
+    websiteUrl: process.env.WEBSITE_URL || process.env.APP_URL || 'http://localhost:3002',
   },
   admin: {
     // Super Admin / ops contact (contact-form forwarding, alerts).

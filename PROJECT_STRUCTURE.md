@@ -1,9 +1,9 @@
-# Project structure — bids-api (Phase 3: bidding)
+# Project structure — bids-api
 
 ```
 bids-api/
-├── index.js                  # Lambda handlers (api + WS + retention purge + closeAuctions + commissionReminder + notifyWorker) and local dev server
-├── serverless.yml            # service bids-api: HTTP API, WebSocket API, S3+CloudFront, NotifyQueue/NotifyDLQ, closeAuctions (1 min) + endingSoon (15 min) + commissionReminder (1 day) + notifyWorker (SQS), alarms
+├── index.js                  # Lambda handlers (api + WS, retentionPurge, closeAuctions, endingSoon, commissionReminder, notifyWorker) and local dev server
+├── serverless.yml            # service bids-api: HTTP API, WebSocket API, S3 (+ CloudFront when ENABLE_CDN=true), NotifyQueue/NotifyDLQ, closeAuctions (1 min) + endingSoon (15 min) + commissionReminder (1 day) + retentionPurge (1 day) + notifyWorker (SQS), alarms
 ├── prisma/schema.prisma      # Member, Session, OtpChallenge, Auction, Bid, Watchlist, Commission,
 │                             #   WsConnection, WsTicket, PushSubscription, RateLimitBucket, PaymentOrder,
 │                             #   WebhookEvent, Notification, AppSetting (+ migrations/, seed.ts, seed-demo.ts)
@@ -21,14 +21,14 @@ bids-api/
 │   │                         #   logger, middleware (auth, rateLimit, validate, errorHandler), prisma client
 │   ├── providers/            # email (SES + stub, render.ts), payment (Razorpay + stub), storage (S3)
 │   ├── templates/            # EJS email templates, HTML + .txt pairs (otp-code, welcome, outbid, auction-won, auction-sold,
-│                             #   auction-unsold, commission-due, commission-paid + _head/_foot/_contact partials)
+│                             #   auction-unsold, ending-soon, commission-due, commission-paid, contact-message + _head/_foot/_contact partials)
 │   └── modules/
 │       ├── auth/             # signup/verify/login/password flows, token, session, device, otp-challenge, password rule
 │       ├── members/          # GET/PATCH /members/me, GET /members/:id/public, member.select.ts
 │       ├── uploads/          # POST /uploads/presign (auctions, avatars; images, 5 MB; size + type signed into the PUT)
 │       ├── auctions/         # catalogue, home, categories, detail, create/patch/delete/republish, mine
 │       │                     #   (routes, controller, service, validation + sanitiser, serializer + effectiveStatus, query helpers)
-│       │                     #   + bidding.rules.ts (pure), auction-detail.service, auction-close.service, auction-events (Phase 4 hook)
+│       │                     #   + bidding.rules.ts (pure), auction-detail.service, auction-close.service, auction-events (WebSocket fan-out)
 │       ├── bids/             # POST/GET /auctions/:id/bids, GET /bids/mine
 │       ├── notify/           # enqueueNotification (SQS or inline), processNotification, SQS worker, content
 │       ├── notifications/    # in-app inbox: list, unread-count, read, read-all
@@ -41,7 +41,7 @@ bids-api/
 │       ├── leaderboard/      # GET /leaderboard (spent|won)
 │       ├── contact/          # POST /contact (rate limited, emails ADMIN_EMAIL with reply-to)
 │       └── admin/            # dashboard, members (PATCH), auctions, commissions (+waive), payments, settings (+legal), retention
-├── readme/                   # ARCHITECTURE.md, methods/, flows/auth.md, flows/auctions.md, flows/bidding.md, flows/notifications.md, flows/payments.md, flows/websocket.md, flows/watchlist.md, flows/leaderboard.md, flows/admin.md, flows/legal-pages.md
+├── readme/                   # ARCHITECTURE.md, methods/, flows/ (auth, auctions, bidding, notifications, payments, websocket, watchlist, leaderboard, admin, legal-pages, deployment)
 ├── docs/DOC_SYNC.md
 └── .claude/ .husky/ .github/workflows/
 ```

@@ -24,6 +24,7 @@ export async function renderEmail(template: string, data: Record<string, unknown
     fromName: env.email.fromName,
     logoUrl: env.email.logoUrl,
     frontendUrl: env.app.url,
+    websiteUrl: env.app.websiteUrl,
     ...data,
   };
   const [html, text] = await Promise.all([
