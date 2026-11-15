@@ -102,6 +102,10 @@ model Member {
   // Seller rating totals; only non-hidden reviews count.
   ratingCount           Int       @default(0)
   ratingSum             Int       @default(0)
+  // Followers of this seller (kept in step with Follow rows in the same transaction).
+  followerCount         Int       @default(0)
+  // Opted in to WhatsApp alerts (needs a verified phone); cleared when the phone changes.
+  whatsappOptInAt       DateTime?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -135,6 +139,10 @@ model Member {
   secondChanceOffers   SecondChanceOffer[]
   shillSignalsAsBidder ShillSignal[]       @relation("ShillBidder")
   shillSignalsAsSeller ShillSignal[]       @relation("ShillSeller")
+
+  following               Follow[]                 @relation("Following")
+  followers               Follow[]                 @relation("Followers")
+  notificationPreferences NotificationPreference[]
 
   @@index([role])
 }
@@ -233,6 +241,7 @@ model Auction {
   deposits           AuctionDeposit[]
   secondChanceOffers SecondChanceOffer[]
   shillSignals       ShillSignal[]
+  statsDaily         AuctionStatDaily[]
 
   @@index([status, endTime])
   @@index([status, startTime])
@@ -745,4 +754,53 @@ model ShillSignal {
 
   @@unique([auctionId, bidderId])
   @@index([reviewedAt, score])
+}
+
+// ----------------------------------------------------------------------------
+// ENGAGEMENT: follow a seller, notification preferences, seller analytics
+// ----------------------------------------------------------------------------
+
+model Follow {
+  follower   Member   @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  followerId String
+  seller     Member   @relation("Followers", fields: [sellerId], references: [id], onDelete: Cascade)
+  sellerId   String
+  createdAt  DateTime @default(now())
+
+  @@id([followerId, sellerId])
+  @@index([sellerId])
+}
+
+// Per-member, per-notification-type channel switches. A missing row = defaults (email + push on, WhatsApp off).
+model NotificationPreference {
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId  String
+  type      String
+  email     Boolean  @default(true)
+  push      Boolean  @default(true)
+  whatsapp  Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+
+  @@id([memberId, type])
+}
+
+// Per-auction per-day (Asia/Kolkata) view counters.
+model AuctionStatDaily {
+  auction       Auction  @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  auctionId     String
+  date          DateTime @db.Date
+  views         Int      @default(0)
+  uniqueViewers Int      @default(0)
+
+  @@id([auctionId, date])
+}
+
+// Dedupe rows for unique-viewer counting (sha256 viewer key); no FK, purged after 30 days by the retention job.
+model AuctionViewer {
+  auctionId String
+  viewerKey String
+  date      DateTime @db.Date
+
+  @@id([auctionId, viewerKey, date])
+  @@index([date])
 }

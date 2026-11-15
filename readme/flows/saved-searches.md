@@ -26,6 +26,10 @@ Meaning follows the browse filters (`auctions.query.ts`): `q` = title contains (
 2. In JS keep searches whose `q` is empty or whose every whitespace-separated word appears in the title (case-insensitive).
 3. One `saved-search-match` notification per member (the oldest matching search names it), dedupe `ssm:<auctionId>:<memberId>`, url `/auctions/<id>`, `data { searchName }`, at most 500 members per auction.
 
+### Follower alerts
+
+After the saved-search pass, `onAuctionPublished` calls `notifyFollowers(auction, alreadyNotified)` (`follows.md`): type `followed-seller-listed`, dedupe `fsl:<auctionId>:<memberId>`, url `/auctions/<id>`, `data { sellerName }`, active followers only, at most 2,000 per auction, skipping members that just received a `saved-search-match` for the same auction in this run. The return value of `onAuctionPublished` is still the saved-search match count.
+
 It is called best-effort (try/catch + logger) from `auctions.service.ts` right after `createAuction` and after a successful `republishAuction`; a failure never fails the request. The dedupe key means a republished auction does not notify the same member twice.
 
 ## Tests

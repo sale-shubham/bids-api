@@ -212,3 +212,13 @@ export const reportLimiter = rateLimit({
   keyGenerator: (req) => req.user?.sub ?? ipKeyGenerator(req.ip ?? 'unknown'),
   message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many reports today, try again tomorrow' } },
 });
+
+// Public view counter: 120 per minute per IP, in-memory (a spam guard, not money).
+export const viewLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? 'unknown'),
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many requests, try later' } },
+});

@@ -30,6 +30,7 @@ const db = vi.hoisted(() => ({
   strike: { count: vi.fn(async () => 0) },
   sellerPayoutAccount: { findUnique: vi.fn(async () => null as unknown) },
   savedSearch: { findMany: vi.fn(async () => []) },
+  follow: { findMany: vi.fn(async () => []) },
   category: {
     findFirst: vi.fn(async ({ where }: { where: { OR: { slug?: string }[] } }) => (where.OR[0].slug === 'electronics' ? ELECTRONICS : null)),
     findUnique: vi.fn(async ({ where }: { where: { id: string } }) => (where.id === 'cat1' ? ELECTRONICS : null)),

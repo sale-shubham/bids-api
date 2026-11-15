@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const db = vi.hoisted(() => ({
   savedSearch: { findMany: vi.fn(), count: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
+  follow: { findMany: vi.fn(async (_a?: unknown) => [] as { followerId: string }[]) },
+  member: { findUnique: vi.fn(async () => ({ name: 'Seller One' })) },
   category: { findFirst: vi.fn(async () => null as unknown), findUnique: vi.fn(async () => null as unknown) },
 }));
 const enqueue = vi.hoisted(() => vi.fn(async (_m: unknown) => undefined));
@@ -10,7 +12,7 @@ vi.mock('@/modules/notify/notify.queue', () => ({ enqueueNotification: enqueue }
 
 import { createSavedSearchSchema } from './saved-searches.validation';
 import { createSavedSearch, deleteSavedSearch, toSavedSearchDTO } from './saved-searches.service';
-import { onAuctionPublished, titleMatches } from './saved-search.matcher';
+import { notifyFollowers, onAuctionPublished, titleMatches } from './saved-search.matcher';
 import { HARD_MAX_PRICE_PAISE } from '@/core/money';
 
 const code = async (p: Promise<unknown>) =>
@@ -137,5 +139,37 @@ describe('matcher', () => {
   it('caps at 500 members', async () => {
     db.savedSearch.findMany.mockResolvedValue(Array.from({ length: 600 }, (_, i) => ({ memberId: `m${i}`, name: null, q: null })));
     expect(await onAuctionPublished(auction)).toBe(500);
+  });
+});
+
+describe('follower fan-out', () => {
+  const auction = { id: 'a1', title: 'Watch', category: 'Watches', condition: 'GOOD' as const, startingBidPaise: 1000, sellerId: 's1' };
+
+  it('notifies active followers with the dedupe key, url data and seller name', async () => {
+    db.follow.findMany.mockResolvedValue([{ followerId: 'f1' }, { followerId: 'f2' }]);
+    expect(await notifyFollowers(auction)).toBe(2);
+    expect(enqueue).toHaveBeenCalledWith({
+      type: 'followed-seller-listed',
+      memberId: 'f1',
+      auctionId: 'a1',
+      data: { sellerName: 'Seller One' },
+      dedupeKey: 'fsl:a1:f1',
+    });
+    const args = db.follow.findMany.mock.calls[0][0] as { where: unknown; take: number };
+    expect(args.where).toEqual({ sellerId: 's1', follower: { isActive: true } });
+    expect(args.take).toBe(2000);
+  });
+
+  it('skips members already notified by a saved search in the same run', async () => {
+    db.follow.findMany.mockResolvedValue([{ followerId: 'f1' }, { followerId: 'f2' }]);
+    db.savedSearch.findMany.mockResolvedValue([{ memberId: 'f1', name: 'x', q: null }]);
+    await onAuctionPublished({ ...auction, categoryId: null });
+    const types = enqueue.mock.calls.map((c) => `${(c[0] as { type: string }).type}:${(c[0] as { memberId: string }).memberId}`);
+    expect(types).toEqual(['saved-search-match:f1', 'followed-seller-listed:f2']);
+  });
+
+  it('never notifies the seller themselves', async () => {
+    db.follow.findMany.mockResolvedValue([{ followerId: 's1' }]);
+    expect(await notifyFollowers(auction)).toBe(0);
   });
 });

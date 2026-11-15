@@ -35,12 +35,17 @@ import categoryRoutes from '@/modules/categories/categories.routes';
 import adminCategoriesRoutes from '@/modules/admin/categories/admin-categories.routes';
 import adminRiskRoutes from '@/modules/admin/risk/admin-risk.routes';
 
+import followRoutes from '@/modules/follows/follows.routes';
+import analyticsRoutes from '@/modules/analytics/analytics.routes';
+
 const router = Router();
 
 router.get('/health', (_req, res) => res.json({ success: true, data: { status: 'ok' } }));
 
 router.use('/auth', authRoutes);
 router.use('/members', memberRoutes);
+router.use('/sellers', followRoutes);
+router.use('/analytics', analyticsRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/commissions', commissionRoutes);

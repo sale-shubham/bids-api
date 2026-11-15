@@ -201,6 +201,17 @@ export function buildContent(c: ContentCtx): Content {
         templateData: { ...base, searchName },
       };
     }
+    case 'followed-seller-listed': {
+      const sellerName = clip(c.data.sellerName, 80) || 'A seller you follow';
+      return {
+        title: 'New listing from a seller you follow',
+        body: `${sellerName} listed "${c.auctionTitle}".`,
+        url: auctionPath,
+        subject: `${sellerName} listed "${c.auctionTitle}"`,
+        template: 'followed-seller-listed',
+        templateData: { ...base, sellerName },
+      };
+    }
     case 'sale-receipt':
     case 'sale-paid':
     case 'sale-shipped':

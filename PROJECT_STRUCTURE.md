@@ -19,7 +19,7 @@ bids-api/
 │   ├── __tests__/http/       # supertest HTTP tests against createApp() (guards, validation, envelope, CORS); see readme/methods/testing.md
 │   ├── core/                 # money.ts (toPaise, HARD_MAX_PRICE_PAISE), json-bigint.ts (BigInt JSON safety net), config (env, constants), errors, http (cookies, pagination, params, response),
 │   │                         #   logger, middleware (auth, rateLimit, validate, errorHandler), prisma client
-│   ├── providers/            # email (SES + stub, render.ts), sms (MSG91 + stub), payment (Razorpay + stub), storage (S3)
+│   ├── providers/            # email (SES + stub, render.ts), sms (MSG91 + stub), whatsapp (Meta Cloud API + stub), payment (Razorpay + stub), storage (S3)
 │   ├── templates/            # EJS email templates, HTML + .txt pairs (otp-code, welcome, outbid, auction-won, auction-sold,
 │                             #   auction-unsold, reserve-not-met, ending-soon, commission-due, commission-paid, review-received, question-asked, question-answered, saved-search-match, contact-message + _head/_foot/_contact partials)
 │   └── modules/
@@ -43,7 +43,10 @@ bids-api/
 │       ├── watchlist/        # GET /watchlist, /watchlist/ids, POST|DELETE /watchlist/:auctionId, runEndingSoon job
 │       ├── reviews/          # POST /auctions/:id/review, POST /reviews/:id/reply, GET /members/:id/reviews; reviews.rules (ratingAvg, 60-day window)
 │       ├── questions/        # GET|POST /auctions/:id/questions, POST /questions/:id/answer|hide
-│       ├── saved-searches/   # GET|POST /saved-searches, DELETE /saved-searches/:id; saved-search.matcher (onAuctionPublished)
+│       ├── saved-searches/   # GET|POST /saved-searches, DELETE /saved-searches/:id; saved-search.matcher (onAuctionPublished, notifyFollowers)
+│       ├── follows/          # POST|DELETE /sellers/:id/follow, GET /members/me/following (follows.service)
+│       ├── notification-preferences/ # GET|PUT /members/me/notification-preferences, POST /members/me/whatsapp; catalogue in notify/notify.catalogue.ts
+│       ├── analytics/        # POST /auctions/:id/view (recordView), GET /analytics/seller, /analytics/auctions/:id; analytics.rules (IST days, viewer key)
 │       ├── deposits/         # POST /auctions/:id/deposit/checkout; deposits.rules (amounts, release decision), deposits.service (checkout, markDepositHeld), deposits.jobs (runDepositRelease)
 │       ├── strikes/          # strikes.rules / service (unpaid-sale strikes, policy, suspendMember, admin list / remove)
 │       ├── second-chance/    # /second-chance-offers (mine, :id, accept, decline); runner-up selection, offer DTO, expiry (POST /sales/:id/second-chance is in sales/)
@@ -52,7 +55,7 @@ bids-api/
 │       ├── leaderboard/      # GET /leaderboard (spent|won)
 │       ├── contact/          # POST /contact (rate limited, emails ADMIN_EMAIL with reply-to)
 │       └── admin/            # dashboard, members (PATCH), auctions (+deposit), categories (CRUD), commissions (+waive), payments, sales (list, release, refund), reviews (list, hide), reports (queue, resolve), settings (+legal), retention, strikes (remove), risk (review queue)
-├── readme/                   # ARCHITECTURE.md, methods/, flows/ (auth, reports, auctions, bidding, notifications, payments, checkout, deposits, strikes, risk, payouts, websocket, watchlist, reviews, questions, saved-searches, leaderboard, admin, legal-pages, deployment)
+├── readme/                   # ARCHITECTURE.md, methods/, flows/ (auth, reports, auctions, bidding, notifications, payments, checkout, deposits, strikes, risk, payouts, websocket, watchlist, reviews, questions, saved-searches, follows, notification-preferences, analytics, leaderboard, admin, legal-pages, deployment)
 ├── docs/DOC_SYNC.md
 └── .claude/ .husky/ .github/workflows/
 ```

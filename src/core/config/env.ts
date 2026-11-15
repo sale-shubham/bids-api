@@ -95,6 +95,12 @@ if (isProd && smsDriver === 'msg91') {
   requireProd('MSG91_OTP_TEMPLATE_ID', process.env.MSG91_OTP_TEMPLATE_ID ?? '', 'SMS_DRIVER=msg91');
 }
 
+const whatsappDriver = process.env.WHATSAPP_DRIVER ?? 'stub';
+if (isProd && whatsappDriver === 'meta') {
+  requireProd('WHATSAPP_TOKEN', process.env.WHATSAPP_TOKEN ?? '', 'WHATSAPP_DRIVER=meta');
+  requireProd('WHATSAPP_PHONE_NUMBER_ID', process.env.WHATSAPP_PHONE_NUMBER_ID ?? '', 'WHATSAPP_DRIVER=meta');
+}
+
 const accessSecret = secret('JWT_SECRET', 'dev_access_secret_change_me');
 const refreshSecret = secret('REFRESH_TOKEN_SECRET', 'dev_refresh_secret_change_me');
 if (isProd && accessSecret === refreshSecret) {
@@ -169,6 +175,20 @@ export const env = {
       authKey: process.env.MSG91_AUTH_KEY ?? '',
       senderId: process.env.MSG91_SENDER_ID ?? '',
       otpTemplateId: process.env.MSG91_OTP_TEMPLATE_ID ?? '',
+    },
+  },
+
+  // WhatsApp alerts (opt-in, utility templates only). `stub` logs a masked number; `meta` = WhatsApp Cloud API.
+  whatsapp: {
+    driver: whatsappDriver,
+    token: process.env.WHATSAPP_TOKEN ?? '',
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID ?? '',
+    apiVersion: process.env.WHATSAPP_API_VERSION || 'v21.0',
+    templates: {
+      outbid: process.env.WHATSAPP_TEMPLATE_OUTBID || 'nb_outbid',
+      endingSoon: process.env.WHATSAPP_TEMPLATE_ENDING_SOON || 'nb_ending_soon',
+      auctionWon: process.env.WHATSAPP_TEMPLATE_AUCTION_WON || 'nb_auction_won',
+      salePaymentDue: process.env.WHATSAPP_TEMPLATE_SALE_PAYMENT_DUE || 'nb_sale_payment_due',
     },
   },
 

@@ -1,6 +1,6 @@
 # Notifications flow
 
-Code: pipeline in `src/modules/notify/` (`notify.queue.ts`, `notify.service.ts`, `notify.worker.ts`, `notify.content.ts`, `notify.types.ts`); in-app inbox API in `src/modules/notifications/`; email templates in `src/templates/` (`outbid`, `auction-won`, `auction-sold`, `auction-unsold`, `reserve-not-met`, `commission-due`, `commission-paid`, `review-received`, `question-asked`, `question-answered`, `saved-search-match`, `sale-receipt`, `sale-paid`, `sale-shipped`, `sale-released`, `sale-disputed`, `sale-refunded`, `sale-cancelled`, `report-filed`, `deposit-held`, `deposit-refunded`, `deposit-forfeited`, `strike-issued`, `account-suspended`, `second-chance-offer`, `second-chance-accepted`, `second-chance-declined`, `shill-flag`, each `.ejs` + `.txt.ejs`, sharing `_head` / `_foot` / `_contact` partials; auction/commission links use `env.app.url`; support `/contact` links use `env.app.websiteUrl` = `WEBSITE_URL`, passed to templates as `websiteUrl` by `renderEmail`).
+Code: pipeline in `src/modules/notify/` (`notify.queue.ts`, `notify.service.ts`, `notify.worker.ts`, `notify.content.ts`, `notify.types.ts`); in-app inbox API in `src/modules/notifications/`; email templates in `src/templates/` (`outbid`, `auction-won`, `auction-sold`, `auction-unsold`, `reserve-not-met`, `commission-due`, `commission-paid`, `review-received`, `question-asked`, `question-answered`, `saved-search-match`, `sale-receipt`, `sale-paid`, `sale-shipped`, `sale-released`, `sale-disputed`, `sale-refunded`, `sale-cancelled`, `report-filed`, `deposit-held`, `deposit-refunded`, `deposit-forfeited`, `strike-issued`, `account-suspended`, `second-chance-offer`, `second-chance-accepted`, `second-chance-declined`, `shill-flag`, `followed-seller-listed`, each `.ejs` + `.txt.ejs`, sharing `_head` / `_foot` / `_contact` partials; auction/commission links use `env.app.url`; support `/contact` links use `env.app.websiteUrl` = `WEBSITE_URL`, passed to templates as `websiteUrl` by `renderEmail`).
 
 ## In-app endpoints (auth required)
 
@@ -29,12 +29,17 @@ New types: `review-received` (to the seller, url `/sellers/<sellerId>`, `data { 
 
 `reserve-not-met` (type added to `NOTIFY_TYPES`) goes to the highest bidder when an auction with bids ends below its hidden reserve (they did not win and are not charged). In the same case the seller's `auction-unsold` carries `data.reserveNotMet: true`, which switches its in-app copy, email subject and both templates to "ended below your reserve". `outbid` now goes only to the member who lost the lead in the request, and its `yourBidPaise` is that member's max bid.
 
+`followed-seller-listed` (to a follower of the seller when they publish; `data { sellerName }`, url `/auctions/<id>`; "<seller> listed <title>"; template `followed-seller-listed`, dedupe `fsl:<auctionId>:<memberId>`; see `follows.md`).
+
+Channels and preferences (`notification-preferences.md`): `processNotification` loads the member's `NotificationPreference` for the type (one query; a missing row = email + push on, WhatsApp off) and `resolveChannels` (`notify.catalogue.ts`) decides email / push / WhatsApp. Email is always sent for the mandatory types (`sale-*`, `deposit-*`, `commission-due`, `commission-paid`, `strike-issued`, `account-suspended`, `auction-won`, `second-chance-offer`). The in-app inbox row and the live WebSocket event are always created. WhatsApp goes out only when the preference is on, the member opted in (`whatsappOptInAt`), the phone is verified and the type is capable (`outbid`, `ending-soon`, `auction-won`); it is sent after the row insert, a failure is only logged and never rethrown (not even with `rethrowEmailErrors`). Dedupe semantics are unchanged.
+
 `processNotification` order (idempotent, retry-safe):
 1. dedupeKey already has a row -> `duplicate`, stop.
 2. Member missing or `isActive = false` -> `skipped` (nothing is sent or stored).
-3. Send the email. In the worker an email failure is rethrown here, before any row exists, so SQS retries the whole message. Inline it is logged and delivery continues.
+3. Send the email (skipped when the channel is off). In the worker an email failure is rethrown here, before any row exists, so SQS retries the whole message. Inline it is logged and delivery continues.
 4. Insert the `Notification` row. A unique violation (concurrent duplicate) = `duplicate`.
-5. `sendPushToMember(memberId, { type, title, body, url })` only if this call inserted the row.
+5. `sendPushToMember(memberId, { type, title, body, url })` only if this call inserted the row and the push channel is on.
+6. WhatsApp template message (same conditions as push plus the WhatsApp gates above); errors are logged.
 
 Accepted trade-offs: if the email send succeeded but the insert fails, the retry sends the email a second time (a rare duplicate email is preferred over a lost one); if the email fails permanently the in-app row is not created and the message ends in the DLQ.
 

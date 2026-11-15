@@ -543,3 +543,41 @@ describe('trust 2: deposits, strikes, risk', () => {
     expectInvalid(await send('put', '/admin/settings', { as: 'SUPER_ADMIN', body: { ...body, depositThresholdPaise: -1 } }), 'depositThresholdPaise');
   });
 });
+
+describe('engagement: follows, preferences, analytics', () => {
+  it('GET /members/me/following bounds page / pageSize', async () => {
+    expectInvalid(await send('get', '/members/me/following?pageSize=101', { as: 'BIDDER' }), 'pageSize');
+    expectInvalid(await send('get', '/members/me/following?page=0', { as: 'BIDDER' }), 'page');
+  });
+
+  it('PUT /members/me/notification-preferences rejects unknown types, duplicates and non-booleans', async () => {
+    const url = '/members/me/notification-preferences';
+    const item = { type: 'outbid', email: true, push: true, whatsapp: false };
+    expectInvalid(await send('put', url, { as: 'BIDDER', body: {} }), 'items');
+    expectInvalid(await send('put', url, { as: 'BIDDER', body: { items: [] } }), 'items');
+    expectInvalid(await send('put', url, { as: 'BIDDER', body: { items: [{ ...item, type: 'nope' }] } }), 'type');
+    expectInvalid(await send('put', url, { as: 'BIDDER', body: { items: [item, item] } }), 'items');
+    expectInvalid(await send('put', url, { as: 'BIDDER', body: { items: [{ ...item, push: 'maybe' }] } }), 'push');
+  });
+
+  it('POST /members/me/whatsapp needs a boolean optIn', async () => {
+    expectInvalid(await send('post', '/members/me/whatsapp', { as: 'BIDDER', body: {} }), 'optIn');
+    expectInvalid(await send('post', '/members/me/whatsapp', { as: 'BIDDER', body: { optIn: 'yes' } }), 'optIn');
+  });
+
+  it('following yourself is a 400 INVALID_FOLLOW', async () => {
+    const res = await send('post', '/sellers/m1/follow', { as: 'AUCTIONEER' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_FOLLOW');
+  });
+
+  it('analytics days must be 7, 30 or 90', async () => {
+    expectInvalid(await send('get', '/analytics/seller?days=14', { as: 'AUCTIONEER' }), 'days');
+    expectInvalid(await send('get', '/analytics/auctions/a1?days=abc', { as: 'AUCTIONEER' }), 'days');
+  });
+
+  it('POST /auctions/:id/view answers 204 and ignores an unknown auction', async () => {
+    const res = await send('post', '/auctions/nope/view');
+    expect(res.status).toBe(204);
+  });
+});

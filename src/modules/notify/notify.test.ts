@@ -4,15 +4,22 @@ const db = vi.hoisted(() => ({
   notification: { findUnique: vi.fn(), create: vi.fn() },
   member: { findUnique: vi.fn() },
   auction: { findUnique: vi.fn() },
+  notificationPreference: { findUnique: vi.fn() },
 }));
+const wa = vi.hoisted(() => vi.fn());
 const send = vi.hoisted(() => vi.fn());
 const push = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock('@/core/prisma/client', () => ({ prisma: db }));
 vi.mock('@/core/logger/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/core/config/env', () => ({
-  env: { app: { url: 'https://app.test', websiteUrl: 'https://www.test' }, email: { fromName: 'NobleBid', logoUrl: '' } },
+  env: {
+    app: { url: 'https://app.test', websiteUrl: 'https://www.test' },
+    email: { fromName: 'NobleBid', logoUrl: '' },
+    whatsapp: { templates: { outbid: 'nb_outbid', endingSoon: 'nb_ending_soon', auctionWon: 'nb_auction_won', salePaymentDue: 'nb_sale_payment_due' } },
+  },
 }));
+vi.mock('@/providers/whatsapp', () => ({ whatsappProvider: { sendTemplate: wa } }));
 vi.mock('@/providers/email', () => ({ emailProvider: { send } }));
 const wsPush = vi.hoisted(() => vi.fn(async () => undefined));
 vi.mock('@/modules/ws/ws.service', () => ({ pushToMember: wsPush }));
@@ -39,6 +46,8 @@ beforeEach(() => {
   db.notification.create.mockResolvedValue({ id: 'n1' });
   db.member.findUnique.mockResolvedValue({ id: 'm1', name: 'Ramesh', email: 'r@example.com', isActive: true });
   db.auction.findUnique.mockResolvedValue({ title: 'Vintage Watch', seller: null, winner: null, highestBidder: null });
+  db.notificationPreference.findUnique.mockResolvedValue(null);
+  wa.mockResolvedValue(undefined);
   send.mockResolvedValue(undefined);
 });
 
@@ -213,6 +222,7 @@ describe('formatInr + templates', () => {
       question: 'Does it come with the box?',
       answer: 'Yes, with the original box.',
       searchName: 'Cheap watches',
+      sellerName: 'Asha Antiques',
       checkout: false,
       payBy: '18 Nov 2026',
       saleUrl: 'https://app.test/purchases/s1',
@@ -239,5 +249,91 @@ describe('formatInr + templates', () => {
     expect(out.html).toContain('https://www.test/contact');
     expect(out.html).not.toContain('https://app.test/contact');
     if (type === 'auction-won') expect(out.text).toContain('Seller: Asha, a@example.com, phone not provided');
+  });
+});
+
+describe('channel preferences', () => {
+  const waMember = { id: 'm1', name: 'Ramesh', email: 'r@example.com', isActive: true, phone: '9876543210', phoneVerifiedAt: new Date(), whatsappOptInAt: new Date() };
+  const waMsg: NotifyMessage = { ...msg, type: 'outbid' };
+  beforeEach(() => {
+    db.member.findUnique.mockResolvedValue(waMember);
+  });
+
+  it('defaults (no row): email + push, no WhatsApp', async () => {
+    await processNotification(waMsg);
+    expect(send).toHaveBeenCalledOnce();
+    expect(push).toHaveBeenCalledOnce();
+    expect(wa).not.toHaveBeenCalled();
+  });
+
+  it('email off skips the email but still stores the inbox row and pushes', async () => {
+    db.notificationPreference.findUnique.mockResolvedValue({ email: false, push: true, whatsapp: false });
+    expect(await processNotification(waMsg)).toBe('sent');
+    expect(send).not.toHaveBeenCalled();
+    expect(db.notification.create).toHaveBeenCalledOnce();
+    expect(push).toHaveBeenCalledOnce();
+  });
+
+  it('push off skips Web Push only', async () => {
+    db.notificationPreference.findUnique.mockResolvedValue({ email: true, push: false, whatsapp: false });
+    await processNotification(waMsg);
+    expect(send).toHaveBeenCalledOnce();
+    expect(push).not.toHaveBeenCalled();
+    expect(wsPush).toHaveBeenCalledOnce();
+  });
+
+  it('mandatory email types ignore email = false', async () => {
+    db.notificationPreference.findUnique.mockResolvedValue({ email: false, push: true, whatsapp: false });
+    await processNotification({ ...msg, type: 'auction-won', data: { finalBidPaise: 100 } });
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it('WhatsApp on + opted in + verified phone + capable: sends the template with title, INR amount and link', async () => {
+    db.notificationPreference.findUnique.mockResolvedValue({ email: true, push: true, whatsapp: true });
+    db.auction.findUnique.mockResolvedValue({ title: 'T'.repeat(80), seller: null, winner: null, highestBidder: null });
+    await processNotification(waMsg);
+    expect(wa).toHaveBeenCalledWith({
+      to: '+919876543210',
+      template: 'nb_outbid',
+      language: 'en',
+      params: ['T'.repeat(59) + '...', '₹1,500', '/auctions/a1'],
+    });
+  });
+
+  it('auction-won in checkout mode uses the payment-due template', async () => {
+    db.notificationPreference.findUnique.mockResolvedValue({ email: true, push: true, whatsapp: true });
+    await processNotification({ ...msg, type: 'auction-won', data: { saleId: 's1', finalBidPaise: 250_000 } });
+    expect(wa.mock.calls[0][0]).toMatchObject({ template: 'nb_sale_payment_due', params: ['Vintage Watch', '₹2,500', '/purchases/s1'] });
+  });
+
+  it('ending-soon takes the amount from the current bid', async () => {
+    db.notificationPreference.findUnique.mockResolvedValue({ email: true, push: true, whatsapp: true });
+    db.auction.findUnique.mockResolvedValue({ title: 'W', currentBidPaise: 500_000n, startingBidPaise: 1n, seller: null, winner: null, highestBidder: null });
+    await processNotification({ ...msg, type: 'ending-soon', data: {} });
+    expect(wa.mock.calls[0][0]).toMatchObject({ template: 'nb_ending_soon', params: ['W', '₹5,000', '/auctions/a1'] });
+  });
+
+  it.each([
+    ['not opted in', { whatsappOptInAt: null }, 'outbid'],
+    ['phone not verified', { phoneVerifiedAt: null }, 'outbid'],
+    ['type not capable', {}, 'review-received'],
+  ])('no WhatsApp when %s', async (_l, over, type) => {
+    db.member.findUnique.mockResolvedValue({ ...waMember, ...over });
+    db.notificationPreference.findUnique.mockResolvedValue({ email: true, push: true, whatsapp: true });
+    await processNotification({ ...msg, type: type as NotifyMessage['type'] });
+    expect(wa).not.toHaveBeenCalled();
+  });
+
+  it('no WhatsApp when the preference is off', async () => {
+    db.notificationPreference.findUnique.mockResolvedValue({ email: true, push: true, whatsapp: false });
+    await processNotification(waMsg);
+    expect(wa).not.toHaveBeenCalled();
+  });
+
+  it('a WhatsApp failure never fails the message, even in worker mode', async () => {
+    db.notificationPreference.findUnique.mockResolvedValue({ email: true, push: true, whatsapp: true });
+    wa.mockRejectedValue(new Error('meta down'));
+    expect(await processNotification(waMsg, { rethrowEmailErrors: true })).toBe('sent');
+    expect(db.notification.create).toHaveBeenCalledOnce();
   });
 });

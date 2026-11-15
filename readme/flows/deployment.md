@@ -92,6 +92,11 @@ the same name with `_PROD`. Shared names have no `_PROD` twin. Empty optional va
 | `SMS_DRIVER` | var | optional | `stub` (default) / `msg91` |
 | `MSG91_AUTH_KEY` | secret | if `SMS_DRIVER=msg91` | |
 | `MSG91_SENDER_ID`, `MSG91_OTP_TEMPLATE_ID` | var | if `SMS_DRIVER=msg91` | DLT-registered sender id + OTP template are required in India; template id from the MSG91 dashboard |
+| `WHATSAPP_DRIVER` | var | optional | `stub` (default) / `meta` |
+| `WHATSAPP_TOKEN` | secret | if `WHATSAPP_DRIVER=meta` | permanent system-user token for the WhatsApp Cloud API |
+| `WHATSAPP_PHONE_NUMBER_ID` | var | if `WHATSAPP_DRIVER=meta` | from the Meta WhatsApp Business account (`notification-preferences.md`) |
+| `WHATSAPP_API_VERSION` | var | optional | Graph API version, default `v21.0` |
+| `WHATSAPP_TEMPLATE_OUTBID`, `_ENDING_SOON`, `_AUCTION_WON`, `_SALE_PAYMENT_DUE` | var | optional | approved template names; defaults `nb_outbid`, `nb_ending_soon`, `nb_auction_won`, `nb_sale_payment_due` |
 | `TOTP_ENC_KEY` | secret | for 2FA | 32 bytes base64 (`openssl rand -base64 32`); empty = 2FA setup returns 503. Rotating it invalidates every enrolled authenticator |
 | `REQUIRE_ADMIN_2FA` | var | optional | `true` = Super Admins must enable 2FA before `/admin` works; default `false` |
 | `ADMIN_EMAIL`, `ALERT_EMAIL` | var | optional | `ALERT_EMAIL` enables alarms + SNS |

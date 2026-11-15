@@ -133,14 +133,14 @@ describe('profile phone change', () => {
       .mockResolvedValueOnce({ phone: '9876543210' })
       .mockResolvedValueOnce({ role: 'AUCTIONEER', phoneVerifiedAt: null, verifiedAt: new Date(), verificationRevokedAt: null, payoutAccount: { status: 'ACTIVE' } });
     await updateProfile('m1', { phone: '9123456789' });
-    expect(db.member.update.mock.calls[0][0].data).toEqual({ phone: '9123456789', phoneVerifiedAt: null });
+    expect(db.member.update.mock.calls[0][0].data).toEqual({ phone: '9123456789', phoneVerifiedAt: null, whatsappOptInAt: null });
     expect(db.member.update.mock.calls[1][0]).toEqual({ where: { id: 'm1' }, data: { verifiedAt: null } });
   });
 
   it('clearing the phone also clears verification; resending the same phone keeps it', async () => {
     db.member.findUnique.mockResolvedValueOnce({ phone: '9876543210' }).mockResolvedValue(null);
     await updateProfile('m1', { phone: '' });
-    expect(db.member.update.mock.calls[0][0].data).toEqual({ phone: null, phoneVerifiedAt: null });
+    expect(db.member.update.mock.calls[0][0].data).toEqual({ phone: null, phoneVerifiedAt: null, whatsappOptInAt: null });
 
     db.member.update.mockClear();
     db.member.findUnique.mockResolvedValueOnce({ phone: '9876543210' });

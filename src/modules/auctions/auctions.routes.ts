@@ -2,12 +2,13 @@ import { Router } from 'express';
 import { asyncHandler } from '@/core/middleware/asyncHandler';
 import { authenticate, optionalAuthenticate, requireActiveMember, requireRole } from '@/core/middleware/auth';
 import { validate } from '@/core/middleware/validate';
-import { auctionWriteLimiter, bulkLimiter } from '@/core/middleware/rateLimit';
+import { auctionWriteLimiter, bulkLimiter, viewLimiter } from '@/core/middleware/rateLimit';
 import { auctionBidsRouter, auctionBuyNowRouter } from '@/modules/bids/bids.routes';
 import { auctionReviewRouter } from '@/modules/reviews/reviews.routes';
 import { auctionQuestionsRouter } from '@/modules/questions/questions.routes';
 import { auctionDepositRouter } from '@/modules/deposits/deposits.routes';
 import * as ctrl from './auctions.controller';
+import { viewBodySchema } from '@/modules/analytics/analytics.validation';
 import {
   bulkCreateSchema,
   createAuctionSchema,
@@ -35,6 +36,7 @@ router.use('/:id/buy-now', auctionBuyNowRouter);
 router.use('/:id/review', auctionReviewRouter);
 router.use('/:id/questions', auctionQuestionsRouter);
 router.use('/:id/deposit', auctionDepositRouter);
+router.post('/:id/view', optionalAuthenticate, viewLimiter, validate(viewBodySchema), asyncHandler(ctrl.recordView));
 router.get('/:id/similar-sold', asyncHandler(ctrl.similarSold));
 router.get('/:id', optionalAuthenticate, asyncHandler(ctrl.detail));
 router.patch('/:id', ...seller, auctionWriteLimiter, validate(updateAuctionSchema), asyncHandler(ctrl.update));

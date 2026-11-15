@@ -30,6 +30,6 @@ All routes are under `/admin` and require `authenticate` + `requireRole('SUPER_A
 | DELETE | `/admin/categories/:id` | 409 `CATEGORY_IN_USE` when it has auctions or children |
 | GET / PUT | `/admin/settings/legal[/:slug]` | see `legal-pages.md` |
 | GET / PUT | `/admin/settings/device-limit` | per-role device cap |
-| POST | `/admin/retention/purge` | manual retention purge |
+| POST | `/admin/retention/purge` | manual retention purge (also deletes `AuctionViewer` rows older than 30 days; the result has `auctionViewersDeleted`; `analytics.md`) |
 
 Removed: `GET /admin/overview`, `POST /admin/members/:id/{activate,deactivate}`, `PATCH /admin/members/:id/role` (replaced by `/admin/dashboard` and `PATCH /admin/members/:id`).

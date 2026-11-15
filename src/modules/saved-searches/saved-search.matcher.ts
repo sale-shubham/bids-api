@@ -4,6 +4,7 @@ import { categoryTerms } from '@/modules/categories/categories.service';
 import type { Condition } from '@/modules/auctions/listing.rules';
 
 const MAX_MEMBERS_PER_AUCTION = 500;
+const MAX_FOLLOWERS_PER_AUCTION = 2000;
 
 export type PublishedAuction = {
   id: string;
@@ -56,5 +57,32 @@ export async function onAuctionPublished(a: PublishedAuction): Promise<number> {
       dedupeKey: `ssm:${a.id}:${memberId}`,
     });
   }
+  await notifyFollowers(a, new Set(byMember.keys()));
   return byMember.size;
+}
+
+/** Notify active followers of the seller (at most 2,000), skipping members already alerted by a saved search in this run. */
+export async function notifyFollowers(a: PublishedAuction, alreadyNotified: Set<string> = new Set()): Promise<number> {
+  const [seller, followers] = await Promise.all([
+    prisma.member.findUnique({ where: { id: a.sellerId }, select: { name: true } }),
+    prisma.follow.findMany({
+      where: { sellerId: a.sellerId, follower: { isActive: true } },
+      select: { followerId: true },
+      orderBy: { createdAt: 'asc' },
+      take: MAX_FOLLOWERS_PER_AUCTION,
+    }),
+  ]);
+  let sent = 0;
+  for (const { followerId } of followers) {
+    if (followerId === a.sellerId || alreadyNotified.has(followerId)) continue;
+    await enqueueNotification({
+      type: 'followed-seller-listed',
+      memberId: followerId,
+      auctionId: a.id,
+      data: { sellerName: seller?.name ?? '' },
+      dedupeKey: `fsl:${a.id}:${followerId}`,
+    });
+    sent++;
+  }
+  return sent;
 }

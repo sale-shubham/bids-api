@@ -69,17 +69,27 @@ export async function purgeExpiredRateLimitBuckets() {
   return count;
 }
 
+// Unique-viewer dedupe rows (AuctionViewer) are only needed for the day they were written; keep 30 days.
+export const AUCTION_VIEWER_RETENTION_DAYS = 30;
+
+export async function purgeAuctionViewers(retentionDays = AUCTION_VIEWER_RETENTION_DAYS) {
+  const cutoff = new Date(Date.now() - retentionDays * 86_400_000);
+  const { count } = await prisma.auctionViewer.deleteMany({ where: { date: { lt: cutoff } } });
+  return count;
+}
+
 export async function runRetentionPurge(overrides?: { otpChallengeDays?: number; sessionInactiveDays?: number }) {
-  const [otpChallengesDeleted, sessionsDeleted, wsRowsDeleted, rateLimitBucketsDeleted] = await Promise.all([
+  const [otpChallengesDeleted, sessionsDeleted, wsRowsDeleted, rateLimitBucketsDeleted, auctionViewersDeleted] = await Promise.all([
     purgeExpiredOtpChallenges(overrides?.otpChallengeDays),
     purgeStaleSessions(overrides?.sessionInactiveDays),
     purgeStaleWsRows(),
     purgeExpiredRateLimitBuckets(),
+    purgeAuctionViewers(),
   ]);
 
   logger.info(
-    { otpChallengesDeleted, sessionsDeleted, ...wsRowsDeleted, rateLimitBucketsDeleted },
+    { otpChallengesDeleted, sessionsDeleted, ...wsRowsDeleted, rateLimitBucketsDeleted, auctionViewersDeleted },
     'Retention purge complete',
   );
-  return { otpChallengesDeleted, sessionsDeleted, ...wsRowsDeleted, rateLimitBucketsDeleted };
+  return { otpChallengesDeleted, sessionsDeleted, ...wsRowsDeleted, rateLimitBucketsDeleted, auctionViewersDeleted };
 }

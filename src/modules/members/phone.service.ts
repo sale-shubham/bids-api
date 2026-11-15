@@ -14,6 +14,9 @@ export async function sendPhoneOtp(phone: string): Promise<{ sentTo: string }> {
 
 export async function verifyPhone(memberId: string, phone: string, code: string, now = new Date()) {
   await consumeOtpChallenge(e164(phone), 'PHONE_VERIFY', code);
-  await prisma.member.update({ where: { id: memberId }, data: { phone, phoneVerifiedAt: now } });
+  const current = await prisma.member.findUnique({ where: { id: memberId }, select: { phone: true } });
+  // A different number than before: the WhatsApp opt-in was for the old one.
+  const optOut = current?.phone !== phone ? { whatsappOptInAt: null } : {};
+  await prisma.member.update({ where: { id: memberId }, data: { phone, phoneVerifiedAt: now, ...optOut } });
   await refreshSellerVerification(memberId, now);
 }

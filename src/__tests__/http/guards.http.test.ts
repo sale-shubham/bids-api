@@ -20,6 +20,14 @@ const AUTHED: Route[] = [
   ['post', '/auth/2fa/recovery-codes'],
   ['post', '/members/me/phone/otp'],
   ['post', '/members/me/phone/verify'],
+  ['post', '/members/me/whatsapp'],
+  ['get', '/members/me/following'],
+  ['get', '/members/me/notification-preferences'],
+  ['put', '/members/me/notification-preferences'],
+  ['post', '/sellers/s1/follow'],
+  ['delete', '/sellers/s1/follow'],
+  ['get', '/analytics/seller'],
+  ['get', '/analytics/auctions/a1'],
   ['post', '/reports'],
   ['get', '/auth/sessions'],
   ['delete', '/auth/sessions/s1'],
@@ -105,6 +113,8 @@ const ADMIN: Route[] = [
 ];
 
 const SELLER_ONLY: Route[] = [
+  ['get', '/analytics/seller'],
+  ['get', '/analytics/auctions/a1'],
   ['get', '/auctions/mine'],
   ['post', '/auctions'],
   ['post', '/auctions/bulk'],
@@ -155,6 +165,7 @@ const PUBLIC: Route[] = [
   ['get', '/auctions/a1'],
   ['get', '/auctions/a1/bids'],
   ['get', '/members/m1/public'],
+  ['post', '/auctions/a1/view'],
   ['get', '/members/m1/reviews'],
   ['get', '/auctions/a1/questions'],
   ['get', '/push/vapid-public-key'],

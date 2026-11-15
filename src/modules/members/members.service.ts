@@ -28,21 +28,23 @@ export async function getMemberDto(memberId: string) {
   };
 }
 
-export async function getPublicProfile(memberId: string, now = new Date()) {
+export async function getPublicProfile(memberId: string, viewerId?: string, now = new Date()) {
   const member = await prisma.member.findFirst({
     where: { id: memberId, isActive: true },
     select: memberPublicSelect,
   });
   if (!member) return null;
   const { statusWhere } = await import('@/modules/auctions/auctions.query');
-  const [auctionsSold, activeAuctions] = await Promise.all([
+  const { isFollowing } = await import('@/modules/follows/follows.service');
+  const [auctionsSold, activeAuctions, following] = await Promise.all([
     prisma.auction.count({
       where: { AND: [{ sellerId: memberId }, statusWhere('ended', now), { winnerId: { not: null } }] },
     }),
     prisma.auction.count({ where: { AND: [{ sellerId: memberId }, statusWhere('live', now)] } }),
+    viewerId ? isFollowing(viewerId, memberId) : Promise.resolve(false),
   ]);
   const { ratingSum, ratingCount, verifiedAt, ...publicFields } = member;
-  return { ...publicFields, verified: !!verifiedAt, ratingAvg: ratingAvg(ratingSum, ratingCount), ratingCount, auctionsSold, activeAuctions };
+  return { ...publicFields, verified: !!verifiedAt, ratingAvg: ratingAvg(ratingSum, ratingCount), ratingCount, auctionsSold, activeAuctions, isFollowing: following };
 }
 
 // Base URLs an avatar may come from: our CloudFront, or the bucket's S3 URL.
@@ -74,6 +76,7 @@ export async function updateProfile(
     if ((current?.phone ?? null) !== next) {
       phoneChanged = true;
       data.phoneVerifiedAt = null;
+      data.whatsappOptInAt = null;
     }
   }
   if (input.name !== undefined) data.name = input.name;

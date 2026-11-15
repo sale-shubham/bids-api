@@ -50,6 +50,7 @@ All three use `path: '/'` (the web app's middleware needs `nb_rt` on every page 
 | `qaLimiter` | `POST /auctions/:id/questions` | 10 / hour per member (IP fallback) | Postgres (`rl:qa:`) |
 | `apiLimiter` | `POST /ws/ticket`, `POST /push/subscribe`, `POST /push/unsubscribe` | 60 / 60 s, keyed by `req.user?.sub` (falls back to per-IP) | in-memory |
 | `auctionWriteLimiter` | `POST /auctions`, `PATCH /auctions/:id`, `POST /auctions/:id/republish` | 10 / 60 s per member (IP fallback) | in-memory |
+| `viewLimiter` | `POST /auctions/:id/view` | 120 / 60 s per IP | in-memory |
 
 - **Shared store for money/security limiters**: every limiter marked Postgres uses `PgRateLimitStore` (`src/core/middleware/pgRateLimitStore.ts`) — the `RateLimitBucket` table in the existing Postgres, one atomic upsert per hit, fixed window, each limiter under its own key prefix (`rl:auth:`, `rl:bid-member:`, …). Every Lambda container shares the count. A DB error fails open (`passOnStoreError`). No Redis/ElastiCache: those would need the Lambda in a VPC plus a NAT gateway; this costs nothing extra. Rows whose window ended more than a day ago are swept by the daily retention job (`purgeExpiredRateLimitBuckets`).
 - **In-memory limiters** (`apiLimiter`, `auctionWriteLimiter`) count per container — cheap anti-hammering guards on ordinary writes, not money paths.
@@ -102,6 +103,8 @@ All three use `path: '/'` (the web app's middleware needs `nb_rt` on every page 
 | `LOGO_URL` | Public HTTPS URL to the brand logo shown in the email header. Optional — falls back to a text wordmark when unset |
 | `SMS_DRIVER` | `stub` (default: logs a masked number, and the code outside production) or `msg91` |
 | `MSG91_AUTH_KEY` / `MSG91_SENDER_ID` / `MSG91_OTP_TEMPLATE_ID` | MSG91 Flow API credentials and DLT-registered OTP template (India). Auth key is a GitHub **secret**; boot refuses `msg91` in production without auth key and template id |
+| `WHATSAPP_DRIVER` / `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_API_VERSION` | `stub` (default: logs a masked number and the template name) or `meta` (WhatsApp Cloud API). Token is a GitHub **secret**; boot refuses `meta` in production without token and phone number id |
+| `WHATSAPP_TEMPLATE_OUTBID` / `_ENDING_SOON` / `_AUCTION_WON` / `_SALE_PAYMENT_DUE` | Approved template names (defaults `nb_outbid`, `nb_ending_soon`, `nb_auction_won`, `nb_sale_payment_due`) |
 | `TOTP_ENC_KEY` | 32 bytes, base64 (`openssl rand -base64 32`): AES-256-GCM key for TOTP secrets. GitHub **secret**. Empty = 2FA setup / enable return 503 `TWO_FACTOR_UNAVAILABLE`. Rotating it invalidates every enrolled authenticator (members must re-enrol) |
 | `REQUIRE_ADMIN_2FA` | `true` = Super Admins must enable 2FA before any `/admin` route works (default `false`) |
 | `RATE_LIMIT_AUTH_MAX` / `RATE_LIMIT_OTP_IP_MAX` | Override the 20 / window caps of `authLimiter` / `otpIpLimiter`. Empty = 20. Set on the dev stage only (Playwright signs up many members from one CI IP); a non-number fails boot |

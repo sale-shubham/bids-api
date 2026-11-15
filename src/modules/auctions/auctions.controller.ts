@@ -81,3 +81,16 @@ export async function republish(req: Request, res: Response) {
   const svc = await import('./auctions.service');
   return ok(res, { auction: await svc.republishAuction(param(req, 'id'), actor(req), req.body) });
 }
+
+// POST /auctions/:id/view — count a page view for seller analytics (204, never errors on unknown ids).
+export async function recordView(req: Request, res: Response) {
+  const svc = await import('@/modules/analytics/analytics.service');
+  const { DEVICE_COOKIE } = await import('@/modules/auth/device.service');
+  await svc.recordView(param(req, 'id'), {
+    memberId: req.user?.sub,
+    deviceId: req.cookies?.[DEVICE_COOKIE],
+    ip: req.ip,
+    userAgent: req.get('user-agent') ?? undefined,
+  });
+  return res.status(204).end();
+}
