@@ -126,6 +126,12 @@ model Member {
   recoveryCodes   RecoveryCode[]
   reportsFiled    Report[]
 
+  deposits             AuctionDeposit[]
+  strikes              Strike[]
+  secondChanceOffers   SecondChanceOffer[]
+  shillSignalsAsBidder ShillSignal[]       @relation("ShillBidder")
+  shillSignalsAsSeller ShillSignal[]       @relation("ShillSeller")
+
   @@index([role])
 }
 
@@ -189,6 +195,7 @@ model Auction {
   currentBidPaise   BigInt        @default(0)
   reservePricePaise BigInt? // hidden from everyone but the seller / admin; null = no reserve
   buyNowPricePaise  BigInt? // null = Buy It Now off
+  depositPaise      BigInt? // refundable bid deposit; null = none
   bidCount          Int           @default(0)
   startTime         DateTime
   endTime           DateTime
@@ -204,13 +211,16 @@ model Auction {
   updatedAt         DateTime      @updatedAt
   deletedAt         DateTime?
 
-  bids       Bid[]
-  maxBids    MaxBid[]
-  watchlist  Watchlist[]
-  commission Commission?
-  review     Review?
-  sale       Sale?
-  questions  AuctionQuestion[]
+  bids               Bid[]
+  maxBids            MaxBid[]
+  watchlist          Watchlist[]
+  commission         Commission?
+  review             Review?
+  sales              Sale[]
+  questions          AuctionQuestion[]
+  deposits           AuctionDeposit[]
+  secondChanceOffers SecondChanceOffer[]
+  shillSignals       ShillSignal[]
 
   @@index([status, endTime])
   @@index([status, startTime])
@@ -497,7 +507,7 @@ enum SaleStatus {
 model Sale {
   id               String     @id @default(cuid())
   auction          Auction    @relation(fields: [auctionId], references: [id])
-  auctionId        String     @unique
+  auctionId        String
   buyer            Member     @relation("Purchases", fields: [buyerId], references: [id])
   buyerId          String
   seller           Member     @relation("Sales", fields: [sellerId], references: [id])
@@ -527,6 +537,11 @@ model Sale {
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
+  strike            Strike?
+  secondChanceOffer SecondChanceOffer?
+
+  // Partial unique index "Sale_open_per_auction" (one open sale per auction) lives in the migration SQL only.
+  @@index([auctionId])
   @@index([buyerId, status])
   @@index([sellerId, status])
   @@index([status, payBy])
@@ -588,4 +603,112 @@ model Report {
   @@unique([reporterId, targetType, targetId])
   @@index([status, createdAt])
   @@index([targetType, targetId])
+}
+
+// ----------------------------------------------------------------------------
+// TRUST 2: bid deposits, strikes, second-chance offers, shill-bid signals
+// ----------------------------------------------------------------------------
+
+enum DepositStatus {
+  PENDING
+  HELD
+  REFUNDED
+  FORFEITED
+}
+
+// Refundable deposit a bidder pays before bidding on a high-value auction (or after 2 strikes).
+model AuctionDeposit {
+  id               String        @id @default(cuid())
+  auction          Auction       @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  auctionId        String
+  member           Member        @relation(fields: [memberId], references: [id])
+  memberId         String
+  amountPaise      BigInt
+  status           DepositStatus @default(PENDING)
+  paymentOrderId   String?       @unique
+  gatewayPaymentId String?
+  refundId         String?
+  heldAt           DateTime?
+  refundedAt       DateTime?
+  forfeitedAt      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@unique([auctionId, memberId])
+  @@index([status])
+}
+
+enum StrikeReason {
+  UNPAID
+}
+
+// One strike per cancelled (unpaid) sale; active = not removed and not expired (12 months).
+model Strike {
+  id          String       @id @default(cuid())
+  member      Member       @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId    String
+  sale        Sale         @relation(fields: [saleId], references: [id])
+  saleId      String       @unique
+  reason      StrikeReason
+  createdAt   DateTime     @default(now())
+  expiresAt   DateTime
+  removedAt   DateTime?
+  removedById String?
+  note        String?
+
+  @@index([memberId, expiresAt])
+}
+
+enum OfferStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+// Second-chance offer to the runner-up after a sale was cancelled for non-payment.
+model SecondChanceOffer {
+  id          String      @id @default(cuid())
+  sale        Sale        @relation(fields: [saleId], references: [id])
+  saleId      String      @unique
+  auction     Auction     @relation(fields: [auctionId], references: [id])
+  auctionId   String
+  bidder      Member      @relation(fields: [bidderId], references: [id])
+  bidderId    String
+  amountPaise BigInt
+  status      OfferStatus @default(PENDING)
+  expiresAt   DateTime
+  respondedAt DateTime?
+  newSaleId   String?
+  createdAt   DateTime    @default(now())
+
+  @@index([bidderId, status])
+  @@index([status, expiresAt])
+}
+
+enum RiskOutcome {
+  DISMISSED
+  ACTION_TAKEN
+}
+
+// Review-only shill-bid flag (never blocks anything).
+model ShillSignal {
+  id           String       @id @default(cuid())
+  auction      Auction      @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  auctionId    String
+  bidder       Member       @relation("ShillBidder", fields: [bidderId], references: [id], onDelete: Cascade)
+  bidderId     String
+  seller       Member       @relation("ShillSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  sellerId     String
+  score        Int
+  reasons      Json
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  reviewedAt   DateTime?
+  reviewedById String?
+  outcome      RiskOutcome?
+  note         String?
+
+  @@unique([auctionId, bidderId])
+  @@index([reviewedAt, score])
 }

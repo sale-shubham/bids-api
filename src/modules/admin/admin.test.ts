@@ -34,6 +34,16 @@ describe('admin member self-protection', () => {
     expect(disconnect).toHaveBeenCalledWith('x');
   });
 
+  it('the admin DTO carries activeStrikes (not-removed, unexpired) and drops the raw _count', async () => {
+    db.member.findUnique.mockResolvedValue({ id: 'x' });
+    db.member.update.mockResolvedValue({ id: 'x', isActive: true, unpaidCommissionPaise: 0n, moneySpentPaise: 0n, _count: { strikes: 2 } });
+    const out = (await updateMember('x', 'me', { isActive: true })) as Record<string, unknown>;
+    expect(out.activeStrikes).toBe(2);
+    expect(out).not.toHaveProperty('_count');
+    const select = db.member.update.mock.calls.at(-1)![0].select;
+    expect(select._count.select.strikes.where).toMatchObject({ removedAt: null, expiresAt: { gt: expect.any(Date) } });
+  });
+
   it('404 for unknown member; reactivation does not revoke sessions', async () => {
     db.member.findUnique.mockResolvedValue(null);
     await expect(updateMember('nope', 'me', { isActive: true })).rejects.toMatchObject({ statusCode: 404 });

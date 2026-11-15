@@ -20,7 +20,11 @@ export async function createReview(
     select: { id: true, sellerId: true, status: true, deletedAt: true, startTime: true, endTime: true, winnerId: true, endedAt: true },
   });
   if (!auction) throw auctionNotFound();
-  const sale = await prisma.sale.findUnique({ where: { auctionId }, select: { status: true, deliveredAt: true, releasedAt: true } });
+  const sale = await prisma.sale.findFirst({
+    where: { auctionId },
+    orderBy: { createdAt: 'desc' },
+    select: { status: true, deliveredAt: true, releasedAt: true },
+  });
   if (!isReviewWindowOpen(auction, memberId, now, sale)) {
     throw new AppError(403, 'REVIEW_NOT_ALLOWED', 'Only the winner of an ended auction can review the seller, within 60 days (after delivery when paid through checkout)');
   }

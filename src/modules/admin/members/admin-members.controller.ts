@@ -16,3 +16,10 @@ export async function update(req: Request, res: Response) {
   const svc = await import('./admin-members.service');
   return ok(res, { member: await svc.updateMember(param(req, 'id'), req.user!.sub, req.body) });
 }
+
+// GET /admin/members/:id/strikes -> { items }
+export async function strikes(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const svc = await import('@/modules/strikes/strikes.service');
+  return ok(res, await svc.listMemberStrikes(param(req, 'id')));
+}

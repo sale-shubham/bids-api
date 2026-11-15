@@ -61,6 +61,12 @@ const AUTHED: Route[] = [
   ['post', '/sales/sale1/ship'],
   ['post', '/sales/sale1/confirm'],
   ['post', '/sales/sale1/dispute'],
+  ['post', '/sales/sale1/second-chance'],
+  ['post', '/auctions/a1/deposit/checkout'],
+  ['get', '/second-chance-offers/mine'],
+  ['get', '/second-chance-offers/o1'],
+  ['post', '/second-chance-offers/o1/accept'],
+  ['post', '/second-chance-offers/o1/decline'],
   ['get', '/payouts/account'],
   ['post', '/payouts/account'],
 ];
@@ -87,6 +93,11 @@ const ADMIN: Route[] = [
   ['get', '/admin/sales'],
   ['post', '/admin/sales/sale1/release'],
   ['post', '/admin/sales/sale1/refund'],
+  ['patch', '/admin/auctions/a1/deposit'],
+  ['get', '/admin/members/m2/strikes'],
+  ['post', '/admin/strikes/st1/remove'],
+  ['get', '/admin/risk'],
+  ['patch', '/admin/risk/r1'],
 ];
 
 const SELLER_ONLY: Route[] = [
@@ -102,6 +113,7 @@ const SELLER_ONLY: Route[] = [
   ['get', '/commissions/summary'],
   ['post', '/commissions/c1/checkout'],
   ['post', '/sales/sale1/ship'],
+  ['post', '/sales/sale1/second-chance'],
   ['get', '/payouts/account'],
   ['post', '/payouts/account'],
 ];
@@ -118,6 +130,11 @@ const BIDDER_ONLY: Route[] = [
   ['post', '/sales/sale1/checkout'],
   ['post', '/sales/sale1/confirm'],
   ['post', '/sales/sale1/dispute'],
+  ['post', '/auctions/a1/deposit/checkout'],
+  ['get', '/second-chance-offers/mine'],
+  ['get', '/second-chance-offers/o1'],
+  ['post', '/second-chance-offers/o1/accept'],
+  ['post', '/second-chance-offers/o1/decline'],
 ];
 
 const PUBLIC: Route[] = [

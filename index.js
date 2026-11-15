@@ -79,7 +79,16 @@ export const endingSoonHandler = async () => {
 export const salesMaintenanceHandler = async () => {
   const { runSalesMaintenance } = await import('./src/modules/sales/sales.jobs.ts');
   const res = await runSalesMaintenance();
-  if (res.cancelled || res.autoConfirmed || res.releaseRetried) logger.info(res, 'sales maintenance run');
+  if (Object.values(res).some((n) => n > 0)) logger.info(res, 'sales maintenance run');
+  return res;
+};
+
+// Scheduled daily (serverless.yml functions.riskScan): scan the last 90 days of bids for shill-bid patterns
+// and flag them for admin review (never blocks anything). Idempotent: signals are upserted.
+export const riskScanHandler = async () => {
+  const { runRiskScan } = await import('./src/modules/risk/risk.jobs.ts');
+  const res = await runRiskScan();
+  if (res.flagged) logger.info(res, 'risk scan run');
   return res;
 };
 

@@ -276,10 +276,17 @@ functions:
   salesMaintenance:
     name: ${self:service}${sls:stage}-sales-maintenance
     handler: dist/index.salesMaintenanceHandler
-    description: Hourly - cancel unpaid sales, auto-confirm shipped sales after 7 days and release held funds, retry failed releases.
+    description: Hourly - cancel unpaid sales (and strike the buyer), auto-confirm shipped sales after 7 days and release held funds, retry failed releases, refund / forfeit bid deposits, expire second-chance offers.
     timeout: 120
     events:
       - schedule: rate(1 hour)
+  riskScan:
+    name: ${self:service}${sls:stage}-risk-scan
+    handler: dist/index.riskScanHandler
+    description: Daily - scan the last 90 days of bids for shill-bid patterns and flag them for admin review.
+    timeout: 120
+    events:
+      - schedule: rate(1 day)
 
 resources:
   Conditions:

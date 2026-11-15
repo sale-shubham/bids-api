@@ -476,3 +476,43 @@ describe('GET /auctions/:id', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('bid deposits', () => {
+  const buy = async () => request(await getApp()).post('/auctions/a1/buy-now').set('Authorization', await bearer('BIDDER', 'bidder1'));
+
+  it('403 DEPOSIT_REQUIRED with the amount when the auction needs a deposit that is not held; no bid is written', async () => {
+    arrange({ depositPaise: 1_000_000n });
+    const res = await place(2_000_000);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatchObject({ code: 'DEPOSIT_REQUIRED', details: { depositPaise: 1_000_000 } });
+    expect(prismaMock.bid.create).not.toHaveBeenCalled();
+  });
+
+  it('a PENDING deposit is not enough; a HELD one lets the bid through', async () => {
+    arrange({ depositPaise: 1_000_000n });
+    prismaMock.auctionDeposit.findUnique.mockResolvedValue({ status: 'PENDING' });
+    expect((await place(2_000_000)).body.error.code).toBe('DEPOSIT_REQUIRED');
+    prismaMock.auctionDeposit.findUnique.mockResolvedValue({ status: 'HELD' });
+    expect((await place(2_000_000)).status).toBe(201);
+  });
+
+  it('two active strikes require the strike-based deposit even without an auction deposit', async () => {
+    arrange();
+    prismaMock.strike.count.mockResolvedValue(2);
+    const res = await place(100_000);
+    expect(res.body.error).toMatchObject({ code: 'DEPOSIT_REQUIRED', details: { depositPaise: 50_000 } });
+  });
+
+  it('Buy It Now needs the deposit too', async () => {
+    arrange({ buyNowPricePaise: 900_000n, depositPaise: 1_000_000n });
+    const res = await buy();
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('DEPOSIT_REQUIRED');
+  });
+
+  it('the shill-bid check runs after the commit and can never fail the bid', async () => {
+    arrange();
+    prismaMock.session.findMany.mockRejectedValue(new Error('db blip'));
+    expect((await place(100_000)).status).toBe(201);
+  });
+});

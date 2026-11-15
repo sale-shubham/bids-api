@@ -25,8 +25,8 @@ import { getPlatformSettings, setPlatformSettings } from './settings.service';
 import { getLegalPage, setLegalPage } from './legal-pages.service';
 import { sanitizeLegalHtml } from './legal-pages.sanitize';
 
-const valid = { commissionRateBps: 500, minIncrementPaise: 10000, antiSnipingMinutes: 2, maxPricePaise: 10_000_000_000, categories: ['Art', 'Books'], checkoutMode: 'optional' as const };
-const { maxPricePaise: _omit, checkoutMode: _omit2, ...legacy } = valid;
+const valid = { commissionRateBps: 500, minIncrementPaise: 10000, antiSnipingMinutes: 2, maxPricePaise: 10_000_000_000, categories: ['Art', 'Books'], checkoutMode: 'optional' as const, depositThresholdPaise: 10_000_000, depositRateBps: 1000 };
+const { maxPricePaise: _omit, checkoutMode: _omit2, depositThresholdPaise: _omit3, depositRateBps: _omit4, ...legacy } = valid;
 
 describe('platform settings validation', () => {
   it('accepts a valid object and enforces ranges', () => {
@@ -57,6 +57,25 @@ describe('platform settings validation', () => {
     store.rows.set('checkout.mode', { key: 'checkout.mode', value: 'bogus', updatedAt: new Date() });
     expect((await getPlatformSettings()).checkoutMode).toBe('optional');
     store.rows.delete('checkout.mode');
+    await setPlatformSettings(valid);
+  });
+  it('deposit settings are optional on PUT: threshold 0..hard max (0 = off), rate 100..5000 bps', () => {
+    expect(platformSettingsSchema.validate(legacy).error).toBeUndefined();
+    expect(platformSettingsSchema.validate({ ...legacy, depositThresholdPaise: 0 }).error).toBeUndefined();
+    expect(platformSettingsSchema.validate({ ...legacy, depositThresholdPaise: -1 }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...legacy, depositThresholdPaise: 1_000_000_000_001 }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...legacy, depositRateBps: 99 }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...legacy, depositRateBps: 5001 }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...legacy, depositRateBps: 5000 }).error).toBeUndefined();
+  });
+  it('deposit settings: defaults, kept when PUT omits them, out-of-range stored values fall back', async () => {
+    expect(await getPlatformSettings()).toMatchObject({ depositThresholdPaise: 10_000_000, depositRateBps: 1000 });
+    await setPlatformSettings({ ...valid, depositThresholdPaise: 0, depositRateBps: 2500 });
+    expect(await setPlatformSettings({ ...legacy, commissionRateBps: 600 })).toMatchObject({ depositThresholdPaise: 0, depositRateBps: 2500 });
+    store.rows.set('auction.depositRateBps', { key: 'auction.depositRateBps', value: '7', updatedAt: new Date() });
+    expect((await getPlatformSettings()).depositRateBps).toBe(1000);
+    store.rows.delete('auction.depositRateBps');
+    store.rows.delete('auction.depositThresholdPaise');
     await setPlatformSettings(valid);
   });
   it('categories: 1-30, unique (case-insensitive), 2-40 chars', () => {

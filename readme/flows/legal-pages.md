@@ -19,7 +19,7 @@ Seed (`npm run prisma:seed`, never run automatically): `prisma/seed.ts` inserts 
 
 ## Public settings
 
-`GET /settings/public` -> `{ commissionRateBps, minIncrementPaise, antiSnipingMinutes, maxPricePaise, categories }` (AppSetting keys `commission.rateBps`, `auction.minIncrementPaise`, `auction.antiSnipingMinutes`, `auction.maxPricePaise`, `auction.categories`, with defaults 500 / 10000 / 2 / 10000000000 / []; `maxPricePaise` is a JSON number, the highest price a listing or bid may have). Admin edit: see `admin.md`.
+`GET /settings/public` -> `{ commissionRateBps, minIncrementPaise, antiSnipingMinutes, maxPricePaise, categories, checkoutMode, depositThresholdPaise, depositRateBps }` (AppSetting keys `commission.rateBps`, `auction.minIncrementPaise`, `auction.antiSnipingMinutes`, `auction.maxPricePaise`, `auction.categories`, with defaults 500 / 10000 / 2 / 10000000000 / []; `maxPricePaise` is a JSON number, the highest price a listing or bid may have; `depositThresholdPaise` (default 10000000, 0 = off) and `depositRateBps` (default 1000) drive bid deposits, `deposits.md`). Admin edit: see `admin.md`.
 
 ## Contact
 

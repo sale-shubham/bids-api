@@ -1,0 +1,9 @@
+<%- include('_head', { heading: 'Deposit received', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  Your refundable deposit of <strong><%= amount %></strong> for <strong><%= auctionTitle %></strong> is held. You can place bids now.
+                </p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  It is refunded automatically when the auction ends and you do not win, or once you have paid as the winner.
+                </p>
+<%- include('_foot', { ctaUrl: auctionUrl, ctaLabel: 'View auction', frontendUrl }) %>

@@ -69,6 +69,7 @@ export function toDetail(a: AuctionRow, now: Date = new Date()) {
     description: a.description,
     images: a.images,
     minIncrementPaise: toPaise(a.minIncrementPaise),
+    depositPaise: toPaiseOrNull(a.depositPaise),
     highestBidderId: a.highestBidderId,
     winnerId: a.winnerId,
     endedAt: a.endedAt ? a.endedAt.toISOString() : null,
@@ -82,5 +83,6 @@ export function toDetail(a: AuctionRow, now: Date = new Date()) {
     watcherCount: 0,
     review: null as ReviewDTO | null,
     canReview: false,
+    deposit: null as { requiredPaise: number; status: 'PENDING' | 'HELD' | 'REFUNDED' | 'FORFEITED' | null } | null,
   };
 }

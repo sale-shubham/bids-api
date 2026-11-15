@@ -1,0 +1,6 @@
+<%- include('_head', { heading: 'Second-chance offer declined', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  The bidder declined your second-chance offer for <strong><%= auctionTitle %></strong>.
+                </p>
+<%- include('_foot', { ctaUrl: saleUrl, ctaLabel: 'View sale', frontendUrl }) %>

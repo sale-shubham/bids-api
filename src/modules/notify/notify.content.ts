@@ -234,6 +234,112 @@ export function buildContent(c: ContentCtx): Content {
         templateData: { name: c.memberName, targetType, reason, targetLabel, reportsUrl: `${env.app.url}/admin/reports` },
       };
     }
+    case 'deposit-held': {
+      const amount = formatInr(num(c.data.amountPaise));
+      return {
+        title: 'Deposit received',
+        body: `Your refundable deposit of ${amount} for "${c.auctionTitle}" is held. You can bid now.`,
+        url: auctionPath,
+        subject: `Deposit of ${amount} received for "${c.auctionTitle}"`,
+        template: 'deposit-held',
+        templateData: { ...base, amount },
+      };
+    }
+    case 'deposit-refunded': {
+      const amount = formatInr(num(c.data.amountPaise));
+      return {
+        title: 'Deposit refunded',
+        body: `Your deposit of ${amount} for "${c.auctionTitle}" was refunded to your original payment method.`,
+        url: auctionPath,
+        subject: `Deposit of ${amount} refunded for "${c.auctionTitle}"`,
+        template: 'deposit-refunded',
+        templateData: { ...base, amount },
+      };
+    }
+    case 'deposit-forfeited': {
+      const amount = formatInr(num(c.data.amountPaise));
+      return {
+        title: 'Deposit forfeited',
+        body: `You won "${c.auctionTitle}" but did not pay in time, so your deposit of ${amount} was forfeited.`,
+        url: auctionPath,
+        subject: `Deposit of ${amount} forfeited for "${c.auctionTitle}"`,
+        template: 'deposit-forfeited',
+        templateData: { ...base, amount },
+      };
+    }
+    case 'strike-issued': {
+      const strikeCount = num(c.data.strikeCount);
+      const depositsRequired = c.data.depositsRequired === true;
+      const expires = dateText(c.data.expiresAt);
+      const purchasesPath = '/purchases';
+      return {
+        title: depositsRequired ? 'Second strike: deposits now required' : 'Strike issued',
+        body: depositsRequired
+          ? `You did not pay for "${c.auctionTitle}" in time. This is strike ${strikeCount}: a refundable deposit is now required on every bid. A third strike suspends your account.`
+          : `You did not pay for "${c.auctionTitle}" in time, so your account received a strike. Three active strikes suspend your account.`,
+        url: purchasesPath,
+        subject: depositsRequired ? 'Strike 2: deposits are now required on every bid' : 'You received a strike for an unpaid auction',
+        template: 'strike-issued',
+        templateData: { ...base, strikeCount, depositsRequired, expires, purchasesUrl: `${env.app.url}${purchasesPath}` },
+      };
+    }
+    case 'account-suspended':
+      return {
+        title: 'Account suspended',
+        body: `Your account was suspended after ${num(c.data.strikeCount) || 3} strikes for unpaid auctions. Contact support if you think this is a mistake.`,
+        url: '/contact',
+        subject: 'Your NobleBid account was suspended',
+        template: 'account-suspended',
+        templateData: { ...base, strikeCount: num(c.data.strikeCount) || 3 },
+      };
+    case 'second-chance-offer': {
+      const amount = formatInr(num(c.data.amountPaise));
+      const offerPath = `/purchases/offers/${str(c.data.offerId)}`;
+      const expires = dateText(c.data.expiresAt);
+      return {
+        title: 'Second chance to buy',
+        body: `The winner of "${c.auctionTitle}" did not pay. The seller offers it to you for ${amount}${expires ? ` (offer ends ${expires})` : ''}.`,
+        url: offerPath,
+        subject: `Second chance: "${c.auctionTitle}" for ${amount}`,
+        template: 'second-chance-offer',
+        templateData: { ...base, amount, expires, offerUrl: `${env.app.url}${offerPath}` },
+      };
+    }
+    case 'second-chance-accepted': {
+      const amount = formatInr(num(c.data.amountPaise));
+      const salePath = `/sell/sales/${str(c.data.saleId)}`;
+      return {
+        title: 'Second-chance offer accepted',
+        body: `The bidder accepted your offer of ${amount} for "${c.auctionTitle}". They have 3 days to pay.`,
+        url: salePath,
+        subject: `Second-chance offer accepted for "${c.auctionTitle}"`,
+        template: 'second-chance-accepted',
+        templateData: { ...base, amount, saleUrl: `${env.app.url}${salePath}` },
+      };
+    }
+    case 'second-chance-declined': {
+      const salePath = `/sell/sales/${str(c.data.saleId)}`;
+      return {
+        title: 'Second-chance offer declined',
+        body: `The bidder declined your second-chance offer for "${c.auctionTitle}".`,
+        url: salePath,
+        subject: `Second-chance offer declined for "${c.auctionTitle}"`,
+        template: 'second-chance-declined',
+        templateData: { ...base, saleUrl: `${env.app.url}${salePath}` },
+      };
+    }
+    case 'shill-flag': {
+      const score = num(c.data.score);
+      const reasons = Array.isArray(c.data.reasons) ? c.data.reasons.filter((r): r is string => typeof r === 'string') : [];
+      return {
+        title: 'Possible shill bidding',
+        body: `Bidding on "${c.auctionTitle}" was flagged for review (score ${score}${reasons.length ? `: ${reasons.join(', ')}` : ''}).`,
+        url: '/admin/risk',
+        subject: `Shill-bid flag on "${c.auctionTitle}"`,
+        template: 'shill-flag',
+        templateData: { ...base, score, reasons: reasons.join(', '), riskUrl: `${env.app.url}/admin/risk` },
+      };
+    }
     case 'commission-due': {
       const commission = formatInr(num(c.data.commissionPaise));
       const commissionPath = '/sell/commissions';

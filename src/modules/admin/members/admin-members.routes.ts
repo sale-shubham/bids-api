@@ -12,5 +12,6 @@ router.use(authenticate, requireRole('SUPER_ADMIN'));
 
 router.get('/', validate(listMembersQuery, 'query'), asyncHandler(ctrl.list));
 router.patch('/:id', validate(updateMemberBody), asyncHandler(ctrl.update));
+router.get('/:id/strikes', asyncHandler(ctrl.strikes));
 
 export default router;

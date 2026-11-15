@@ -4,6 +4,7 @@ import { env } from '@/core/config/env';
 import { ratingAvg } from '@/modules/reviews/reviews.rules';
 import { memberProfileSelect, memberPublicSelect, withMemberMoney, withMemberTrust } from './member.select';
 import { refreshSellerVerification } from './verification.service';
+import { activeStrikeCount } from '@/modules/strikes/strikes.service';
 
 export { memberProfileSelect, memberPublicSelect };
 // Back-compat alias.
@@ -21,6 +22,7 @@ export async function getMemberDto(memberId: string) {
   const { getMaxDevicesForRole } = await import('@/modules/settings/device-limit.service');
   return {
     ...member,
+    activeStrikes: (await activeStrikeCount(prisma, memberId)) ?? 0,
     deviceLimit: await getMaxDevicesForRole(member.role),
     twoFactorSetupRequired: member.role === 'SUPER_ADMIN' && env.twoFactor.requireAdmin && !member.twoFactorEnabled,
   };

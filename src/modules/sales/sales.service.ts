@@ -5,6 +5,7 @@ import { logger } from '@/core/logger/logger';
 import { offsetArgs, pageMeta } from '@/core/http/pagination';
 import { enqueueNotification } from '@/modules/notify/notify.queue';
 import { ORDER_REUSE_MS } from '@/modules/commissions/commissions.service';
+import { toOfferDTO, type OfferStatusValue } from '@/modules/second-chance/second-chance.rules';
 import {
   ADMIN_RELEASABLE,
   CONFIRMABLE,
@@ -21,6 +22,9 @@ export const saleInclude = {
   auction: { select: { id: true, title: true, images: true } },
   buyer: person,
   seller: person,
+  secondChanceOffer: {
+    select: { id: true, auctionId: true, amountPaise: true, status: true, expiresAt: true, respondedAt: true, newSaleId: true, createdAt: true },
+  },
 } as const;
 
 type Person = { id: string; name: string; email: string; phone: string | null };
@@ -50,6 +54,16 @@ export type SaleRow = {
   auction: { id: string; title: string; images: string[] };
   buyer: Person;
   seller: Person;
+  secondChanceOffer?: {
+    id: string;
+    auctionId: string;
+    amountPaise: bigint | number;
+    status: OfferStatusValue;
+    expiresAt: Date;
+    respondedAt: Date | null;
+    newSaleId: string | null;
+    createdAt: Date;
+  } | null;
 };
 
 export type SaleViewer = { id: string; role?: string };
@@ -67,7 +81,7 @@ export function viewerRole(s: { buyerId: string; sellerId: string }, viewer: Sal
 
 const contact = (p: Person) => ({ name: p.name, email: p.email, phone: p.phone });
 
-export function toSaleDTO(s: SaleRow, role: SaleRole) {
+export function toSaleDTO(s: SaleRow, role: SaleRole, now = new Date()) {
   const amountPaise = toPaise(s.amountPaise);
   const commissionPaise = toPaise(s.commissionPaise);
   const paid = s.paidAt !== null;
@@ -96,6 +110,12 @@ export function toSaleDTO(s: SaleRow, role: SaleRole) {
     buyer: { id: s.buyer.id, name: s.buyer.name },
     seller: { id: s.seller.id, name: s.seller.name },
     ...(role !== 'BUYER' ? { commissionPaise, payoutPaise: payoutPaise(amountPaise, commissionPaise) } : {}),
+    ...(role === 'SELLER'
+      ? {
+          secondChanceOffer: s.secondChanceOffer ? toOfferDTO(s.secondChanceOffer, s.auction, now) : null,
+          canOfferSecondChance: s.status === 'CANCELLED' && !s.secondChanceOffer,
+        }
+      : {}),
     ...(role === 'SELLER' && paid ? { buyerContact: contact(s.buyer) } : {}),
     ...(role === 'BUYER' && paid ? { sellerContact: contact(s.seller) } : {}),
   };

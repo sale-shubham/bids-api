@@ -2,8 +2,8 @@
 
 ```
 bids-api/
-├── index.js                  # Lambda handlers (api + WS, retentionPurge, closeAuctions, endingSoon, commissionReminder, salesMaintenance, notifyWorker) and local dev server
-├── serverless.yml            # service bids-api: HTTP API, WebSocket API, S3 (+ CloudFront when ENABLE_CDN=true), NotifyQueue/NotifyDLQ, closeAuctions (1 min) + endingSoon (15 min) + commissionReminder (1 day) + salesMaintenance (1 hour) + retentionPurge (1 day) + notifyWorker (SQS), alarms
+├── index.js                  # Lambda handlers (api + WS, retentionPurge, closeAuctions, endingSoon, commissionReminder, salesMaintenance, riskScan, notifyWorker) and local dev server
+├── serverless.yml            # service bids-api: HTTP API, WebSocket API, S3 (+ CloudFront when ENABLE_CDN=true), NotifyQueue/NotifyDLQ, closeAuctions (1 min) + endingSoon (15 min) + commissionReminder (1 day) + salesMaintenance (1 hour) + riskScan (1 day) + retentionPurge (1 day) + notifyWorker (SQS), alarms
 ├── prisma/schema.prisma      # Member, Session, OtpChallenge, Auction, Bid, MaxBid, Watchlist, Commission,
 │                             #   WsConnection, WsTicket, PushSubscription, RateLimitBucket, PaymentOrder,
 │                             #   WebhookEvent, Notification, AppSetting (+ migrations/, seed.ts, seed-demo.ts)
@@ -43,11 +43,15 @@ bids-api/
 │       ├── reviews/          # POST /auctions/:id/review, POST /reviews/:id/reply, GET /members/:id/reviews; reviews.rules (ratingAvg, 60-day window)
 │       ├── questions/        # GET|POST /auctions/:id/questions, POST /questions/:id/answer|hide
 │       ├── saved-searches/   # GET|POST /saved-searches, DELETE /saved-searches/:id; saved-search.matcher (onAuctionPublished)
+│       ├── deposits/         # POST /auctions/:id/deposit/checkout; deposits.rules (amounts, release decision), deposits.service (checkout, markDepositHeld), deposits.jobs (runDepositRelease)
+│       ├── strikes/          # strikes.rules / service (unpaid-sale strikes, policy, suspendMember, admin list / remove)
+│       ├── second-chance/    # /second-chance-offers (mine, :id, accept, decline); runner-up selection, offer DTO, expiry (POST /sales/:id/second-chance is in sales/)
+│       ├── risk/             # shill-bid signals: risk.rules (scoring, scan), risk.service (checkBidRisk, upsertSignal), risk.jobs (runRiskScan)
 │       ├── reports/          # POST /reports (reportLimiter), reports.service (target rules, admin notify)
 │       ├── leaderboard/      # GET /leaderboard (spent|won)
 │       ├── contact/          # POST /contact (rate limited, emails ADMIN_EMAIL with reply-to)
-│       └── admin/            # dashboard, members (PATCH), auctions, commissions (+waive), payments, sales (list, release, refund), reviews (list, hide), reports (queue, resolve), settings (+legal), retention
-├── readme/                   # ARCHITECTURE.md, methods/, flows/ (auth, reports, auctions, bidding, notifications, payments, checkout, payouts, websocket, watchlist, reviews, questions, saved-searches, leaderboard, admin, legal-pages, deployment)
+│       └── admin/            # dashboard, members (PATCH), auctions, commissions (+waive), payments, sales (list, release, refund), reviews (list, hide), reports (queue, resolve), settings (+legal), retention, strikes (remove), risk (review queue)
+├── readme/                   # ARCHITECTURE.md, methods/, flows/ (auth, reports, auctions, bidding, notifications, payments, checkout, deposits, strikes, risk, payouts, websocket, watchlist, reviews, questions, saved-searches, leaderboard, admin, legal-pages, deployment)
 ├── docs/DOC_SYNC.md
 └── .claude/ .husky/ .github/workflows/
 ```

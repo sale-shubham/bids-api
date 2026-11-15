@@ -24,6 +24,8 @@ const verification = vi.hoisted(() => ({ refreshSellerVerification: vi.fn() }));
 vi.mock('@/modules/members/verification.service', () => verification);
 const sales = vi.hoisted(() => ({ markSalePaid: vi.fn(), getSaleDTO: vi.fn(), storeTransferId: vi.fn() }));
 vi.mock('@/modules/sales/sales.service', () => sales);
+const deposits = vi.hoisted(() => ({ markDepositHeld: vi.fn(), getDepositDTO: vi.fn() }));
+vi.mock('@/modules/deposits/deposits.service', () => deposits);
 
 import { handleWebhook, verifyPayment } from './payments.service';
 import { StubPayment } from '@/providers/payment/stub.payment';
@@ -46,6 +48,8 @@ beforeEach(() => {
   settle.getCommissionDTO.mockResolvedValue({ id: 'c1', status: 'PAID' });
   sales.markSalePaid.mockResolvedValue({ applied: true, saleId: 'sale1' });
   sales.getSaleDTO.mockResolvedValue({ id: 'sale1', status: 'PAID' });
+  deposits.markDepositHeld.mockResolvedValue({ applied: true, depositId: 'dep1' });
+  deposits.getDepositDTO.mockResolvedValue({ id: 'dep1', status: 'HELD' });
   db.sale.updateMany.mockResolvedValue({ count: 1 });
   db.sellerPayoutAccount.updateMany.mockResolvedValue({ count: 1 });
   db.sellerPayoutAccount.findMany.mockResolvedValue([{ sellerId: 'seller1' }]);
@@ -66,6 +70,15 @@ describe('verifyPayment', () => {
     expect(sales.markSalePaid).toHaveBeenCalledWith({ paymentOrderId: 'po2', gatewayPaymentId: 'pay_1' });
     expect(sales.getSaleDTO).toHaveBeenCalledWith('sale1', { id: 'm1' });
     expect(settle.markCommissionPaid).not.toHaveBeenCalled();
+  });
+
+  it('dispatches a DEPOSIT order to markDepositHeld and returns the deposit', async () => {
+    db.paymentOrder.findFirst.mockResolvedValue({ ...order, id: 'po3', referenceType: 'DEPOSIT', referenceId: 'dep1' });
+    const r = await verifyPayment('m1', input);
+    expect(r).toEqual({ referenceType: 'DEPOSIT', deposit: { id: 'dep1', status: 'HELD' } });
+    expect(deposits.markDepositHeld).toHaveBeenCalledWith({ paymentOrderId: 'po3', gatewayPaymentId: 'pay_1' });
+    expect(settle.markCommissionPaid).not.toHaveBeenCalled();
+    expect(sales.markSalePaid).not.toHaveBeenCalled();
   });
 
   it('409 ORDER_REFERENCE_UNKNOWN for an order that pays for nothing known', async () => {
@@ -145,6 +158,17 @@ describe('handleWebhook', () => {
     await handleWebhook(captured({ notes: { commissionId: 'c1' } }), 'sig', 'evt3');
     expect(db.paymentOrder.findFirst.mock.calls[0][0].where).toEqual({ referenceType: 'COMMISSION', referenceId: 'c1' });
     expect(settle.markCommissionPaid).toHaveBeenCalled();
+  });
+
+  it('payment.captured on a DEPOSIT order holds the deposit (found by order id or the depositId note)', async () => {
+    db.paymentOrder.findUnique.mockResolvedValue({ ...order, id: 'po3', referenceType: 'DEPOSIT', referenceId: 'dep1' });
+    await handleWebhook(captured(), 'sig', 'evt-dep');
+    expect(deposits.markDepositHeld).toHaveBeenCalledWith({ paymentOrderId: 'po3', gatewayPaymentId: 'pay_1' });
+    expect(settle.markCommissionPaid).not.toHaveBeenCalled();
+    db.paymentOrder.findUnique.mockResolvedValue(null);
+    db.paymentOrder.findFirst.mockResolvedValue({ ...order, id: 'po3', referenceType: 'DEPOSIT', referenceId: 'dep1' });
+    await handleWebhook(captured({ notes: { depositId: 'dep1' } }), 'sig', 'evt-dep2');
+    expect(db.paymentOrder.findFirst.mock.calls.at(-1)![0].where).toEqual({ referenceType: 'DEPOSIT', referenceId: 'dep1' });
   });
 
   it('payment.captured on a SALE order settles the sale (not the commission) and stores the transfer id', async () => {

@@ -5,7 +5,7 @@ const db = vi.hoisted(() => {
     auction: { findUnique: vi.fn() },
     review: { findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     member: { update: vi.fn() },
-    sale: { findUnique: vi.fn() },
+    sale: { findFirst: vi.fn() },
   };
   d.$transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn(d));
   return d;
@@ -59,7 +59,7 @@ beforeEach(() => {
   db.auction.findUnique.mockResolvedValue(auction());
   db.review.findUnique.mockResolvedValue(null);
   db.review.create.mockResolvedValue(reviewRow());
-  db.sale.findUnique.mockResolvedValue(null);
+  db.sale.findFirst.mockResolvedValue(null);
 });
 
 describe('ratingAvg', () => {
@@ -107,9 +107,9 @@ describe('review eligibility with a checkout sale', () => {
     expect(isReviewWindowOpen(auction() as never, 'w1', now, sale('RELEASED'))).toBe(false);
   });
   it('createReview is blocked until the sale is delivered, allowed after', async () => {
-    db.sale.findUnique.mockResolvedValue(sale('SHIPPED'));
+    db.sale.findFirst.mockResolvedValue(sale('SHIPPED'));
     expect(await code(createReview('w1', 'a1', { rating: 5 }, now))).toBe('403:REVIEW_NOT_ALLOWED');
-    db.sale.findUnique.mockResolvedValue(sale('DELIVERED', { deliveredAt: now }));
+    db.sale.findFirst.mockResolvedValue(sale('DELIVERED', { deliveredAt: now }));
     expect(await code(createReview('w1', 'a1', { rating: 5 }, now))).toBe('ok');
   });
   it('legacy auctions without a Sale keep the current rule', () => {

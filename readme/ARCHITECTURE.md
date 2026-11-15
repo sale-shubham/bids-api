@@ -9,7 +9,8 @@
 | `closeAuctions` | `rate(1 minute)` | `closeAuctionsHandler`: starts SCHEDULED auctions, ends due ones, picks winner, creates commission |
 | `endingSoon` | `rate(15 minutes)` | `endingSoonHandler`: watchlist "ending soon" alerts |
 | `commissionReminder` | `rate(1 day)` | `commissionReminderHandler` |
-| `salesMaintenance` | `rate(1 hour)` | `salesMaintenanceHandler`: cancels unpaid sales, auto-confirms shipped sales after 7 days and releases held funds, retries failed releases (`flows/checkout.md`) |
+| `salesMaintenance` | `rate(1 hour)` | `salesMaintenanceHandler`: cancels unpaid sales, auto-confirms shipped sales after 7 days and releases held funds, retries failed releases, strikes unpaid buyers, refunds / forfeits bid deposits, expires second-chance offers (`flows/checkout.md`, `flows/strikes.md`, `flows/deposits.md`) |
+| `riskScan` | `rate(1 day)` | `riskScanHandler`: shill-bid concentration / never-wins scan of the last 90 days, upserts `ShillSignal` flags for admin review (`flows/risk.md`) |
 | `retentionPurge` | `rate(1 day)` | `retentionPurgeHandler` |
 | `notifyWorker` | SQS `NotifyQueue` (+ `NotifyDLQ`) | `notifyWorkerHandler`: email + push + WebSocket fan-out |
 
@@ -19,9 +20,9 @@ Locally `npm run dev` (`tsx watch index.js`) starts a plain Express server, atta
 `app.ts` (helmet, CORS with credentials, JSON body with raw-body capture for the Razorpay webhook, cookie-parser) -> `routes.ts` -> module routes -> `authenticate` / `optionalAuthenticate` (JWT from `nb_at` cookie or Bearer, plus `Session` row lookup) -> `requireRole` (with `REQUIRE_ADMIN_2FA`, also the Super Admin 2FA check) / `requireActiveMember` -> Joi `validate` -> controller -> service -> Prisma.
 
 ## Data
-PostgreSQL via Prisma 7 with the `pg` driver adapter. Runtime uses the pooled `DATABASE_URL`; migrations use `DIRECT_URL`. Models: Member (BIDDER / AUCTIONEER / SUPER_ADMIN), Session, OtpChallenge, Auction, Bid, Watchlist, Commission, Notification, WsConnection, WsTicket, PushSubscription, RateLimitBucket, PaymentOrder, WebhookEvent, AppSetting. Migrations live in `prisma/migrations/`. `prisma/seed.ts` creates the Super Admin, default settings (commission rate, minimum increment, anti-sniping, categories) and legal pages; `prisma/seed-demo.ts` adds demo data. Money is always integer paise in `BigInt` columns, plain numbers in code and JSON (limits: `docs/DECISIONS.md` → Known limits).
+PostgreSQL via Prisma 7 with the `pg` driver adapter. Runtime uses the pooled `DATABASE_URL`; migrations use `DIRECT_URL`. Models: Member (BIDDER / AUCTIONEER / SUPER_ADMIN), Session, OtpChallenge, Auction, Bid, Watchlist, Commission, Notification, WsConnection, WsTicket, PushSubscription, RateLimitBucket, PaymentOrder, WebhookEvent, AppSetting, Sale, AuctionDeposit, Strike, SecondChanceOffer, ShillSignal. Migrations live in `prisma/migrations/`. `prisma/seed.ts` creates the Super Admin, default settings (commission rate, minimum increment, anti-sniping, categories) and legal pages; `prisma/seed-demo.ts` adds demo data. Money is always integer paise in `BigInt` columns, plain numbers in code and JSON (limits: `docs/DECISIONS.md` → Known limits).
 
-The daily `retentionPurge` (also `POST /admin/retention/purge`) deletes OTP challenges expired more than 30 days, sessions idle longer than the refresh-token lifetime (`REFRESH_TTL_MS`, default 30 days), `WsTicket` rows expired or older than 1 day, `WsConnection` rows older than 2 h, and rate-limit buckets reset more than 1 day ago.
+The daily `retentionPurge` (also `POST /admin/retention/purge`) deletes OTP challenges expired more than 30 days, sessions idle longer than `max(30 days, refresh-token lifetime)` (`REFRESH_TTL_MS`; shill-bid detection reads 30 days of sessions), `WsTicket` rows expired or older than 1 day, `WsConnection` rows older than 2 h, and rate-limit buckets reset more than 1 day ago.
 
 ## Integrations
 - Email: SES (or the stub driver) with EJS templates in `src/templates/`: otp-code, welcome, outbid, auction-won, auction-sold, auction-unsold, ending-soon, commission-due, commission-paid, review-received, question-asked, question-answered, saved-search-match, contact-message. Email OTP is used only for signup email verification and forgot-password; login is email + password.

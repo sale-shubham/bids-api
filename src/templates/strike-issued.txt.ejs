@@ -1,0 +1,13 @@
+<%= fromName %> - Strike issued
+
+Hi <%= name %>,
+
+You did not pay for "<%= auctionTitle %>" in time, so your account received a strike (active strikes: <%= strikeCount %>).
+
+<% if (depositsRequired) { %>A refundable deposit is now required on every bid. A third strike suspends your account.<% } else { %>Three active strikes suspend your account.<% } %>
+
+<% if (expires) { %>This strike expires on <%= expires %>.<% } %>
+
+View your purchases: <%= purchasesUrl %>
+
+Support: <%= websiteUrl %>/contact

@@ -6,6 +6,7 @@ import { toPaise } from '@/core/money';
 import crypto from 'node:crypto';
 import { getCommissionDTO, markCommissionPaid } from '@/modules/commissions/commissions.service';
 import { getSaleDTO, markSalePaid, storeTransferId } from '@/modules/sales/sales.service';
+import { getDepositDTO, markDepositHeld } from '@/modules/deposits/deposits.service';
 import { mapActivationStatus } from '@/providers/payment/route-status';
 import { refreshSellerVerification } from '@/modules/members/verification.service';
 
@@ -45,6 +46,12 @@ export async function verifyPayment(
     if (!saleId) throw new AppError(404, 'SALE_NOT_FOUND', 'Sale not found');
     return { referenceType: 'SALE' as const, sale: await getSaleDTO(saleId, { id: memberId }) };
   }
+  if (order.referenceType === 'DEPOSIT') {
+    const { depositId } = await markDepositHeld({ paymentOrderId: order.id, gatewayPaymentId: input.paymentId });
+    const deposit = depositId ? await getDepositDTO(depositId) : null;
+    if (!deposit) throw new AppError(404, 'DEPOSIT_NOT_FOUND', 'Deposit not found');
+    return { referenceType: 'DEPOSIT' as const, deposit };
+  }
   if (order.referenceType !== 'COMMISSION') {
     throw new AppError(409, 'ORDER_REFERENCE_UNKNOWN', 'This payment order cannot be settled');
   }
@@ -74,7 +81,7 @@ type ProductEntity = {
   };
 };
 
-const noteString = (notes: unknown, key: 'commissionId' | 'saleId'): string | undefined => {
+const noteString = (notes: unknown, key: 'commissionId' | 'saleId' | 'depositId'): string | undefined => {
   const v = (notes as Record<string, unknown> | null | undefined)?.[key];
   return typeof v === 'string' ? v : undefined;
 };
@@ -100,6 +107,13 @@ async function findOrderForEvent(event: WebhookEvent) {
   if (saleId) {
     return prisma.paymentOrder.findFirst({
       where: { referenceType: 'SALE', referenceId: saleId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+  const depositId = noteString(pay?.notes, 'depositId') ?? noteString(ord?.notes, 'depositId');
+  if (depositId) {
+    return prisma.paymentOrder.findFirst({
+      where: { referenceType: 'DEPOSIT', referenceId: depositId },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -159,6 +173,10 @@ async function processEvent(event: WebhookEvent) {
     const { saleId } = await markSalePaid({ paymentOrderId: order.id, gatewayPaymentId: paymentId });
     // A redelivery after a failed transfer lookup still gets the transfer id stored.
     if (saleId) await storeTransferId(saleId, paymentId);
+    return;
+  }
+  if (order.referenceType === 'DEPOSIT') {
+    await markDepositHeld({ paymentOrderId: order.id, gatewayPaymentId: paymentId });
     return;
   }
   if (order.referenceType !== 'COMMISSION') {

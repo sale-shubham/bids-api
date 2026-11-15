@@ -4,7 +4,11 @@ const db = vi.hoisted(() => {
   const d: any = {
     sale: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
     sellerPayoutAccount: { findUnique: vi.fn() },
-    member: { findUnique: vi.fn(), findMany: vi.fn() },
+    member: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    session: { deleteMany: vi.fn() },
+    strike: { create: vi.fn(), count: vi.fn() },
+    auctionDeposit: { findMany: vi.fn(), updateMany: vi.fn() },
+    secondChanceOffer: { updateMany: vi.fn() },
     paymentOrder: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
     commission: { create: vi.fn(), updateMany: vi.fn() },
   };
@@ -24,6 +28,8 @@ vi.mock('@/core/prisma/client', () => ({ prisma: db }));
 vi.mock('@/core/logger/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/providers/payment', () => ({ paymentProvider: provider }));
 vi.mock('@/modules/notify/notify.queue', () => ({ enqueueNotification: enqueue }));
+const disconnect = vi.hoisted(() => vi.fn(async (_id: string) => undefined));
+vi.mock('@/modules/ws/ws.service', () => ({ disconnectMemberConnections: disconnect }));
 
 import * as svc from './sales.service';
 import { runSalesMaintenance } from './sales.jobs';
@@ -87,6 +93,10 @@ beforeEach(() => {
   db.sale.findUnique.mockResolvedValue({ ...facts, status: 'PAID' });
   db.sale.findFirst.mockResolvedValue({ ...facts, status: 'PAID' });
   db.member.findMany.mockResolvedValue([{ id: 'admin1' }]);
+  db.strike.create.mockResolvedValue({ id: 'st1', expiresAt: new Date('2027-11-15T10:00:00Z') });
+  db.strike.count.mockResolvedValue(1);
+  db.auctionDeposit.findMany.mockResolvedValue([]);
+  db.secondChanceOffer.updateMany.mockResolvedValue({ count: 0 });
   provider.fetchPaymentTransfers.mockResolvedValue([{ id: 'trf_1', account: 'acc_1', amountPaise: 95_000, onHold: true }]);
   provider.releaseTransfer.mockResolvedValue(undefined);
   db.sellerPayoutAccount.findUnique.mockResolvedValue({ status: 'ACTIVE', razorpayAccountId: 'acc_1' });
@@ -410,19 +420,78 @@ describe('runSalesMaintenance', () => {
   it('cancels unpaid sales past payBy and notifies both', async () => {
     db.sale.findMany.mockResolvedValueOnce([unpaid]).mockResolvedValue([]);
     const counts = await runSalesMaintenance(now);
-    expect(counts).toEqual({ cancelled: 1, autoConfirmed: 0, releaseRetried: 0 });
+    expect(counts).toEqual({ cancelled: 1, autoConfirmed: 0, releaseRetried: 0, depositsRefunded: 0, depositsForfeited: 0, offersExpired: 0 });
     expect(db.sale.findMany.mock.calls[0][0].where).toEqual({ status: 'AWAITING_PAYMENT', payBy: { lt: now } });
     expect(db.sale.updateMany).toHaveBeenCalledWith({
       where: { id: 'u1', status: 'AWAITING_PAYMENT' },
       data: { status: 'CANCELLED', cancelledAt: now },
     });
-    expect(enqueue.mock.calls.map((c) => (c[0] as { dedupeKey: string }).dedupeKey)).toEqual(['sale-cancelled:u1:b1', 'sale-cancelled:u1:s1']);
+    expect(enqueue.mock.calls.map((c) => (c[0] as { dedupeKey: string }).dedupeKey)).toEqual([
+      'sale-cancelled:u1:b1',
+      'sale-cancelled:u1:s1',
+      'strike-issued:st1',
+    ]);
+  });
+
+  describe('strikes on cancel', () => {
+    const cancelWith = async (activeCount: number) => {
+      db.sale.findMany.mockResolvedValueOnce([unpaid]).mockResolvedValue([]);
+      db.strike.count.mockResolvedValue(activeCount);
+      await runSalesMaintenance(now);
+    };
+    const sent = (type: string) => enqueue.mock.calls.map((c) => c[0] as { type: string; data?: Record<string, unknown> }).filter((m) => m.type === type);
+
+    it('creates the UNPAID strike in the same transaction as the cancel, expiring in 12 months', async () => {
+      await cancelWith(1);
+      expect(db.$transaction).toHaveBeenCalled();
+      expect(db.strike.create).toHaveBeenCalledWith({
+        data: { memberId: 'b1', saleId: 'u1', reason: 'UNPAID', expiresAt: new Date('2027-11-15T10:00:00Z') },
+        select: { id: true, expiresAt: true },
+      });
+      expect(db.strike.count.mock.calls[0][0].where).toEqual({ memberId: 'b1', removedAt: null, expiresAt: { gt: now } });
+    });
+    it('1 active strike: a warning only', async () => {
+      await cancelWith(1);
+      expect(sent('strike-issued')[0].data).toMatchObject({ strikeCount: 1, depositsRequired: false });
+      expect(db.member.update).not.toHaveBeenCalled();
+    });
+    it('2 active strikes: the notice says deposits are now required', async () => {
+      await cancelWith(2);
+      expect(sent('strike-issued')[0].data).toMatchObject({ strikeCount: 2, depositsRequired: true });
+      expect(db.member.update).not.toHaveBeenCalled();
+    });
+    it('3 active strikes: account-suspended, member deactivated, sessions and connections killed', async () => {
+      await cancelWith(3);
+      expect(sent('strike-issued')).toHaveLength(0);
+      expect(sent('account-suspended')).toHaveLength(1);
+      expect(db.member.update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { isActive: false } });
+      expect(db.session.deleteMany).toHaveBeenCalledWith({ where: { memberId: 'b1' } });
+      expect(disconnect).toHaveBeenCalledWith('b1');
+    });
+    it('no strike when the cancel was a no-op (already moved)', async () => {
+      db.sale.findMany.mockResolvedValueOnce([unpaid]).mockResolvedValue([]);
+      db.sale.updateMany.mockResolvedValue({ count: 0 });
+      await runSalesMaintenance(now);
+      expect(db.strike.create).not.toHaveBeenCalled();
+    });
+  });
+
+  it('expires pending second-chance offers and runs the deposit release', async () => {
+    db.sale.findMany.mockResolvedValue([]);
+    db.secondChanceOffer.updateMany.mockResolvedValue({ count: 2 });
+    const counts = await runSalesMaintenance(now);
+    expect(counts.offersExpired).toBe(2);
+    expect(db.secondChanceOffer.updateMany).toHaveBeenCalledWith({
+      where: { status: 'PENDING', expiresAt: { lte: now } },
+      data: { status: 'EXPIRED' },
+    });
+    expect(db.auctionDeposit.findMany).toHaveBeenCalled();
   });
 
   it('is idempotent: a sale that already moved is skipped silently', async () => {
     db.sale.findMany.mockResolvedValueOnce([unpaid]).mockResolvedValue([]);
     db.sale.updateMany.mockResolvedValue({ count: 0 });
-    expect(await runSalesMaintenance(now)).toEqual({ cancelled: 0, autoConfirmed: 0, releaseRetried: 0 });
+    expect(await runSalesMaintenance(now)).toEqual({ cancelled: 0, autoConfirmed: 0, releaseRetried: 0, depositsRefunded: 0, depositsForfeited: 0, offersExpired: 0 });
     expect(enqueue).not.toHaveBeenCalled();
   });
 

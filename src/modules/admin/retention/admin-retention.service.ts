@@ -16,7 +16,8 @@ export const OTP_CHALLENGE_RETENTION_DAYS = 30;
 // Matches REFRESH_TTL_MS (token.service.ts): the refresh token itself is
 // dead by 30 days, so a Session row that's been idle that long has already
 // stopped granting access — keeping it around longer has no purpose left.
-export const SESSION_INACTIVE_RETENTION_DAYS = REFRESH_TTL_MS / 86_400_000;
+// Never below 30 days: shill-bid detection (risk.service.ts) reads Session deviceId / ip from the last 30 days.
+export const SESSION_INACTIVE_RETENTION_DAYS = Math.max(30, REFRESH_TTL_MS / 86_400_000);
 
 export async function purgeExpiredOtpChallenges(retentionDays = OTP_CHALLENGE_RETENTION_DAYS) {
   const cutoff = new Date(Date.now() - retentionDays * 86_400_000);

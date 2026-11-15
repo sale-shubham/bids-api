@@ -1,0 +1,9 @@
+<%- include('_head', { heading: 'Second chance to buy', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  The winner of <strong><%= auctionTitle %></strong> did not pay. The seller offers the item to you for <strong><%= amount %></strong>.
+                </p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  <% if (expires) { %>The offer ends on <%= expires %>.<% } %>
+                </p>
+<%- include('_foot', { ctaUrl: offerUrl, ctaLabel: 'View offer', frontendUrl }) %>

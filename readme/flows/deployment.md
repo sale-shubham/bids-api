@@ -11,14 +11,14 @@ Region `ap-south-1`. Stages: `dev` (push to branch `dev`) and `prod` (push to `m
 Browser --> Amplify (Next.js app) ----(NEXT_PUBLIC_API_URL or Next.js rewrite)----> API Gateway HTTP API --> Lambda `api` (Express)
         \--> wss://<ws-id>.execute-api... (API Gateway WebSocket) --> Lambda `api` ($connect/$disconnect/$default)
 EventBridge schedules --> closeAuctions (1 min), endingSoon (15 min), commissionReminder (1 day), salesMaintenance (1 hour),
-                          retentionPurge (1 day), api warmer (5 min)
+                          riskScan (1 day), retentionPurge (1 day), api warmer (5 min)
 Lambda `api` / jobs --> SQS NotifyQueue (+DLQ, 3 receives) --> Lambda notifyWorker (batch 10, ReportBatchItemFailures)
 Uploads: browser PUT via presigned URL --> S3 AppBucket <-- CloudFront (OAC, ENABLE_CDN=true) or S3 direct <-- images
 Postgres (managed, pooled URL for Lambda, direct URL for migrations)
 ```
 
 Everything under `serverless.yml`: functions (`api`, `closeAuctions`, `endingSoon`, `commissionReminder`, `salesMaintenance`,
-`retentionPurge`, `notifyWorker`), `NotifyQueue` + `NotifyDLQ`, `AppBucket` + bucket policy (+ OAC + CloudFront when `ENABLE_CDN=true`),
+`riskScan` (daily shill-bid scan, `flows/risk.md`), `retentionPurge`, `notifyWorker`), `NotifyQueue` + `NotifyDLQ`, `AppBucket` + bucket policy (+ OAC + CloudFront when `ENABLE_CDN=true`),
 optional alarms (`ALERT_EMAIL`), optional custom domain (`API_DOMAIN_NAME` + `API_CERTIFICATE_ARN`).
 IAM: S3 object/list on the bucket, `ses:SendEmail/SendRawEmail`, SQS send on NotifyQueue, X-Ray, and
 `execute-api:ManageConnections` (auto-added by Serverless for WebSocket events).
@@ -164,7 +164,7 @@ policy pages (terms, privacy, refund, contact). Set `PAYMENT_DRIVER=razorpay` wi
 
 CI runs `npx prisma migrate deploy` (via `DIRECT_URL`) before packaging, on every deploy. Write migrations
 backward compatible (expand, deploy, contract) because the old Lambda code runs against the new schema briefly.
-Never run `migrate reset` against a deployed DB.
+Never run `migrate reset` against a deployed DB. Migration `20261115220000_trust_2` ends with a hand-written partial unique index (`Sale_open_per_auction`); `migrate deploy` applies it as is, but never run `migrate dev` (see `methods/prisma.md`).
 
 ## Rollback
 

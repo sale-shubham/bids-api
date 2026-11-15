@@ -27,7 +27,7 @@ DISPUTED --admin release--> RELEASED     PAID|SHIPPED|DELIVERED|DISPUTED --admin
 
 Every transition is a guarded `updateMany` (`WHERE status IN (...)`), so concurrent or repeated calls are no-ops. Wrong state -> 409 `SALE_INVALID_STATE`; not a party -> 404 `SALE_NOT_FOUND`.
 
-`Sale` columns: `itemPaise`, `shippingFeePaise` (0 for now), `amountPaise` (item + shipping), `commissionPaise` (`commissionAmountPaise(item, rateBps)`), `rateBps`, `payBy` (close + 3 days), status timestamps, `gatewayPaymentId`, `transferId`, shipping fields, dispute / resolution fields. All money columns are BigInt paise (`toPaise` at the boundary). One Sale per auction (`auctionId` unique).
+`Sale` columns: `itemPaise`, `shippingFeePaise` (0 for now), `amountPaise` (item + shipping), `commissionPaise` (`commissionAmountPaise(item, rateBps)`), `rateBps`, `payBy` (close + 3 days), status timestamps, `gatewayPaymentId`, `transferId`, shipping fields, dispute / resolution fields. All money columns are BigInt paise (`toPaise` at the boundary). An auction can have several Sales over time (a cancelled one, then a second-chance one: `strikes.md`); at most one is open, enforced by the partial unique index `Sale_open_per_auction` (migration SQL only) with `@@index([auctionId])` in Prisma. Lookups by auction use the latest sale.
 
 ## Close
 
@@ -43,12 +43,13 @@ Every transition is a guarded `updateMany` (`WHERE status IN (...)`), so concurr
 | POST | `/sales/:id/ship` | seller (AUCTIONEER) | `{ method: 'COURIER'\|'PICKUP', courier? <= 60 (required for COURIER), trackingNo? <= 60 }`; PAID -> SHIPPED; notifies the buyer |
 | POST | `/sales/:id/confirm` | buyer | PAID\|SHIPPED -> DELIVERED, then release -> RELEASED. If the release call fails the sale stays DELIVERED (the job retries); the response is still 200 with the current state |
 | POST | `/sales/:id/dispute` | buyer | `{ reason: 10..1000 }`; PAID\|SHIPPED\|DELIVERED -> DISPUTED; notifies the seller and every active SUPER_ADMIN |
-| POST | `/payments/verify` | order owner | now `{ referenceType: 'COMMISSION', commission }` or `{ referenceType: 'SALE', sale }` |
+| POST | `/sales/:id/second-chance` | seller (AUCTIONEER) | offer a CANCELLED sale to the runner-up -> `{ offer }`; see `strikes.md` |
+| POST | `/payments/verify` | order owner | now `{ referenceType: 'COMMISSION', commission }`, `{ referenceType: 'SALE', sale }` or `{ referenceType: 'DEPOSIT', deposit }` (`deposits.md`) |
 | GET | `/admin/sales?status=&q=&page&limit` | SUPER_ADMIN | paginated `SaleDTO` (role ADMIN) with buyer / seller emails; `q` matches id, auction title, buyer / seller name or email |
 | POST | `/admin/sales/:id/release` | SUPER_ADMIN | DISPUTED\|DELIVERED -> RELEASED (`resolution = RELEASED_BY_ADMIN`, `resolvedAt` when it was disputed); 502 `RELEASE_FAILED` when the gateway call fails |
 | POST | `/admin/sales/:id/refund` | SUPER_ADMIN | `{ note? <= 500 }`; PAID\|SHIPPED\|DELIVERED\|DISPUTED -> REFUNDED; 409 `SALE_NO_PAYMENT` without a payment id; marks the PAID Commission row WAIVED; notifies both |
 
-`SaleDTO` = `{ id, auctionId, auction { id, title, coverImage }, status, itemPaise, shippingFeePaise, amountPaise, payBy, paidAt, shippingMethod, courier, trackingNo, shippedAt, deliveredAt, releasedAt, disputedAt, disputeReason, refundedAt, cancelledAt, createdAt, role 'BUYER'|'SELLER'|'ADMIN', buyer { id, name }, seller { id, name } }` plus `commissionPaise` and `payoutPaise` (seller and admin only), `buyerContact { name, email, phone }` (seller only, once paid), `sellerContact` (buyer only, once paid).
+`SaleDTO` = `{ id, auctionId, auction { id, title, coverImage }, status, itemPaise, shippingFeePaise, amountPaise, payBy, paidAt, shippingMethod, courier, trackingNo, shippedAt, deliveredAt, releasedAt, disputedAt, disputeReason, refundedAt, cancelledAt, createdAt, role 'BUYER'|'SELLER'|'ADMIN', buyer { id, name }, seller { id, name } }` plus `commissionPaise` and `payoutPaise` (seller and admin only), `buyerContact { name, email, phone }` (seller only, once paid), `sellerContact` (buyer only, once paid). The seller view also has `secondChanceOffer: OfferDTO | null` and `canOfferSecondChance: boolean` (`strikes.md`).
 
 Auction detail (`GET /auctions/:id`) has `sale: { id, status, payBy } | null` for the buyer, the seller and admins; `GET /bids/mine` rows have `saleId` and `saleStatus`. The admin dashboard has `salesByStatus: { <status>: { count, amountPaise } }` (all statuses, zero-filled).
 
@@ -62,11 +63,11 @@ Auction detail (`GET /auctions/:id`) has `sale: { id, status, payBy } | null` fo
 
 ## Maintenance job (`salesMaintenanceHandler`)
 
-Lambda `salesMaintenance`, `rate(1 hour)` (`index.salesMaintenanceHandler`; locally every 10 min; `npm run job:sales` runs one pass by hand). Each pass is batch-limited (100 per step), idempotent, and logs and skips a failing sale: (1) AWAITING_PAYMENT past `payBy` -> CANCELLED + `sale-cancelled` to both; (2) SHIPPED with `shippedAt` older than 7 days -> DELIVERED -> release; (3) DELIVERED with `releasedAt` null -> release retry. Returns `{ cancelled, autoConfirmed, releaseRetried }`.
+Lambda `salesMaintenance`, `rate(1 hour)` (`index.salesMaintenanceHandler`; locally every 10 min; `npm run job:sales` runs one pass by hand). Each pass is batch-limited (100 per step), idempotent, and logs and skips a failing sale: (1) AWAITING_PAYMENT past `payBy` -> CANCELLED + a `Strike` for the buyer in the same transaction + `sale-cancelled` to both, then the strike policy (`strikes.md`); (2) SHIPPED with `shippedAt` older than 7 days -> DELIVERED -> release; (3) DELIVERED with `releasedAt` null -> release retry; (4) held bid deposits are refunded or forfeited (`deposits.md`); (5) PENDING second-chance offers past `expiresAt` -> EXPIRED. Returns `{ cancelled, autoConfirmed, releaseRetried, depositsRefunded, depositsForfeited, offersExpired }`.
 
 ## Notifications
 
-`sale-receipt` (buyer), `sale-paid` (seller), `sale-shipped` (buyer), `sale-released` (seller), `sale-disputed` (seller + each SUPER_ADMIN), `sale-refunded` (both), `sale-cancelled` (both). Dedupe `<type>:<saleId>` and `:<memberId>` for the multi-recipient ones. Links: buyer `/purchases/<id>`, seller `/sell/sales/<id>`, admin `/admin/sales`. Details in `notifications.md`.
+`sale-receipt` (buyer), `sale-paid` (seller), `sale-shipped` (buyer), `sale-released` (seller), `sale-disputed` (seller + each SUPER_ADMIN), `sale-refunded` (both), `sale-cancelled` (both). Trust-2 types (`strike-issued`, `account-suspended`, `deposit-*`, `second-chance-*`) are in `strikes.md` / `deposits.md`. Dedupe `<type>:<saleId>` and `:<memberId>` for the multi-recipient ones. Links: buyer `/purchases/<id>`, seller `/sell/sales/<id>`, admin `/admin/sales`. Details in `notifications.md`.
 
 ## Reviews
 

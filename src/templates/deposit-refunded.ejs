@@ -1,0 +1,6 @@
+<%- include('_head', { heading: 'Deposit refunded', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  Your deposit of <strong><%= amount %></strong> for <strong><%= auctionTitle %></strong> was refunded to your original payment method.
+                </p>
+<%- include('_foot', { ctaUrl: auctionUrl, ctaLabel: 'View auction', frontendUrl }) %>

@@ -16,5 +16,6 @@ router.post('/:id/checkout', ...buyer, asyncHandler(ctrl.checkout));
 router.post('/:id/ship', ...seller, validate(shipSchema), asyncHandler(ctrl.ship));
 router.post('/:id/confirm', ...buyer, asyncHandler(ctrl.confirm));
 router.post('/:id/dispute', ...buyer, validate(disputeSchema), asyncHandler(ctrl.dispute));
+router.post('/:id/second-chance', ...seller, asyncHandler(ctrl.secondChance));
 
 export default router;

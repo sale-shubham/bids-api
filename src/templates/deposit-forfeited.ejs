@@ -1,0 +1,6 @@
+<%- include('_head', { heading: 'Deposit forfeited', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  You won <strong><%= auctionTitle %></strong> but did not pay in time, so your deposit of <strong><%= amount %></strong> was forfeited.
+                </p>
+<%- include('_foot', { ctaUrl: auctionUrl, ctaLabel: 'View auction', frontendUrl }) %>

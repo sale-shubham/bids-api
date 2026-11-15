@@ -40,7 +40,8 @@ export async function processNotification(
       where: { id: msg.memberId },
       select: { id: true, name: true, email: true, isActive: true },
     });
-    if (!member || !member.isActive) {
+    // account-suspended is sent while / after the member is deactivated, so it is the one type that still goes out.
+    if (!member || (!member.isActive && msg.type !== 'account-suspended')) {
       logger.info({ memberId: msg.memberId, type: msg.type }, 'notify: member missing or inactive, skipped');
       return 'skipped';
     }

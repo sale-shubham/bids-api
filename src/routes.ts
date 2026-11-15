@@ -29,6 +29,9 @@ import adminReviewsRoutes from '@/modules/admin/reviews/admin-reviews.routes';
 import adminSettingsRoutes from '@/modules/admin/settings/admin-settings.routes';
 import reportRoutes from '@/modules/reports/reports.routes';
 import adminReportsRoutes from '@/modules/admin/reports/admin-reports.routes';
+import secondChanceRoutes from '@/modules/second-chance/second-chance.routes';
+import adminStrikesRoutes from '@/modules/admin/strikes/admin-strikes.routes';
+import adminRiskRoutes from '@/modules/admin/risk/admin-risk.routes';
 
 const router = Router();
 
@@ -63,6 +66,9 @@ router.use('/admin/settings', adminSettingsRoutes);
 router.use('/admin/reviews', adminReviewsRoutes);
 router.use('/admin/reports', adminReportsRoutes);
 router.use('/reports', reportRoutes);
+router.use('/second-chance-offers', secondChanceRoutes);
+router.use('/admin/strikes', adminStrikesRoutes);
+router.use('/admin/risk', adminRiskRoutes);
 router.use('/admin', adminDashboardRoutes);
 
 export default router;

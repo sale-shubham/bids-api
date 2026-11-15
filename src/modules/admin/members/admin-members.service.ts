@@ -7,16 +7,17 @@ import { refreshSellerVerification } from '@/modules/members/verification.servic
 
 // Backs the admin Members page: list, update (active / role / verified).
 
-type AdminMemberRow = Prisma.MemberGetPayload<{ select: typeof memberSelect }>;
+type AdminMemberRow = Prisma.MemberGetPayload<{ select: ReturnType<typeof memberSelect> }>;
 
 /** Admin DTO: booleans for 2FA / verified, payout status, money as numbers. */
 function toAdminDto(m: AdminMemberRow) {
-  const { twoFactorEnabledAt, verifiedAt, payoutAccount, ...rest } = m;
+  const { twoFactorEnabledAt, verifiedAt, payoutAccount, _count, ...rest } = m;
   return {
     ...withMemberMoney(rest),
     verified: !!verifiedAt,
     twoFactorEnabled: !!twoFactorEnabledAt,
     payoutStatus: payoutAccount?.status ?? null,
+    activeStrikes: _count?.strikes ?? 0,
   };
 }
 
@@ -38,7 +39,7 @@ const MEMBER_SORT_MAP: Record<string, (order: SortOrder) => Prisma.MemberOrderBy
   isActive: (order) => ({ isActive: order }),
 };
 
-const memberSelect = {
+const memberSelect = (now = new Date()) => ({
   id: true,
   name: true,
   email: true,
@@ -54,7 +55,8 @@ const memberSelect = {
   auctionsWon: true,
   moneySpentPaise: true,
   createdAt: true,
-} satisfies Prisma.MemberSelect;
+  _count: { select: { strikes: { where: { removedAt: null, expiresAt: { gt: now } } } } },
+}) satisfies Prisma.MemberSelect;
 
 export async function listMembers(params: ListParams) {
   const search = params.search?.trim();
@@ -76,7 +78,7 @@ export async function listMembers(params: ListParams) {
   const orderBy = buildOrderBy(params.sortBy, params.sortOrder, MEMBER_SORT_MAP, { createdAt: 'desc' });
 
   const [items, total, stats] = await Promise.all([
-    prisma.member.findMany({ where, select: memberSelect, orderBy, ...offsetArgs(params) }),
+    prisma.member.findMany({ where, select: memberSelect(), orderBy, ...offsetArgs(params) }),
     prisma.member.count({ where }),
     getMemberStats(),
   ]);
@@ -118,10 +120,10 @@ export async function updateMember(id: string, actorId: string, input: { isActiv
   } else if (input.verified === true) {
     data.verificationRevokedAt = null;
   }
-  let member = await prisma.member.update({ where: { id }, data, select: memberSelect });
+  let member = await prisma.member.update({ where: { id }, data, select: memberSelect() });
   if (input.verified === true || input.role !== undefined) {
     await refreshSellerVerification(id);
-    member = (await prisma.member.findUnique({ where: { id }, select: memberSelect })) ?? member;
+    member = (await prisma.member.findUnique({ where: { id }, select: memberSelect() })) ?? member;
   }
 
   if (input.isActive === false) {

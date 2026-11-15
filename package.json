@@ -18,6 +18,7 @@
     "seed:demo": "tsx prisma/seed-demo.ts",
     "job:close": "tsx scripts/run-close.ts",
     "job:sales": "tsx scripts/run-sales.ts",
+    "job:risk": "tsx scripts/run-risk.ts",
     "prisma:studio": "prisma studio",
     "test": "vitest run",
     "check": "npm run typecheck && npm test",

@@ -1,6 +1,6 @@
 # Payments flow (seller commissions via Razorpay)
 
-> Winner checkout (`PaymentOrder.referenceType = 'SALE'`, Razorpay Route held transfers) is documented in `checkout.md`; this file covers the commission path and the shared verify / webhook plumbing.
+> Winner checkout (`PaymentOrder.referenceType = 'SALE'`, Razorpay Route held transfers) is documented in `checkout.md`, refundable bid deposits (`'DEPOSIT'`) in `deposits.md`; this file covers the commission path and the shared verify / webhook plumbing.
 
 Code: `src/modules/commissions/` (list, summary, checkout, settlement, reminders), `src/modules/payments/` (verify + webhook), `src/providers/payment/` (Razorpay + stub drivers).
 
@@ -39,7 +39,7 @@ The browser callback and the webhook race on purpose: whichever arrives first se
 | GET | `/commissions/summary` | AUCTIONEER / SUPER_ADMIN | `{ unpaidPaise, dueCount, overdueCount }` |
 | GET | `/commissions/:id` | owner (AUCTIONEER / SUPER_ADMIN) | `CommissionDTO`; 404 `COMMISSION_NOT_FOUND` if missing or not the caller's (the app polls this while Razorpay Checkout is open) |
 | POST | `/commissions/:id/checkout` | owner | `{ orderId, amountPaise, currency: 'INR', keyId, description, prefill: { name, email, contact } }` |
-| POST | `/payments/verify` | any authenticated member who owns the order | `{ referenceType: 'COMMISSION', commission: CommissionDTO }` or, for a sale order, `{ referenceType: 'SALE', sale: SaleDTO }` |
+| POST | `/payments/verify` | any authenticated member who owns the order | `{ referenceType: 'COMMISSION', commission: CommissionDTO }` for a sale order `{ referenceType: 'SALE', sale: SaleDTO }`, or for a bid deposit `{ referenceType: 'DEPOSIT', deposit: DepositDTO }` |
 | POST | `/payments/webhook` | none (Razorpay, `X-Razorpay-Signature`) | `{ processed: true }` or `{ skipped: true }` |
 
 `CommissionDTO` = `{ id, auctionId, auction: { id, title, coverImage, finalBidPaise, endedAt }, rateBps, amountPaise, status: 'DUE'|'PAID'|'WAIVED', dueAt, paidAt, createdAt, isOverdue }` (`isOverdue` = DUE and past `dueAt`).
@@ -54,7 +54,7 @@ The browser callback and the webhook race on purpose: whichever arrives first se
 | 400 | `INVALID_SIGNATURE` | verify: HMAC (order_id\|payment_id) mismatch |
 | 409 | `PAYMENT_NOT_CAPTURED` | verify: gateway payment is not `captured` / `authorized` |
 | 409 | `AMOUNT_MISMATCH` | verify: gateway amount differs from the order amount |
-| 409 | `ORDER_REFERENCE_UNKNOWN` | verify: the order pays for neither a commission nor a sale |
+| 409 | `ORDER_REFERENCE_UNKNOWN` | verify: the order pays for neither a commission, a sale nor a deposit |
 | 400 | `BAD_REQUEST` | webhook: bad signature or unparsable body |
 
 ## Checkout details
@@ -64,7 +64,7 @@ The browser callback and the webhook race on purpose: whichever arrives first se
 
 ## Settlement dispatch
 
-`verifyPayment` and the webhook `processEvent` read `PaymentOrder.referenceType`: `COMMISSION` -> `markCommissionPaid` (unchanged), `SALE` -> `markSalePaid` (`checkout.md`; for the webhook also `storeTransferId`). Extra webhook events: `transfer.processed` (stores a missing `Sale.transferId`) and `product.route.*` (updates `SellerPayoutAccount.status`, `payouts.md`). With `checkout.mode` `off`, or sellers without an ACTIVE payout account, nothing changes: sold auctions still create DUE commissions.
+`verifyPayment` and the webhook `processEvent` read `PaymentOrder.referenceType`: `COMMISSION` -> `markCommissionPaid` (unchanged), `SALE` -> `markSalePaid` (`checkout.md`; for the webhook also `storeTransferId`), `DEPOSIT` -> `markDepositHeld` (`deposits.md`: guarded PENDING -> HELD; the webhook also finds the order by the `depositId` note; verify returns `{ referenceType: 'DEPOSIT', deposit }`). Extra webhook events: `transfer.processed` (stores a missing `Sale.transferId`) and `product.route.*` (updates `SellerPayoutAccount.status`, `payouts.md`). With `checkout.mode` `off`, or sellers without an ACTIVE payout account, nothing changes: sold auctions still create DUE commissions.
 
 ## Idempotency
 

@@ -32,7 +32,9 @@ const auction: BidAuction = {
   buyNowPricePaise: null,
 };
 const bidder = { id: 'bidder', isActive: true };
-const run = (over: Partial<BidAuction> = {}, b = bidder) => validateBid({ auction: { ...auction, ...over }, bidder: b, now });
+const noDeposit = { requiredPaise: 0, held: false };
+const run = (over: Partial<BidAuction> = {}, b = bidder, deposit = noDeposit) =>
+  validateBid({ auction: { ...auction, ...over }, bidder: b, now, deposit });
 const code = (fn: () => unknown) => {
   try {
     fn();
@@ -72,13 +74,33 @@ describe('validateBid (pre-checks only)', () => {
   it('inactive bidder -> ACCOUNT_SUSPENDED', () => {
     expect(code(() => run({}, { id: 'bidder', isActive: false }))).toBe('ACCOUNT_SUSPENDED');
   });
+  it('a required deposit that is not held -> 403 DEPOSIT_REQUIRED with depositPaise', () => {
+    expect(err(() => run({}, bidder, { requiredPaise: 1_000_000, held: false }))).toEqual([
+      403,
+      'DEPOSIT_REQUIRED',
+      { depositPaise: 1_000_000 },
+    ]);
+  });
+  it('a held deposit, or none required, passes', () => {
+    expect(() => run({}, bidder, { requiredPaise: 1_000_000, held: true })).not.toThrow();
+    expect(() => run({}, bidder, { requiredPaise: 0, held: false })).not.toThrow();
+  });
+  it('the deposit check comes after the other pre-checks', () => {
+    const need = { requiredPaise: 5, held: false };
+    expect(code(() => run({ status: 'ENDED' }, bidder, need))).toBe('AUCTION_ENDED');
+    expect(code(() => run({}, { id: 'seller', isActive: true }, need))).toBe('OWN_AUCTION');
+  });
 });
 
 describe('validateBuyNow', () => {
-  const bn = (over: Partial<BidAuction> = {}, b = bidder) =>
-    validateBuyNow({ auction: { ...auction, buyNowPricePaise: 900_000, ...over }, bidder: b, now });
+  const bn = (over: Partial<BidAuction> = {}, b = bidder, deposit = noDeposit) =>
+    validateBuyNow({ auction: { ...auction, buyNowPricePaise: 900_000, ...over }, bidder: b, now, deposit });
   it('accepts when set and there are no bids', () => {
     expect(() => bn()).not.toThrow();
+  });
+  it('DEPOSIT_REQUIRED applies to Buy It Now too', () => {
+    expect(err(() => bn({}, bidder, { requiredPaise: 7_000, held: false }))).toEqual([403, 'DEPOSIT_REQUIRED', { depositPaise: 7_000 }]);
+    expect(() => bn({}, bidder, { requiredPaise: 7_000, held: true })).not.toThrow();
   });
   it('BUY_NOW_UNAVAILABLE when unset or after the first bid', () => {
     expect(err(() => bn({ buyNowPricePaise: null }))).toEqual([409, 'BUY_NOW_UNAVAILABLE', undefined]);

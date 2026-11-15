@@ -192,6 +192,8 @@ describe('public reads', () => {
         maxPricePaise: 10_000_000_000,
         categories: ['Art', 'Cars'],
         checkoutMode: 'optional',
+        depositThresholdPaise: 10_000_000,
+        depositRateBps: 1000,
       },
     });
   });
@@ -306,6 +308,8 @@ describe('admin dashboard', () => {
       maxPricePaise: 5_000_000_000,
       categories: ['Art'],
       checkoutMode: 'required',
+      depositThresholdPaise: 5_000_000,
+      depositRateBps: 1500,
     };
     prismaMock.appSetting.findMany.mockResolvedValue([
       { key: 'commission.rateBps', value: '600' },
@@ -314,6 +318,8 @@ describe('admin dashboard', () => {
       { key: 'auction.maxPricePaise', value: '5000000000' },
       { key: 'auction.categories', value: '["Art"]' },
       { key: 'checkout.mode', value: 'required' },
+      { key: 'auction.depositThresholdPaise', value: '5000000' },
+      { key: 'auction.depositRateBps', value: '1500' },
     ]);
     prismaMock.appSetting.upsert.mockResolvedValue({});
     const app = await getApp();

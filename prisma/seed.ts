@@ -27,6 +27,8 @@ const SETTINGS: Record<string, string> = {
   'auction.antiSnipingMinutes': '2',
   'auction.maxPricePaise': '10000000000',
   'checkout.mode': 'optional',
+  'auction.depositThresholdPaise': '10000000',
+  'auction.depositRateBps': '1000',
   'auction.categories': JSON.stringify([
     'Electronics',
     'Fashion',

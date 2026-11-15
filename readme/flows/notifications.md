@@ -1,6 +1,6 @@
 # Notifications flow
 
-Code: pipeline in `src/modules/notify/` (`notify.queue.ts`, `notify.service.ts`, `notify.worker.ts`, `notify.content.ts`, `notify.types.ts`); in-app inbox API in `src/modules/notifications/`; email templates in `src/templates/` (`outbid`, `auction-won`, `auction-sold`, `auction-unsold`, `reserve-not-met`, `commission-due`, `commission-paid`, `review-received`, `question-asked`, `question-answered`, `saved-search-match`, `sale-receipt`, `sale-paid`, `sale-shipped`, `sale-released`, `sale-disputed`, `sale-refunded`, `sale-cancelled`, `report-filed`, each `.ejs` + `.txt.ejs`, sharing `_head` / `_foot` / `_contact` partials; auction/commission links use `env.app.url`; support `/contact` links use `env.app.websiteUrl` = `WEBSITE_URL`, passed to templates as `websiteUrl` by `renderEmail`).
+Code: pipeline in `src/modules/notify/` (`notify.queue.ts`, `notify.service.ts`, `notify.worker.ts`, `notify.content.ts`, `notify.types.ts`); in-app inbox API in `src/modules/notifications/`; email templates in `src/templates/` (`outbid`, `auction-won`, `auction-sold`, `auction-unsold`, `reserve-not-met`, `commission-due`, `commission-paid`, `review-received`, `question-asked`, `question-answered`, `saved-search-match`, `sale-receipt`, `sale-paid`, `sale-shipped`, `sale-released`, `sale-disputed`, `sale-refunded`, `sale-cancelled`, `report-filed`, `deposit-held`, `deposit-refunded`, `deposit-forfeited`, `strike-issued`, `account-suspended`, `second-chance-offer`, `second-chance-accepted`, `second-chance-declined`, `shill-flag`, each `.ejs` + `.txt.ejs`, sharing `_head` / `_foot` / `_contact` partials; auction/commission links use `env.app.url`; support `/contact` links use `env.app.websiteUrl` = `WEBSITE_URL`, passed to templates as `websiteUrl` by `renderEmail`).
 
 ## In-app endpoints (auth required)
 
@@ -19,7 +19,7 @@ Model `Notification { id, memberId, type, title, body, url, data Json?, dedupeKe
 - `NOTIFY_QUEUE_URL` set (Lambda) -> SQS `SendMessage`; the `notifyWorker` Lambda (batch 10, `ReportBatchItemFailures`, SQS `maximumConcurrency: 5` instead of reserved concurrency, because new AWS accounts have only 10 concurrency slots) runs `processSqsBatch`, which returns `{ batchItemFailures: [{ itemIdentifier: messageId }] }` for failed records (after 3 receives SQS moves them to NotifyDLQ).
 - Unset (local dev) -> `processNotification` inline; errors are logged, never thrown. Enqueue itself never throws (a notification must not fail a bid or the close job).
 
-Dedupe keys: `outbid:<bidId>:<memberId>`, `auction-won:<auctionId>`, `auction-sold:<auctionId>`, `commission-due:<auctionId>`, `commission-paid:<commissionId>`, `commission-reminder:<commissionId>:<YYYY-MM-DD>` (daily reminder, type `commission-due`), `auction-unsold:<auctionId>:<endedAtMs>` (the timestamp lets a republished auction notify again), `reserve-not-met:<auctionId>:<endedAtMs>`, `review-received:<reviewId>`, `question-asked:<questionId>`, `question-answered:<questionId>`, `ssm:<auctionId>:<memberId>`, `sale-paid|sale-receipt|sale-shipped|sale-released:<saleId>`, `sale-disputed:<saleId>` (seller) and `sale-disputed:<saleId>:<adminId>`, `sale-refunded:<saleId>:<memberId>`, `sale-cancelled:<saleId>:<memberId>`, `report-filed:<reportId>:<adminId>`.
+Dedupe keys: `outbid:<bidId>:<memberId>`, `auction-won:<auctionId>`, `auction-sold:<auctionId>`, `commission-due:<auctionId>`, `commission-paid:<commissionId>`, `commission-reminder:<commissionId>:<YYYY-MM-DD>` (daily reminder, type `commission-due`), `auction-unsold:<auctionId>:<endedAtMs>` (the timestamp lets a republished auction notify again), `reserve-not-met:<auctionId>:<endedAtMs>`, `review-received:<reviewId>`, `question-asked:<questionId>`, `question-answered:<questionId>`, `ssm:<auctionId>:<memberId>`, `sale-paid|sale-receipt|sale-shipped|sale-released:<saleId>`, `sale-disputed:<saleId>` (seller) and `sale-disputed:<saleId>:<adminId>`, `sale-refunded:<saleId>:<memberId>`, `sale-cancelled:<saleId>:<memberId>`, `report-filed:<reportId>:<adminId>`, `deposit-held|deposit-refunded|deposit-forfeited:<depositId>`, `strike-issued:<strikeId>`, `account-suspended:<strikeId>`, `second-chance-offer|second-chance-accepted|second-chance-declined:<offerId>`, `shill-flag:<auctionId>:<bidderId>:<adminId>`.
 
 `report-filed` (to every active SUPER_ADMIN when a member files a report; no auction, `data { reportId, targetType, reason, targetLabel }`, url `/admin/reports`; `reports.md`). Template variables `targetType`, `reason`, `targetLabel`, `reportsUrl`, escaped.
 
@@ -39,3 +39,16 @@ New types: `review-received` (to the seller, url `/sellers/<sellerId>`, `data { 
 Accepted trade-offs: if the email send succeeded but the insert fails, the retry sends the email a second time (a rare duplicate email is preferred over a lost one); if the email fails permanently the in-app row is not created and the message ends in the DLQ.
 
 Contact details for `auction-won` (seller) and `auction-sold` (winner) are loaded at processing time, never put on the queue. Amounts are formatted as INR (`en-IN`) by `formatInr`.
+
+Trust-2 types (`buildContent` passes the auction title when `auctionId` is set):
+
+| Type | To | Data | Url |
+|---|---|---|---|
+| `deposit-held` / `deposit-refunded` / `deposit-forfeited` | the depositor (`deposits.md`) | `amountPaise` | `/auctions/<id>` |
+| `strike-issued` | the unpaid winner (`strikes.md`) | `strikeCount`, `depositsRequired` (true at the 2nd strike: "a deposit is now required on every bid"), `expiresAt` | `/purchases` |
+| `account-suspended` | the member at the 3rd active strike | `strikeCount` | `/contact` |
+| `second-chance-offer` | the runner-up | `offerId`, `amountPaise`, `expiresAt` | `/purchases/offers/<offerId>` |
+| `second-chance-accepted` / `second-chance-declined` | the seller | `offerId`, `saleId` (accepted: the new sale, plus `amountPaise`) | `/sell/sales/<saleId>` |
+| `shill-flag` | every active SUPER_ADMIN (`risk.md`) | `bidderId`, `sellerId`, `score`, `reasons[]` | `/admin/risk` |
+
+`processNotification` skips inactive members **except** `account-suspended` (it is queued while the account is being deactivated).

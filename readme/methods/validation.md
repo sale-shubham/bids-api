@@ -70,7 +70,7 @@ router.put(
 | `saved-searches/saved-searches.validation.ts` | `createSavedSearchSchema` | `name` ≤ 60, `q` ≤ 100, `category` ≤ 100, `condition` `NEW` \| `USED`, `minPricePaise` / `maxPricePaise` integer 0 to `HARD_MAX_PRICE_PAISE`; at least one of q / category / condition / min / max; min ≤ max |
 | `admin/reviews/admin-reviews.validation.ts` | `listReviewsQuery`, `hideReviewBody` | `hidden` boolean, `q` ≤ 100, paging; body `{ hidden }` required |
 | `contact/contact.validation.ts` | `contactSchema` | `name` 2-80, `email` ≤ 254, `subject` 3-120, `message` 10-4000 |
-| `settings/settings.validation.ts` | `platformSettingsSchema`, `legalSlugParamSchema(slugs)`, `legalPageBodySchema` | Whole-object replace for `PUT /admin/settings`: `commissionRateBps` 0-3000, `minIncrementPaise` 100 to `HARD_MAX_PRICE_PAISE`, `antiSnipingMinutes` 0-30, optional `maxPricePaise` 100,000 to `HARD_MAX_PRICE_PAISE` (absent keeps the stored value), `categories` 1-30 names of 2-40 chars, unique ignoring case. Legal page: `title` 2-120, `content` 1-200,000 (sanitised by the service) |
+| `settings/settings.validation.ts` | `platformSettingsSchema`, `legalSlugParamSchema(slugs)`, `legalPageBodySchema` | Whole-object replace for `PUT /admin/settings`: `commissionRateBps` 0-3000, `minIncrementPaise` 100 to `HARD_MAX_PRICE_PAISE`, `antiSnipingMinutes` 0-30, optional `maxPricePaise` 100,000 to `HARD_MAX_PRICE_PAISE` (absent keeps the stored value), `categories` 1-30 names of 2-40 chars, unique ignoring case. Legal page: `title` 2-120, `content` 1-200,000 (sanitised by the service) | Also optional: `depositThresholdPaise` 0..HARD_MAX (0 = off), `depositRateBps` 100..5000.
 | `admin/members/admin-members.validation.ts` | `listMembersQuery`, `updateMemberBody` | List: `status` `active` \| `inactive`, `role`, `q` ≤ 100, paging, `sortBy` allowlist + `sortOrder` (see `http.md`). Update: `isActive` and/or `role`, at least one |
 | `admin/retention/admin-retention.validation.ts` | `purgeRetentionSchema` | Optional `otpChallengeDays`, `sessionInactiveDays`, each 1-365 |
 
@@ -85,6 +85,9 @@ Schemas defined inline in their route file (still through `validate()`):
 | `admin/payments/admin-payments.routes.ts` | `listQuerySchema` | `status` `created` \| `paid` \| `failed`, paging |
 | `admin/settings/admin-settings.routes.ts` | `deviceLimitSchema` | `memberLimit`, `superAdminLimit`, each 1-20, both required |
 | `admin/reports/admin-reports.routes.ts` | `adminListReportsQuery` / `resolveReportBody` (`reports.validation.ts`) | `status`, `targetType`, paging; `status` ACTION_TAKEN \| DISMISSED, `note` <= 500, `applyToAllOpenForTarget` |
+| `admin/auctions/admin-auctions.routes.ts` | `depositBodySchema` (inline) | `PATCH /admin/auctions/:id/deposit`: `depositPaise` integer 0..HARD_MAX or null, required |
+| `strikes/strikes.validation.ts` | `removeStrikeBody` | `POST /admin/strikes/:id/remove`: `note` <= 500 (optional) |
+| `admin/risk/admin-risk.validation.ts` | `listRiskQuery` / `reviewRiskBody` | `status` open \| reviewed (default open), paging (`pageSize` <= 100); `outcome` DISMISSED \| ACTION_TAKEN required, `note` <= 500 |
 | `notifications/notifications.routes.ts` | `listQuerySchema` | Paging only |
 | `leaderboard/leaderboard.routes.ts` | `leaderboardQuerySchema` (exported) | `by` `spent` (default) \| `won`, `limit` 1-50 (default 20) |
 

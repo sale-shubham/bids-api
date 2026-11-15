@@ -1,0 +1,6 @@
+<%- include('_head', { heading: 'Second-chance offer accepted', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  The bidder accepted your second-chance offer of <strong><%= amount %></strong> for <strong><%= auctionTitle %></strong>. They have 3 days to pay.
+                </p>
+<%- include('_foot', { ctaUrl: saleUrl, ctaLabel: 'View sale', frontendUrl }) %>

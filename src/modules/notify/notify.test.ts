@@ -111,6 +111,40 @@ describe('processSqsBatch', () => {
   });
 });
 
+describe('suspended members', () => {
+  it('account-suspended is still delivered to an inactive member; other types are skipped', async () => {
+    db.member.findUnique.mockResolvedValue({ id: 'm1', name: 'R', email: 'r@example.com', isActive: false });
+    db.notification.findUnique.mockResolvedValue(null);
+    db.notification.create.mockResolvedValue({ id: 'n1' });
+    expect(await processNotification({ type: 'account-suspended', memberId: 'm1', data: { strikeCount: 3 }, dedupeKey: 'account-suspended:st1' })).toBe('sent');
+    expect(await processNotification({ ...msg, memberId: 'm1' })).toBe('skipped');
+  });
+});
+
+describe('trust 2 copy', () => {
+  const ctx = { auctionId: 'a1', auctionTitle: 'Vintage Watch', memberName: 'Ramesh' };
+  it('strike-issued: warning vs deposits-required', () => {
+    const warn = buildContent({ ...ctx, type: 'strike-issued', data: { strikeCount: 1, depositsRequired: false } });
+    expect(warn.body).toMatch(/strike/);
+    expect(warn.body).not.toMatch(/deposit is now required/);
+    const second = buildContent({ ...ctx, type: 'strike-issued', data: { strikeCount: 2, depositsRequired: true } });
+    expect(second.body).toMatch(/deposit is now required on every bid/);
+  });
+  it('second-chance-offer links to the offer page and shows the amount', () => {
+    const c = buildContent({ ...ctx, type: 'second-chance-offer', data: { offerId: 'o1', amountPaise: 9_500_000 } });
+    expect(c.url).toBe('/purchases/offers/o1');
+    expect(c.body).toMatch(/95,000/);
+  });
+  it('shill-flag goes to the admin risk page', () => {
+    expect(buildContent({ ...ctx, type: 'shill-flag', data: { score: 70, reasons: ['SHARED_DEVICE'] } })).toMatchObject({ url: '/admin/risk', template: 'shill-flag' });
+  });
+  it('deposit-* types link to the auction', () => {
+    for (const type of ['deposit-held', 'deposit-refunded', 'deposit-forfeited'] as const) {
+      expect(buildContent({ ...ctx, type, data: { amountPaise: 100_000 } })).toMatchObject({ url: '/auctions/a1', template: type });
+    }
+  });
+});
+
 describe('formatInr + templates', () => {
   it('formats INR with Indian grouping', () => {
     expect(formatInr(12_345_600)).toMatch(/1,23,456/);
@@ -189,6 +223,15 @@ describe('formatInr + templates', () => {
       targetType: 'auction',
       targetLabel: 'Vintage Watch',
       reportsUrl: 'https://app.test/admin/reports',
+      strikeCount: 2,
+      depositsRequired: true,
+      expires: '15 Nov 2027',
+      purchasesUrl: 'https://app.test/purchases',
+      supportUrl: 'https://app.test/contact',
+      offerUrl: 'https://app.test/purchases/offers/o1',
+      score: 70,
+      reasons: 'SHARED_DEVICE',
+      riskUrl: 'https://app.test/admin/risk',
     });
     expect(out.html).toContain('Vintage Watch');
     expect(out.text).toContain('Vintage Watch');

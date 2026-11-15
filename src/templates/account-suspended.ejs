@@ -1,0 +1,9 @@
+<%- include('_head', { heading: 'Account suspended', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  Your account was suspended after <%= strikeCount %> strikes for unpaid auctions (latest: <strong><%= auctionTitle %></strong>).
+                </p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  If you think this is a mistake, please contact our support team.
+                </p>
+<%- include('_foot', { ctaUrl: websiteUrl + '/contact', ctaLabel: 'Contact support', frontendUrl }) %>

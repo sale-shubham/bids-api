@@ -1,0 +1,9 @@
+<%- include('_head', { heading: 'Possible shill bidding', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  Bidding on <strong><%= auctionTitle %></strong> was flagged for review (score <%= score %><% if (reasons) { %>: <%= reasons %><% } %>).
+                </p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  Flags are signals only; nothing was blocked.
+                </p>
+<%- include('_foot', { ctaUrl: riskUrl, ctaLabel: 'Review flags', frontendUrl }) %>

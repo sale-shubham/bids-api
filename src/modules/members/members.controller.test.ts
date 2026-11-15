@@ -10,6 +10,7 @@ vi.mock('@/modules/settings/device-limit.service', () => ({
 }));
 vi.mock('@/core/prisma/client', () => ({
   prisma: {
+    strike: { count: async () => 1 },
     member: {
       findUnique: async ({ where }: { where: { id: string } }) => ({
         id: where.id,
@@ -41,7 +42,7 @@ async function callMe(sub: string) {
 
 describe('GET /members/me deviceLimit', () => {
   it("returns a member's memberLimit", async () => {
-    expect(await callMe('m1')).toMatchObject({ role: 'BIDDER', deviceLimit: 3 });
+    expect(await callMe('m1')).toMatchObject({ role: 'BIDDER', deviceLimit: 3, activeStrikes: 1 });
   });
 
   it("returns a super admin's superAdminLimit", async () => {

@@ -6,6 +6,7 @@ import { auctionWriteLimiter } from '@/core/middleware/rateLimit';
 import { auctionBidsRouter, auctionBuyNowRouter } from '@/modules/bids/bids.routes';
 import { auctionReviewRouter } from '@/modules/reviews/reviews.routes';
 import { auctionQuestionsRouter } from '@/modules/questions/questions.routes';
+import { auctionDepositRouter } from '@/modules/deposits/deposits.routes';
 import * as ctrl from './auctions.controller';
 import {
   createAuctionSchema,
@@ -30,6 +31,7 @@ router.use('/:id/bids', auctionBidsRouter);
 router.use('/:id/buy-now', auctionBuyNowRouter);
 router.use('/:id/review', auctionReviewRouter);
 router.use('/:id/questions', auctionQuestionsRouter);
+router.use('/:id/deposit', auctionDepositRouter);
 router.get('/:id', optionalAuthenticate, asyncHandler(ctrl.detail));
 router.patch('/:id', ...seller, auctionWriteLimiter, validate(updateAuctionSchema), asyncHandler(ctrl.update));
 router.delete('/:id', ...seller, asyncHandler(ctrl.remove));

@@ -15,7 +15,9 @@ const db = vi.hoisted(() => ({
   bid: { findMany: vi.fn(async () => []), aggregate: vi.fn(async () => ({ _max: { amountPaise: null } })) },
   maxBid: { findUnique: vi.fn(async () => null as unknown) },
   review: { findUnique: vi.fn(async () => null as unknown) },
-  sale: { findUnique: vi.fn(async () => null as unknown) },
+  sale: { findUnique: vi.fn(async () => null as unknown), findFirst: vi.fn(async () => null as unknown) },
+  auctionDeposit: { findUnique: vi.fn(async () => null as unknown) },
+  strike: { count: vi.fn(async () => 0) },
   sellerPayoutAccount: { findUnique: vi.fn(async () => null as unknown) },
   savedSearch: { findMany: vi.fn(async () => []) },
 }));

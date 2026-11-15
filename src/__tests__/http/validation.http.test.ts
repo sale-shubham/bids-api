@@ -460,3 +460,32 @@ describe('checkout: sales, payouts, admin sales, checkout mode', () => {
     expectInvalid(await send('put', '/admin/settings', { as: 'SUPER_ADMIN', body }), 'checkoutMode');
   });
 });
+
+describe('trust 2: deposits, strikes, risk', () => {
+  it('PATCH /admin/auctions/:id/deposit needs depositPaise: an integer >= 0 or null', async () => {
+    const url = '/admin/auctions/a1/deposit';
+    expectInvalid(await send('patch', url, { as: 'SUPER_ADMIN', body: {} }), 'depositPaise');
+    expectInvalid(await send('patch', url, { as: 'SUPER_ADMIN', body: { depositPaise: -1 } }), 'depositPaise');
+    expectInvalid(await send('patch', url, { as: 'SUPER_ADMIN', body: { depositPaise: 1.5 } }), 'depositPaise');
+    expectInvalid(await send('patch', url, { as: 'SUPER_ADMIN', body: { depositPaise: 'ten' } }), 'depositPaise');
+  });
+
+  it('POST /admin/strikes/:id/remove caps the note at 500 chars', async () => {
+    expectInvalid(await send('post', '/admin/strikes/st1/remove', { as: 'SUPER_ADMIN', body: { note: 'x'.repeat(501) } }), 'note');
+  });
+
+  it('admin risk: list status and paging, review outcome and note are bounded', async () => {
+    expectInvalid(await send('get', '/admin/risk?status=all', { as: 'SUPER_ADMIN' }), 'status');
+    expectInvalid(await send('get', '/admin/risk?pageSize=101', { as: 'SUPER_ADMIN' }), 'pageSize');
+    expectInvalid(await send('patch', '/admin/risk/r1', { as: 'SUPER_ADMIN', body: {} }), 'outcome');
+    expectInvalid(await send('patch', '/admin/risk/r1', { as: 'SUPER_ADMIN', body: { outcome: 'OPEN' } }), 'outcome');
+    expectInvalid(await send('patch', '/admin/risk/r1', { as: 'SUPER_ADMIN', body: { outcome: 'DISMISSED', note: 'x'.repeat(501) } }), 'note');
+  });
+
+  it('PUT /admin/settings bounds the deposit settings', async () => {
+    const body = { commissionRateBps: 500, minIncrementPaise: 10_000, antiSnipingMinutes: 2, categories: ['Art', 'Cars'] };
+    expectInvalid(await send('put', '/admin/settings', { as: 'SUPER_ADMIN', body: { ...body, depositRateBps: 99 } }), 'depositRateBps');
+    expectInvalid(await send('put', '/admin/settings', { as: 'SUPER_ADMIN', body: { ...body, depositRateBps: 5001 } }), 'depositRateBps');
+    expectInvalid(await send('put', '/admin/settings', { as: 'SUPER_ADMIN', body: { ...body, depositThresholdPaise: -1 } }), 'depositThresholdPaise');
+  });
+});

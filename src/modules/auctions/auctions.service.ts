@@ -8,6 +8,7 @@ import { getSetting } from '@/modules/settings/settings.service';
 import { getCheckoutMode } from '@/modules/settings/checkout-mode';
 import { assertWithinMaxPrice, getMaxPricePaise } from '@/modules/settings/max-price';
 import { toPaise, toPaiseOrNull } from '@/core/money';
+import { depositForStartingBid } from '@/modules/deposits/deposits.service';
 import { auctionInclude, effectiveStatus, toCard, toDetail, type AuctionRow } from './auctions.serializer';
 import { effectivePrice, listWhere, orderFor, statusWhere } from './auctions.query';
 import {
@@ -232,6 +233,7 @@ export async function createAuction(memberId: string, input: CreateAuctionInput,
       minIncrementPaise,
       reservePricePaise: input.reservePricePaise ?? null,
       buyNowPricePaise: input.buyNowPricePaise ?? null,
+      depositPaise: await depositForStartingBid(input.startingBidPaise),
       startTime: input.startTime,
       endTime: input.endTime,
       status: input.startTime.getTime() <= now.getTime() ? 'LIVE' : 'SCHEDULED',
@@ -282,6 +284,8 @@ export async function updateAuction(id: string, actor: Actor, input: UpdateAucti
     if (input[k] !== undefined) data[k] = input[k];
   }
   if (input.description !== undefined) data.description = cleanDescription(input.description);
+  // The deposit follows the starting bid (an admin override is replaced when the starting bid is edited).
+  if (input.startingBidPaise !== undefined) data.depositPaise = await depositForStartingBid(input.startingBidPaise);
   if (timesChanged) {
     data.startTime = start;
     data.endTime = end;

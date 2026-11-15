@@ -13,6 +13,7 @@ import { getCheckoutMode } from '@/modules/settings/checkout-mode';
 import { afterClose, closeOneTx, commissionRateBps } from '@/modules/auctions/auction-close.service';
 import { isReviewWindowOpen } from '@/modules/reviews/reviews.rules';
 import { enqueueNotification } from '@/modules/notify/notify.queue';
+import { getDepositConfig, loadDepositFacts } from '@/modules/deposits/deposits.service';
 import {
   antiSnipedEndTime,
   bidState,
@@ -52,16 +53,27 @@ function toBidAuction(a: AuctionRow): BidAuction {
   };
 }
 
-type LockedTx = Pick<typeof prisma, '$queryRaw' | 'auction' | 'member'>;
+type LockedTx = Pick<typeof prisma, '$queryRaw' | 'auction' | 'member' | 'auctionDeposit' | 'strike'>;
 
 /** SELECT ... FOR UPDATE, then load the auction and the bidder. */
-async function lockAndLoad(db: LockedTx, auctionId: string, memberId: string) {
+async function lockAndLoad(db: LockedTx, auctionId: string, memberId: string, rateBps: number) {
   const locked = await db.$queryRaw<{ id: string }[]>`SELECT id FROM "Auction" WHERE id = ${auctionId} FOR UPDATE`;
   if (locked.length === 0) throw auctionNotFound();
   const auction = (await db.auction.findUniqueOrThrow({ where: { id: auctionId }, include: auctionInclude })) as AuctionRow;
   const bidder = await db.member.findUnique({ where: { id: memberId }, select: { id: true, name: true, isActive: true } });
   if (!bidder) throw new AppError(401, 'UNAUTHORIZED', 'Unauthorized');
-  return { auction, bidder };
+  const deposit = await loadDepositFacts(db, auction, auctionId, memberId, rateBps);
+  return { auction, bidder, deposit };
+}
+
+/** Best-effort shill-bid check after a bid committed; never fails the bid. */
+async function runRiskCheck(auctionId: string, bidderId: string, sellerId: string): Promise<void> {
+  try {
+    const { checkBidRisk } = await import('@/modules/risk/risk.service');
+    await checkBidRisk({ auctionId, bidderId, sellerId });
+  } catch (err) {
+    logger.warn({ err, auctionId }, 'bids: risk check failed');
+  }
 }
 
 type InsertedBid = { id: string; amountPaise: bigint; kind: BidKindValue; createdAt: Date };
@@ -76,13 +88,14 @@ type InsertedBid = { id: string; amountPaise: bigint; kind: BidKindValue; create
 export async function placeBid(memberId: string, auctionId: string, maxPaise: number) {
   assertWithinMaxPrice(await getMaxPricePaise(), maxPaise);
   const antiSniping = await antiSnipingMinutes();
+  const { rateBps: depositRateBps } = await getDepositConfig();
 
   const tx = await prisma.$transaction(
     async (db) => {
-      const { auction, bidder } = await lockAndLoad(db, auctionId, memberId);
+      const { auction, bidder, deposit } = await lockAndLoad(db, auctionId, memberId, depositRateBps);
       const now = new Date(); // after the lock: bids are judged in the order they win the lock
       const bidAuction = toBidAuction(auction);
-      validateBid({ auction: bidAuction, bidder, now });
+      validateBid({ auction: bidAuction, bidder, now, deposit });
 
       const prevLeaderId = auction.highestBidderId;
       const leaderMaxRow = prevLeaderId
@@ -200,6 +213,8 @@ export async function placeBid(memberId: string, auctionId: string, maxPaise: nu
     }
   }
 
+  await runRiskCheck(auctionId, memberId, updated.sellerId);
+
   const mine = [...dtos].reverse().find((d) => d.isMe) ?? null;
   const auctionDetail = await buildAuctionDetail(updated, memberId, now);
   return { auction: auctionDetail, bid: mine, serverTime: new Date().toISOString(), outbidByProxy: resolved.outbidByProxy };
@@ -213,13 +228,14 @@ export async function placeBid(memberId: string, auctionId: string, maxPaise: nu
 export async function buyNow(memberId: string, auctionId: string) {
   const rateBps = await commissionRateBps();
   const checkoutMode = await getCheckoutMode();
+  const { rateBps: depositRateBps } = await getDepositConfig();
 
   const tx = await prisma.$transaction(
     async (db) => {
-      const { auction, bidder } = await lockAndLoad(db, auctionId, memberId);
+      const { auction, bidder, deposit } = await lockAndLoad(db, auctionId, memberId, depositRateBps);
       const now = new Date();
       const bidAuction = toBidAuction(auction);
-      validateBuyNow({ auction: bidAuction, bidder, now });
+      validateBuyNow({ auction: bidAuction, bidder, now, deposit });
       const pricePaise = bidAuction.buyNowPricePaise!; // validateBuyNow guarantees it is set
 
       const bid = await db.bid.create({
@@ -261,6 +277,7 @@ export async function buyNow(memberId: string, auctionId: string) {
     logger.warn({ err, auctionId }, 'bids: publishAuctionEvent failed');
   }
   await afterClose(closed); // auction.ended + won / sold / commission notifications
+  await runRiskCheck(auctionId, memberId, updated.sellerId);
 
   const auctionDetail = await buildAuctionDetail(updated, memberId, now);
   return { auction: auctionDetail, serverTime: new Date().toISOString() };
@@ -343,10 +360,13 @@ export async function listMyBids(memberId: string, q: MyBidsQuery, now = new Dat
   const sales = pageIds.length
     ? await prisma.sale.findMany({
         where: { auctionId: { in: pageIds } },
+        orderBy: { createdAt: 'desc' },
         select: { id: true, auctionId: true, status: true, deliveredAt: true, releasedAt: true },
       })
     : [];
-  const saleByAuction = new Map(sales.map((s) => [s.auctionId, s]));
+  // An auction can have several sales (a cancelled one, then a second-chance one): the latest wins.
+  const saleByAuction = new Map<string, (typeof sales)[number]>();
+  for (const s of sales) if (!saleByAuction.has(s.auctionId)) saleByAuction.set(s.auctionId, s);
   const reviewCandidates = pageRows
     .filter(({ a }) => isReviewWindowOpen(a, memberId, now, saleByAuction.get(a.id)))
     .map(({ a }) => a.id);

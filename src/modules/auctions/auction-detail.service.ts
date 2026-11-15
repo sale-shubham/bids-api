@@ -2,12 +2,13 @@ import { prisma } from '@/core/prisma/client';
 import { toPaise, toPaiseOrNull } from '@/core/money';
 import { effectiveStatus, toDetail, type AuctionContact, type AuctionRow } from './auctions.serializer';
 import { provisionalWinnerId, toBidDTO } from './bidding.rules';
+import { viewerDeposit } from '@/modules/deposits/deposits.service';
 import { isReviewWindowOpen, reviewInclude, toReviewDTO } from '@/modules/reviews/reviews.rules';
 
 const RECENT_BIDS = 5;
 const contactSelect = { name: true, email: true, phone: true } as const;
 
-type Db = Pick<typeof prisma, 'bid' | 'member' | 'watchlist' | 'maxBid' | 'review' | 'sale'>;
+type Db = Pick<typeof prisma, 'bid' | 'member' | 'watchlist' | 'maxBid' | 'review' | 'sale' | 'auctionDeposit' | 'strike'>;
 
 /**
  * AuctionDetail with the viewer-specific extras: latest 5 bids (masked),
@@ -22,7 +23,7 @@ export async function buildAuctionDetail(
   db: Db = prisma,
   viewerRole: string | null = null,
 ) {
-  const [bids, mine, myMax, contact, watcherCount, watching, reviewRow, saleRow] = await Promise.all([
+  const [bids, mine, myMax, contact, watcherCount, watching, reviewRow, saleRow, deposit] = await Promise.all([
     db.bid.findMany({
       where: { auctionId: row.id },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -47,10 +48,13 @@ export async function buildAuctionDetail(
         })
       : Promise.resolve(null),
     db.review.findUnique({ where: { auctionId: row.id }, include: reviewInclude }),
-    db.sale.findUnique({
+    // Latest sale first: a cancelled sale can be followed by a second-chance sale.
+    db.sale.findFirst({
       where: { auctionId: row.id },
+      orderBy: { createdAt: 'desc' },
       select: { id: true, status: true, payBy: true, buyerId: true, sellerId: true, deliveredAt: true, releasedAt: true },
     }),
+    viewerId ? viewerDeposit(row, viewerId, now, db) : Promise.resolve(null),
   ]);
   const seesSale = !!viewerId && !!saleRow && (viewerId === saleRow.buyerId || viewerId === saleRow.sellerId || viewerRole === 'SUPER_ADMIN');
   const seesReserve = !!viewerId && (viewerId === row.sellerId || viewerRole === 'SUPER_ADMIN');
@@ -65,6 +69,7 @@ export async function buildAuctionDetail(
     watcherCount,
     review: reviewRow && !reviewRow.hiddenAt ? toReviewDTO(reviewRow) : null,
     canReview: !reviewRow && isReviewWindowOpen(row, viewerId, now, saleRow),
+    deposit,
     sale: seesSale && saleRow ? { id: saleRow.id, status: saleRow.status, payBy: saleRow.payBy } : null,
   };
 }

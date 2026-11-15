@@ -1,0 +1,12 @@
+<%- include('_head', { heading: 'Strike issued', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  You did not pay for <strong><%= auctionTitle %></strong> in time, so your account received a strike (active strikes: <%= strikeCount %>).
+                </p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  <% if (depositsRequired) { %>A refundable deposit is now required on every bid. A third strike suspends your account.<% } else { %>Three active strikes suspend your account.<% } %>
+                </p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  <% if (expires) { %>This strike expires on <%= expires %>.<% } %>
+                </p>
+<%- include('_foot', { ctaUrl: purchasesUrl, ctaLabel: 'View your purchases', frontendUrl }) %>

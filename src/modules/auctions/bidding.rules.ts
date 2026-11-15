@@ -50,9 +50,12 @@ export function provisionalWinnerId(a: {
   return a.winnerId ?? (a.bidCount > 0 && reserveMet(a) ? a.highestBidderId : null);
 }
 
-type PreCheckInput = { auction: BidAuction; bidder: Bidder; now: Date };
+/** Deposit facts for the bidder on this auction (see deposits.rules.ts): what is required and whether it is held. */
+export type DepositFacts = { requiredPaise: number; held: boolean };
 
-function preChecks({ auction, bidder, now }: PreCheckInput): void {
+type PreCheckInput = { auction: BidAuction; bidder: Bidder; now: Date; deposit: DepositFacts };
+
+function preChecks({ auction, bidder, now, deposit }: PreCheckInput): void {
   if (!bidder.isActive) throw new AppError(403, 'ACCOUNT_SUSPENDED', 'Your account has been suspended. Contact admin support.');
   if (auction.status === 'CANCELLED' || auction.deletedAt) throw new AppError(404, 'AUCTION_NOT_FOUND', 'Auction not found');
   if (now.getTime() < auction.startTime.getTime()) throw new AppError(409, 'AUCTION_NOT_STARTED', 'This auction has not started yet');
@@ -60,11 +63,16 @@ function preChecks({ auction, bidder, now }: PreCheckInput): void {
     throw new AppError(409, 'AUCTION_ENDED', 'This auction has ended');
   }
   if (auction.sellerId === bidder.id) throw new AppError(403, 'OWN_AUCTION', 'You cannot bid on your own auction');
+  if (deposit.requiredPaise > 0 && !deposit.held) {
+    throw new AppError(403, 'DEPOSIT_REQUIRED', 'A refundable deposit is required to bid on this auction', {
+      depositPaise: deposit.requiredPaise,
+    });
+  }
 }
 
 /**
  * Throws the AppError the API contract names, in this order: suspended,
- * not found (cancelled/deleted), not started, ended, own auction. The amount is
+ * not found (cancelled/deleted), not started, ended, own auction, deposit required. The amount is
  * judged by resolveMaxBid. Time checks use startTime/endTime, never the stored
  * status (the close job lags), except a stored ENDED/CANCELLED which is final.
  */

@@ -42,3 +42,10 @@ export async function dispute(req: Request, res: Response) {
   const svc = await import('./sales.service');
   return ok(res, await svc.disputeSale(req.user!.sub, param(req, 'id'), req.body.reason));
 }
+
+// POST /sales/:id/second-chance -> { offer }
+export async function secondChance(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const svc = await import('@/modules/second-chance/second-chance.service');
+  return ok(res, await svc.createOffer(req.user!.sub, param(req, 'id')), 201);
+}
