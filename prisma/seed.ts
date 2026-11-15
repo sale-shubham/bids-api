@@ -21,6 +21,19 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString, ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}) }),
 });
 
+const DEFAULT_CATEGORIES = [
+  'Electronics',
+  'Fashion',
+  'Home & Garden',
+  'Collectibles',
+  'Art',
+  'Vehicles',
+  'Sports',
+  'Jewellery',
+  'Books',
+  'Other',
+];
+
 const SETTINGS: Record<string, string> = {
   'commission.rateBps': '500',
   'auction.minIncrementPaise': '10000',
@@ -29,18 +42,6 @@ const SETTINGS: Record<string, string> = {
   'checkout.mode': 'optional',
   'auction.depositThresholdPaise': '10000000',
   'auction.depositRateBps': '1000',
-  'auction.categories': JSON.stringify([
-    'Electronics',
-    'Fashion',
-    'Home & Garden',
-    'Collectibles',
-    'Art',
-    'Vehicles',
-    'Sports',
-    'Jewellery',
-    'Books',
-    'Other',
-  ]),
 };
 
 async function main() {
@@ -49,6 +50,18 @@ async function main() {
     await prisma.appSetting.upsert({ where: { key }, create: { key, value }, update: {} });
   }
   console.log(`[seed] app settings ensured (${Object.keys(SETTINGS).length})`);
+
+  // Categories: only seeded into an empty table, so admin edits survive a re-seed.
+  if ((await prisma.category.count()) === 0) {
+    await prisma.category.createMany({
+      data: DEFAULT_CATEGORIES.map((name, i) => ({
+        name,
+        slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''),
+        sortOrder: i,
+      })),
+    });
+    console.log(`[seed] categories created (${DEFAULT_CATEGORIES.length})`);
+  }
 
   // Legal pages: only create when missing, so admin-edited content/titles survive a re-seed.
   for (const page of LEGAL_SEED) {

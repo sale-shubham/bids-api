@@ -1,6 +1,8 @@
 import { prisma } from '@/core/prisma/client';
 import { CHECKOUT_MODE_KEY, DEFAULT_CHECKOUT_MODE, parseCheckoutMode, type CheckoutMode } from './checkout-mode.constants';
 import { DEPOSIT_RATE_KEY, DEPOSIT_THRESHOLD_KEY, parseDepositConfig } from '@/modules/deposits/deposits.rules';
+import { logger } from '@/core/logger/logger';
+import { activeRootCategoryNames } from '@/modules/categories/categories.service';
 import { DEFAULT_MAX_PRICE_PAISE, HARD_MAX_PRICE_PAISE, MAX_PRICE_SETTING_KEY, MIN_MAX_PRICE_PAISE } from '@/core/money';
 
 // Admin-managed app settings live in the AppSetting key/value table
@@ -27,7 +29,6 @@ export const SETTING_KEYS = {
   minIncrementPaise: 'auction.minIncrementPaise',
   antiSnipingMinutes: 'auction.antiSnipingMinutes',
   maxPricePaise: MAX_PRICE_SETTING_KEY,
-  categories: 'auction.categories',
   checkoutMode: CHECKOUT_MODE_KEY,
   depositThresholdPaise: DEPOSIT_THRESHOLD_KEY,
   depositRateBps: DEPOSIT_RATE_KEY,
@@ -59,16 +60,6 @@ const intOr = (raw: string | null | undefined, fallback: number, min: number, ma
   return Number.isFinite(n) && n >= min && n <= max ? n : fallback;
 };
 
-export function parseCategories(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
 export async function getPlatformSettings(): Promise<PlatformSettings> {
   const rows = await prisma.appSetting.findMany({ where: { key: { in: Object.values(SETTING_KEYS) } } });
   const map = new Map(rows.map((r) => [r.key, r.value]));
@@ -78,7 +69,7 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
     minIncrementPaise: intOr(map.get(SETTING_KEYS.minIncrementPaise), SETTING_DEFAULTS.minIncrementPaise, 100, HARD_MAX_PRICE_PAISE),
     antiSnipingMinutes: intOr(map.get(SETTING_KEYS.antiSnipingMinutes), SETTING_DEFAULTS.antiSnipingMinutes, 0, 30),
     maxPricePaise: intOr(map.get(SETTING_KEYS.maxPricePaise), SETTING_DEFAULTS.maxPricePaise, MIN_MAX_PRICE_PAISE, HARD_MAX_PRICE_PAISE),
-    categories: parseCategories(map.get(SETTING_KEYS.categories)),
+    categories: await activeRootCategoryNames(),
     checkoutMode: parseCheckoutMode(map.get(SETTING_KEYS.checkoutMode)),
     depositThresholdPaise: deposit.thresholdPaise,
     depositRateBps: deposit.rateBps,
@@ -87,7 +78,9 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
 
 // maxPricePaise, checkoutMode and the deposit settings are optional on write: old admin clients omit them and the stored value stays.
 export async function setPlatformSettings(
-  input: Omit<PlatformSettings, 'maxPricePaise' | 'checkoutMode' | 'depositThresholdPaise' | 'depositRateBps'> & {
+  input: Omit<PlatformSettings, 'categories' | 'maxPricePaise' | 'checkoutMode' | 'depositThresholdPaise' | 'depositRateBps'> & {
+    /** Deprecated and ignored: categories are the Category table now (admin/categories). */
+    categories?: string[];
     maxPricePaise?: number;
     checkoutMode?: CheckoutMode;
     depositThresholdPaise?: number;
@@ -98,8 +91,8 @@ export async function setPlatformSettings(
     [SETTING_KEYS.commissionRateBps, String(input.commissionRateBps)],
     [SETTING_KEYS.minIncrementPaise, String(input.minIncrementPaise)],
     [SETTING_KEYS.antiSnipingMinutes, String(input.antiSnipingMinutes)],
-    [SETTING_KEYS.categories, JSON.stringify(input.categories)],
   ];
+  if (input.categories !== undefined) logger.debug('settings: `categories` is deprecated and ignored; manage /admin/categories');
   if (input.maxPricePaise !== undefined) entries.push([SETTING_KEYS.maxPricePaise, String(input.maxPricePaise)]);
   if (input.checkoutMode !== undefined) entries.push([SETTING_KEYS.checkoutMode, input.checkoutMode]);
   if (input.depositThresholdPaise !== undefined) entries.push([SETTING_KEYS.depositThresholdPaise, String(input.depositThresholdPaise)]);

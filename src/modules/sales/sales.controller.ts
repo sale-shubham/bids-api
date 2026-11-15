@@ -22,7 +22,7 @@ export async function getOne(req: Request, res: Response) {
 export async function checkout(req: Request, res: Response) {
   const { ok } = await import('@/core/http/response');
   const svc = await import('./sales.service');
-  return ok(res, await svc.checkout(req.user!.sub, param(req, 'id')));
+  return ok(res, await svc.checkout(req.user!.sub, param(req, 'id'), new Date(), (req.body as { delivery?: 'COURIER' | 'PICKUP' } | undefined)?.delivery));
 }
 
 export async function ship(req: Request, res: Response) {

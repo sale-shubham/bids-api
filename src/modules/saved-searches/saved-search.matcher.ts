@@ -1,5 +1,7 @@
 import { prisma } from '@/core/prisma/client';
 import { enqueueNotification } from '@/modules/notify/notify.queue';
+import { categoryTerms } from '@/modules/categories/categories.service';
+import type { Condition } from '@/modules/auctions/listing.rules';
 
 const MAX_MEMBERS_PER_AUCTION = 500;
 
@@ -7,7 +9,8 @@ export type PublishedAuction = {
   id: string;
   title: string;
   category: string;
-  condition: 'NEW' | 'USED';
+  categoryId?: string | null;
+  condition: Condition;
   startingBidPaise: number;
   sellerId: string;
 };
@@ -21,10 +24,12 @@ export function titleMatches(q: string | null, title: string): boolean {
 
 /** Notify members whose saved search matches a newly published auction (price = starting bid). */
 export async function onAuctionPublished(a: PublishedAuction): Promise<number> {
+  // A search for a parent category matches its descendants: accept the name or slug of the auction's category and every ancestor.
+  const categories = [...new Set([a.category, ...(await categoryTerms(a.categoryId))])];
   const rows = await prisma.savedSearch.findMany({
     where: {
       AND: [
-        { OR: [{ category: null }, { category: a.category }] },
+        { OR: [{ category: null }, { category: { in: categories } }] },
         { OR: [{ condition: null }, { condition: a.condition }] },
         { OR: [{ minPricePaise: null }, { minPricePaise: { lte: a.startingBidPaise } }] },
         { OR: [{ maxPricePaise: null }, { maxPricePaise: { gte: a.startingBidPaise } }] },

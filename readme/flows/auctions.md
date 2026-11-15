@@ -15,8 +15,8 @@ List filters (`auctions.query.ts` `statusWhere`) mirror this in SQL: live = `sta
 
 ## Shapes
 
-`AuctionCard` = `{ id, title, category, condition: NEW|USED, coverImage|null, startingBidPaise, currentBidPaise, bidCount, buyNowPricePaise: number|null (null when unset or once bidCount > 0), hasReserve: boolean, reserveMet: boolean, startTime, endTime, status, seller: { id, name, avatarUrl, ratingAvg: number|null, ratingCount, verified: boolean } }`. `seller.verified` = the verified-seller badge (`Member.verifiedAt`: AUCTIONEER with verified phone and an ACTIVE payout account, not revoked by an admin; see `auth.md`). `ratingAvg` = round(ratingSum / ratingCount, 1), null when there are no counted reviews (`reviews.md`); `ratingSum` is never exposed.
-`AuctionDetail` = card + `{ description, images[], minIncrementPaise, highestBidderId|null, winnerId|null, endedAt|null, createdAt, updatedAt, recentBids: BidDTO[], myHighestBidPaise: number|null, myMaxBidPaise: number|null, reservePricePaise?: number|null (owner / SUPER_ADMIN only), contact: { role: 'SELLER'|'WINNER', name, email, phone }|null, isWatching: boolean, watcherCount: number, review: ReviewDTO|null, canReview: boolean }`. `review` is the auction's non-hidden review; `canReview` is true when the viewer is the stamped winner, the auction ended within the last 60 days and no review exists (`reviews.md`); both are `null` / `false` on create, patch and republish. `isWatching` (false for guests) and `watcherCount` come from the Watchlist table (`watchlist.md`) and are `false` / `0` on create, patch and republish. The three extras before them are filled for `GET /auctions/:id` and the bid response (latest 5 bids newest first; the requester's highest bid; post-auction contact card for the winner / seller only) and are `[]` / `null` / `null` on create, patch and republish. See `bidding.md`.
+`AuctionCard` = `{ id, title, category (name), categorySlug|null, condition: NEW|LIKE_NEW|GOOD|FAIR|USED|FOR_PARTS, estimateLowPaise|null, estimateHighPaise|null, hasVideo: boolean, sold: boolean (effective ENDED with a winner), endedAt|null, coverImage|null, startingBidPaise, currentBidPaise, bidCount, buyNowPricePaise: number|null (null when unset or once bidCount > 0), hasReserve: boolean, reserveMet: boolean, startTime, endTime, status, seller: { id, name, avatarUrl, ratingAvg: number|null, ratingCount, verified: boolean } }`. `seller.verified` = the verified-seller badge (`Member.verifiedAt`: AUCTIONEER with verified phone and an ACTIVE payout account, not revoked by an admin; see `auth.md`). `ratingAvg` = round(ratingSum / ratingCount, 1), null when there are no counted reviews (`reviews.md`); `ratingSum` is never exposed.
+`AuctionDetail` = card + `{ description, categoryId|null, categoryPath: [{ id, slug, name }] (root to leaf), specs: [{ key, label, value, unit|null }] (category schema order; unknown / removed keys omitted), conditionReport|null (sanitised HTML), videoUrl|null, shippingOptions: { pickup, pickupCity|null, courier, shippingFeePaise|null, shipsWithinDays|null }|null (null = legacy auction), images[], minIncrementPaise, highestBidderId|null, winnerId|null, endedAt|null, createdAt, updatedAt, recentBids: BidDTO[], myHighestBidPaise: number|null, myMaxBidPaise: number|null, reservePricePaise?: number|null (owner / SUPER_ADMIN only), contact: { role: 'SELLER'|'WINNER', name, email, phone }|null, isWatching: boolean, watcherCount: number, review: ReviewDTO|null, canReview: boolean }`. `review` is the auction's non-hidden review; `canReview` is true when the viewer is the stamped winner, the auction ended within the last 60 days and no review exists (`reviews.md`); both are `null` / `false` on create, patch and republish. `isWatching` (false for guests) and `watcherCount` come from the Watchlist table (`watchlist.md`) and are `false` / `0` on create, patch and republish. The three extras before them are filled for `GET /auctions/:id` and the bid response (latest 5 bids newest first; the requester's highest bid; post-auction contact card for the winner / seller only) and are `[]` / `null` / `null` on create, patch and republish. See `bidding.md`.
 
 **Reserve exposure:** `reservePricePaise` is never in `toCard` / `toDetail`. `buildAuctionDetail` adds it only when the viewer is the seller or a SUPER_ADMIN (`GET /auctions/:id`); the owner-only endpoints add it too (`/auctions/mine` rows, create / patch / republish responses, via `withReserve` in `auctions.service.ts`). Everyone else only sees `hasReserve` / `reserveMet`. `myMaxBidPaise` is the viewer's own `MaxBid`.
 
@@ -26,24 +26,26 @@ List filters (`auctions.query.ts` `statusWhere`) mirror this in SQL: live = `sta
 |---|---|---|---|
 | GET | `/auctions` | public | query below -> `paginated(AuctionCard[])` |
 | GET | `/auctions/home` | public | `{ featured[8], endingSoon[8], upcoming[8], serverTime }` (featured = live, most bids; endingSoon = live, soonest end; upcoming = soonest start) |
-| GET | `/auctions/categories` | public | `{ categories: [{ name, liveCount }] }`, names + order from AppSetting `auction.categories` |
+| GET | `/auctions/categories` | public | legacy shape `{ categories: [{ name, liveCount }] }`, now the active root `Category` rows (`categories.md`; `GET /categories` is the full tree) |
+| GET | `/auctions/:id/similar-sold` | public | `{ items: AuctionCard[] }` up to 6: same `categoryId`, sold (effective ENDED, winner set), `endedAt` within 90 days, excluding itself, newest first. 404 `AUCTION_NOT_FOUND` for a missing / cancelled auction; `[]` when the auction has no category |
 | GET | `/auctions/sitemap` | public | `{ items: [{ id, updatedAt }] }`: live + upcoming + ended in the last 90 days, never cancelled, max 5000, newest update first |
 | GET | `/auctions/mine` | AUCTIONEER / SUPER_ADMIN | `status=upcoming\|live\|ended\|cancelled` (default live) + paging -> `paginated(AuctionCard[])` |
 | GET | `/auctions/:id` | public, optional auth | `{ auction: AuctionDetail, serverTime }`; 404 `AUCTION_NOT_FOUND` if missing, or cancelled/deleted unless requester is the seller or SUPER_ADMIN |
 | POST | `/auctions` | AUCTIONEER / SUPER_ADMIN | 201 `{ auction }` |
+| POST | `/auctions/bulk` | AUCTIONEER / SUPER_ADMIN | `{ items: CreateAuctionInput[] (1..50) }` -> 201 `{ items: AuctionCard[] }`; see Bulk create |
 | PATCH | `/auctions/:id` | seller | all fields optional -> `{ auction }` |
 | DELETE | `/auctions/:id` | seller / SUPER_ADMIN | soft delete -> `{ id }`. A SUPER_ADMIN may cancel any auction, including ones with bids (no refund or notification; it is logged). This is the admin cancel action. |
 | POST | `/auctions/:id/republish` | seller | `{ startTime, endTime }` -> `{ auction }` |
 | POST / GET | `/auctions/:id/bids` | BIDDER / public | place a (max) bid / list bids; see `bidding.md` |
 | POST | `/auctions/:id/buy-now` | BIDDER | Buy It Now; see `bidding.md` |
 
-Fixed paths (`home`, `categories`, `sitemap`, `mine`) are declared before `/:id`.
+Fixed paths (`home`, `categories`, `sitemap`, `mine`, `bulk`) are declared before `/:id`.
 
 `AuctionDetail` also has `sale: { id, status, payBy } | null` (set for the sale's buyer, its seller and SUPER_ADMIN; see `checkout.md`).
 
 ### GET /auctions query
 
-`status=live|upcoming|ended` (default `live`), `category`, `sellerId` (seller page), `condition=NEW|USED`, `q` (case-insensitive title contains, max 100), `minPrice`, `maxPrice` (paise, `minPrice <= maxPrice`), `verified=true` (only lots whose seller has `verifiedAt` set), `sort=endingSoon|newest|priceAsc|priceDesc|mostBids`, `page` (default 1), `pageSize` (default 20, max 100).
+`status=live|upcoming|ended` (default `live`), `category` (a category **slug or name**; matches that category and all its descendants, `categories.md`; an unknown term falls back to the legacy name column), `attr.<key>=value` (up to 5; exact match on the category attributes, strings as text, a numeric value also matches the stored number; JSON path filters served by the GIN index), `sold=true` (effective ENDED with a winner, overrides `status`), `sellerId` (seller page), `condition=NEW|LIKE_NEW|GOOD|FAIR|USED|FOR_PARTS`, `q` (case-insensitive title contains, max 100), `minPrice`, `maxPrice` (paise, `minPrice <= maxPrice`), `verified=true` (only lots whose seller has `verifiedAt` set), `sort=endingSoon|newest|priceAsc|priceDesc|mostBids|recentlySold` (`recentlySold` = `endedAt` desc), `page` (default 1), `pageSize` (default 20, max 100).
 
 Default sort: `endingSoon` (endTime asc) for live/upcoming; for ended, most recently ended first (endTime desc). `newest` = createdAt desc; `mostBids` = bidCount desc then endTime asc.
 
@@ -68,8 +70,13 @@ Price = `currentBidPaise` if `bidCount > 0` else `startingBidPaise` (the `GREATE
 |---|---|
 | `title` | 5-120 chars |
 | `description` | HTML, 20-10000 chars raw; sanitised server-side (allow-list below); must still be >= 20 chars after sanitising |
-| `category` | must be in AppSetting `auction.categories` (400 `VALIDATION_ERROR`) |
-| `condition` | `NEW` / `USED` |
+| `categoryId` / `category` | one is required. `categoryId` is preferred; `category` is the legacy alias (a category name or slug, case-insensitive). It must resolve to an **active** `Category` (400 `INVALID_CATEGORY`); both `Auction.categoryId` and the denormalised `Auction.category` (name) are written (`categories.md`) |
+| `attributes` | optional `{ key: string\|number }`, validated against the category `attributeSchema` by `validateAttributes` (required keys, finite numbers, select options, text <= 200, unknown keys dropped); 400 `INVALID_ATTRIBUTES`, `details.fields: [{ field, message }]`. Re-validated when the category or the attributes change on PATCH |
+| `condition` | `NEW` / `LIKE_NEW` / `GOOD` / `FAIR` / `USED` / `FOR_PARTS` (enum order is exactly that) |
+| `conditionReport` | optional rich text, sanitised with the description allow-list; <= 5,000 chars after sanitising (400 `VALIDATION_ERROR`); empty -> null; `null` clears on PATCH |
+| `estimateLowPaise` / `estimateHighPaise` | both or neither; `low <= high`; each >= 100 and <= `auction.maxPricePaise`; else 400 `INVALID_ESTIMATE`. PATCH combines with the stored pair; `null` + `null` clears both. Estimates are display-only (no effect on bidding) |
+| `videoUrl` | optional; must be an uploaded object on this platform (`isOwnMediaUrl`, same check as `images`); upload via `POST /uploads/presign` with `folder: 'auction-videos'`; `null` clears on PATCH |
+| `shippingOptions` | optional `{ pickup: boolean, pickupCity? <= 60 (required when pickup), courier: boolean, shippingFeePaise? int 0..10,000,000 (courier only), shipsWithinDays? 1..30 }`, at least one of pickup / courier (400 `INVALID_SHIPPING`, `details` = field list); options that are off lose their sub-fields; `null` clears on PATCH. Used by checkout (`checkout.md`) |
 | `images` | 1-8 URLs, each under our CloudFront/S3 base (`isOwnMediaUrl`, same check as avatars); first = cover |
 | `startingBidPaise` | int 100..1_000_000_000_000 (`HARD_MAX_PRICE_PAISE`); also <= AppSetting `auction.maxPricePaise` (400 `PRICE_TOO_HIGH`, `details: { maxPaise }`) |
 | `minIncrementPaise` | optional int 100..`HARD_MAX_PRICE_PAISE`, <= `auction.maxPricePaise` (`PRICE_TOO_HIGH`); default AppSetting `auction.minIncrementPaise` (10000 fallback) |
@@ -89,7 +96,12 @@ Stored `status` on create/republish: `LIVE` if `startTime <= now`, else `SCHEDUL
 | 400 | `PRICE_TOO_HIGH` | create / patch with `startingBidPaise` or `minIncrementPaise` above `auction.maxPricePaise` |
 | 400 | `INVALID_RESERVE` | reserve below the starting bid |
 | 400 | `INVALID_BUY_NOW` | buy-now not above the starting bid, or below the reserve |
-| 400 | `VALIDATION_ERROR` | Joi failure, unknown category, time window broken against stored times |
+| 400 | `INVALID_CATEGORY` | `categoryId` / `category` unknown or inactive |
+| 400 | `INVALID_ATTRIBUTES` | attributes fail the category schema (`details.fields`) |
+| 400 | `INVALID_ESTIMATE` | estimate pair rules (see table) |
+| 400 | `INVALID_SHIPPING` | `shippingOptions` rules (see table) |
+| 400 | `BULK_INVALID` | any row of `POST /auctions/bulk` failed; `details.rows: [{ index, errors: [{ field, message }] }]`, nothing created |
+| 400 | `VALIDATION_ERROR` | Joi failure, over-long sanitised condition report, time window broken against stored times |
 | 403 | `FORBIDDEN` | role is not AUCTIONEER / SUPER_ADMIN on create / mine / write routes |
 | 403 | `COMMISSION_UNPAID` | create while `unpaidCommissionPaise > 0` |
 | 403 | `PAYOUT_ACCOUNT_REQUIRED` | create when `checkout.mode = required` and the seller has no ACTIVE payout account (`checkout.md`) |
@@ -104,11 +116,21 @@ Create and a successful republish call `onAuctionPublished` (`saved-searches.md`
 
 DELETE = soft delete: `status = CANCELLED`, `deletedAt = now`. SUPER_ADMIN may delete regardless of bids (and any seller's auction). Republish sets the new times and status, clears `endedAt`, `winnerId`, `highestBidderId` and keeps `reservePricePaise` / `buyNowPricePaise`. Relisting after an auction ended below its reserve is a client-side pre-fill of `/sell/new` (no endpoint, decision D9).
 
+All the new listing fields (category, attributes, condition, report, estimates, video, shipping) are editable under the existing rule: PATCH is refused (409 `AUCTION_HAS_BIDS`) once bids exist. Republish keeps them.
+
+## Bulk create
+
+`POST /auctions/bulk` (same auth chain as create: AUCTIONEER / SUPER_ADMIN, active member; plus `bulkLimiter`, 5 per hour per member, Postgres store `rl:bulk:`). Body `{ items: CreateAuctionInput[] (1..50) }`. The `COMMISSION_UNPAID` / `PAYOUT_ACCOUNT_REQUIRED` blocks are checked once for the member. Every item is then validated with the same `createAuctionSchema` plus all service rules (`prepareCreate`: category, attributes, prices, admin ceiling, reserve / buy-now, time window, estimate, report, shipping; image / video ownership is part of the Joi schema), collecting errors per row. Any failure -> 400 `BULK_INVALID` with `details.rows: [{ index, errors: [{ field, message }] }]` (`index` is the position in `items`) and nothing is created. Otherwise all rows are created in **one transaction** (deposit computed per row, status `LIVE` / `SCHEDULED` by start time), then saved-search matching runs best-effort per auction. Response 201 `{ items: AuctionCard[] }` (no reserve, unlike the single create).
+
+## Sold archive
+
+`sold=true` on `GET /auctions` lists lots that are effectively ENDED with a `winnerId` (sorted by `recentlySold` when asked: `endedAt` desc, nulls last). Cards carry `sold` and `endedAt`. `GET /auctions/:id/similar-sold` and `GET /categories/:slug/stats` (`categories.md`) give the price context shown on a lot page. Sold lots are never cancelled / deleted rows.
+
 Rate limit: `auctionWriteLimiter` (10 / min per member) on create, patch, republish.
 
 ## Uploads hardening
 
-`presignPut(key, type, size)` signs `ContentType` and `ContentLength` into the URL, so S3 rejects a PUT whose body size or type differs from what was declared to `POST /uploads/presign` (cap stays 5 MB).
+`presignPut(key, type, size)` signs `ContentType` and `ContentLength` into the URL, so S3 rejects a PUT whose body size or type differs from what was declared to `POST /uploads/presign`. Images (`auctions`, `avatars`) stay at 5 MB (jpeg / png / webp). Videos are accepted only for the folder `auction-videos`: `video/mp4` (`.mp4`) and `video/webm` (`.webm`), up to 50 MB, with a 10 minute PUT URL; a type that does not match the folder (a video in `auctions`, an image in `auction-videos`) is a 400 `VALIDATION_ERROR`.
 
 ## Demo data
 

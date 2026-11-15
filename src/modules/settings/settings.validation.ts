@@ -1,7 +1,7 @@
 import Joi from 'joi';
 import { HARD_MAX_PRICE_PAISE, MIN_MAX_PRICE_PAISE } from '@/core/money';
 
-// PUT /admin/settings — the whole object is replaced (maxPricePaise, checkoutMode and the deposit settings optional: absent keeps the stored value).
+// PUT /admin/settings — `categories` is deprecated and ignored (see /admin/categories); the whole object is replaced (maxPricePaise, checkoutMode and the deposit settings optional: absent keeps the stored value).
 export const platformSettingsSchema = Joi.object({
   commissionRateBps: Joi.number().integer().min(0).max(3000).required(),
   minIncrementPaise: Joi.number().integer().min(100).max(HARD_MAX_PRICE_PAISE).required(),
@@ -15,7 +15,7 @@ export const platformSettingsSchema = Joi.object({
     .min(1)
     .max(30)
     .unique((a: string, b: string) => a.toLowerCase() === b.toLowerCase())
-    .required(),
+    .optional(),
 });
 
 export const legalSlugParamSchema = (slugs: readonly string[]) =>

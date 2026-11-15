@@ -177,10 +177,8 @@ describe('websocket tickets', () => {
 
 describe('public reads', () => {
   it('GET /settings/public -> platform settings with defaults and parsed categories', async () => {
-    prismaMock.appSetting.findMany.mockResolvedValue([
-      { key: 'commission.rateBps', value: '750' },
-      { key: 'auction.categories', value: JSON.stringify(['Art', 'Cars']) },
-    ]);
+    prismaMock.appSetting.findMany.mockResolvedValue([{ key: 'commission.rateBps', value: '750' }]);
+    prismaMock.category.findMany.mockResolvedValue([{ name: 'Cars' }, { name: 'Art' }]);
     const res = await request(await getApp()).get('/settings/public');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
@@ -199,6 +197,7 @@ describe('public reads', () => {
   });
 
   it('GET /settings/public ignores out-of-range stored values (falls back to defaults)', async () => {
+    prismaMock.category.findMany.mockResolvedValue([]);
     prismaMock.appSetting.findMany.mockResolvedValue([{ key: 'commission.rateBps', value: '99999' }]);
     const res = await request(await getApp()).get('/settings/public');
     expect(res.body.data.commissionRateBps).toBe(500);
@@ -316,12 +315,12 @@ describe('admin dashboard', () => {
       { key: 'auction.minIncrementPaise', value: '20000' },
       { key: 'auction.antiSnipingMinutes', value: '3' },
       { key: 'auction.maxPricePaise', value: '5000000000' },
-      { key: 'auction.categories', value: '["Art"]' },
       { key: 'checkout.mode', value: 'required' },
       { key: 'auction.depositThresholdPaise', value: '5000000' },
       { key: 'auction.depositRateBps', value: '1500' },
     ]);
     prismaMock.appSetting.upsert.mockResolvedValue({});
+    prismaMock.category.findMany.mockResolvedValue([{ name: 'Art' }]);
     const app = await getApp();
     const auth = await bearer('SUPER_ADMIN', 'admin1');
     const get = await request(app).get('/admin/settings').set('Authorization', auth);

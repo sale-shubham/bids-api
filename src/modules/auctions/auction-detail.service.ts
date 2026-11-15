@@ -3,6 +3,7 @@ import { toPaise, toPaiseOrNull } from '@/core/money';
 import { effectiveStatus, toDetail, type AuctionContact, type AuctionRow } from './auctions.serializer';
 import { provisionalWinnerId, toBidDTO } from './bidding.rules';
 import { viewerDeposit } from '@/modules/deposits/deposits.service';
+import { categoryContext } from '@/modules/categories/categories.service';
 import { isReviewWindowOpen, reviewInclude, toReviewDTO } from '@/modules/reviews/reviews.rules';
 
 const RECENT_BIDS = 5;
@@ -23,7 +24,7 @@ export async function buildAuctionDetail(
   db: Db = prisma,
   viewerRole: string | null = null,
 ) {
-  const [bids, mine, myMax, contact, watcherCount, watching, reviewRow, saleRow, deposit] = await Promise.all([
+  const [bids, mine, myMax, contact, watcherCount, watching, reviewRow, saleRow, deposit, catCtx] = await Promise.all([
     db.bid.findMany({
       where: { auctionId: row.id },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -55,11 +56,12 @@ export async function buildAuctionDetail(
       select: { id: true, status: true, payBy: true, buyerId: true, sellerId: true, deliveredAt: true, releasedAt: true },
     }),
     viewerId ? viewerDeposit(row, viewerId, now, db) : Promise.resolve(null),
+    categoryContext(row.categoryId),
   ]);
   const seesSale = !!viewerId && !!saleRow && (viewerId === saleRow.buyerId || viewerId === saleRow.sellerId || viewerRole === 'SUPER_ADMIN');
   const seesReserve = !!viewerId && (viewerId === row.sellerId || viewerRole === 'SUPER_ADMIN');
   return {
-    ...toDetail(row, now),
+    ...toDetail(row, now, catCtx),
     ...(seesReserve ? { reservePricePaise: toPaiseOrNull(row.reservePricePaise) } : {}),
     myMaxBidPaise: toPaiseOrNull(myMax?.maxAmountPaise),
     recentBids: bids.map((b) => toBidDTO(b, viewerId)),

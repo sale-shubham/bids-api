@@ -2,13 +2,14 @@ import { Router } from 'express';
 import { asyncHandler } from '@/core/middleware/asyncHandler';
 import { authenticate, optionalAuthenticate, requireActiveMember, requireRole } from '@/core/middleware/auth';
 import { validate } from '@/core/middleware/validate';
-import { auctionWriteLimiter } from '@/core/middleware/rateLimit';
+import { auctionWriteLimiter, bulkLimiter } from '@/core/middleware/rateLimit';
 import { auctionBidsRouter, auctionBuyNowRouter } from '@/modules/bids/bids.routes';
 import { auctionReviewRouter } from '@/modules/reviews/reviews.routes';
 import { auctionQuestionsRouter } from '@/modules/questions/questions.routes';
 import { auctionDepositRouter } from '@/modules/deposits/deposits.routes';
 import * as ctrl from './auctions.controller';
 import {
+  bulkCreateSchema,
   createAuctionSchema,
   listQuerySchema,
   mineQuerySchema,
@@ -27,11 +28,14 @@ router.get('/sitemap', asyncHandler(ctrl.sitemap));
 router.get('/mine', ...seller, validate(mineQuerySchema, 'query'), asyncHandler(ctrl.mine));
 router.post('/', ...seller, auctionWriteLimiter, validate(createAuctionSchema), asyncHandler(ctrl.create));
 
+router.post('/bulk', ...seller, bulkLimiter, validate(bulkCreateSchema), asyncHandler(ctrl.bulkCreate));
+
 router.use('/:id/bids', auctionBidsRouter);
 router.use('/:id/buy-now', auctionBuyNowRouter);
 router.use('/:id/review', auctionReviewRouter);
 router.use('/:id/questions', auctionQuestionsRouter);
 router.use('/:id/deposit', auctionDepositRouter);
+router.get('/:id/similar-sold', asyncHandler(ctrl.similarSold));
 router.get('/:id', optionalAuthenticate, asyncHandler(ctrl.detail));
 router.patch('/:id', ...seller, auctionWriteLimiter, validate(updateAuctionSchema), asyncHandler(ctrl.update));
 router.delete('/:id', ...seller, asyncHandler(ctrl.remove));

@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { env } from '@/core/config/env';
 import { ServiceUnavailable } from '@/core/errors/AppError';
-import { IMAGE_TYPES } from './uploads.validation';
+import { UPLOAD_EXTENSIONS, VIDEO_FOLDER } from './uploads.validation';
 
 // POST /uploads/presign — mints a short-lived PUT URL; the browser uploads the
 // bytes straight to S3 (Content-Type must equal `contentType` and the body exactly `size` bytes; both are signed). The object key
@@ -14,10 +14,10 @@ export async function presign(req: Request, res: Response) {
   const { storage } = await import('@/providers/storage');
   const { folder, contentType, size } = req.body as { folder: string; contentType: string; size: number };
 
-  const key = storage.keyFor(folder, IMAGE_TYPES[contentType]);
+  const key = storage.keyFor(folder, UPLOAD_EXTENSIONS[contentType]);
   let uploadUrl: string;
   try {
-    uploadUrl = await storage.presignPut(key, contentType, size);
+    uploadUrl = await folder === VIDEO_FOLDER ? await storage.presignPut(key, contentType, size, 600) : await storage.presignPut(key, contentType, size);
   } catch {
     throw ServiceUnavailable('Could not prepare the upload. Please try again.');
   }

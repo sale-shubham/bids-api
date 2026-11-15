@@ -47,7 +47,11 @@ enum AuctionStatus {
 
 enum ItemCondition {
   NEW
+  LIKE_NEW
+  GOOD
+  FAIR
   USED
+  FOR_PARTS
 }
 
 enum CommissionStatus {
@@ -187,9 +191,17 @@ model Auction {
   id                String        @id @default(cuid())
   title             String
   description       String // rich text, sanitised before save
-  category          String
+  category          String // denormalised Category.name, always written together with categoryId
+  categoryRef       Category?     @relation("AuctionCategory", fields: [categoryId], references: [id])
+  categoryId        String?
+  attributes        Json? // validated against Category.attributeSchema; GIN index in migration SQL only
   condition         ItemCondition
+  conditionReport   String? // rich text (sanitised), max 5000 chars
+  estimateLowPaise  BigInt?
+  estimateHighPaise BigInt?
   images            String[] // CloudFront URLs, first = cover
+  videoUrl          String? // uploaded auction-videos object
+  shippingOptions   Json? // { pickup, pickupCity?, courier, shippingFeePaise?, shipsWithinDays? }
   startingBidPaise  BigInt
   minIncrementPaise BigInt
   currentBidPaise   BigInt        @default(0)
@@ -226,6 +238,27 @@ model Auction {
   @@index([status, startTime])
   @@index([sellerId])
   @@index([category, status])
+  @@index([categoryId])
+}
+
+// Category tree (self relation). Replaces the AppSetting `auction.categories` list (decision D13).
+model Category {
+  id              String     @id @default(cuid())
+  slug            String     @unique
+  name            String
+  parent          Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  parentId        String?
+  children        Category[] @relation("CategoryTree")
+  sortOrder       Int        @default(0)
+  isActive        Boolean    @default(true)
+  description     String?
+  attributeSchema Json       @default("[]") // AttributeDef[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  auctions Auction[] @relation("AuctionCategory")
+
+  @@index([parentId])
 }
 
 model Bid {
@@ -514,6 +547,7 @@ model Sale {
   sellerId         String
   itemPaise        BigInt
   shippingFeePaise BigInt     @default(0)
+  deliveryChoice   String? // 'COURIER' | 'PICKUP', set at checkout
   amountPaise      BigInt
   commissionPaise  BigInt
   rateBps          Int

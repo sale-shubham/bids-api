@@ -11,7 +11,7 @@ Code: `src/modules/saved-searches/saved-searches.{routes,controller,service,vali
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/saved-searches` | `{ items }`, newest first |
-| POST | `/saved-searches` | `{ name? <= 60, q? <= 100, category?, condition? NEW\|USED, minPricePaise?, maxPricePaise? }` -> 201 `{ savedSearch }`. At least one of q / category / condition / min / max; `min <= max`; prices integers 0..`HARD_MAX_PRICE_PAISE`. Max 10 per member, else 409 `SAVED_SEARCH_LIMIT` |
+| POST | `/saved-searches` | `{ name? <= 60, q? <= 100, category? (a category slug or name, stored under its canonical name when it resolves), condition? NEW\|LIKE_NEW\|GOOD\|FAIR\|USED\|FOR_PARTS, minPricePaise?, maxPricePaise? }` -> 201 `{ savedSearch }`. At least one of q / category / condition / min / max; `min <= max`; prices integers 0..`HARD_MAX_PRICE_PAISE`. Max 10 per member, else 409 `SAVED_SEARCH_LIMIT` |
 | DELETE | `/saved-searches/:id` | own only, else 404 `NOT_FOUND` -> `{ id }` |
 
 DTO `{ id, name, q, category, condition, minPricePaise, maxPricePaise (number|null), createdAt }`.
@@ -20,9 +20,9 @@ DTO `{ id, name, q, category, condition, minPricePaise, maxPricePaise (number|nu
 
 Meaning follows the browse filters (`auctions.query.ts`): `q` = title contains (case-insensitive), price compares against the **starting bid** of a new listing.
 
-`onAuctionPublished({ id, title, category, condition, startingBidPaise, sellerId })`:
+`onAuctionPublished({ id, title, category, categoryId?, condition, startingBidPaise, sellerId })`:
 
-1. One query for candidate searches: category null or equal, condition null or equal, min null or `<=` price, max null or `>=` price, `memberId != seller`, member active.
+1. One query for candidate searches: category null or one of the names / slugs of the auction's category and **all its ancestors** (so a search for a parent category matches its descendants; `categoryTerms` walks `parentId` from `categoryId`), condition null or equal, min null or `<=` price, max null or `>=` price, `memberId != seller`, member active.
 2. In JS keep searches whose `q` is empty or whose every whitespace-separated word appears in the title (case-insensitive).
 3. One `saved-search-match` notification per member (the oldest matching search names it), dedupe `ssm:<auctionId>:<memberId>`, url `/auctions/<id>`, `data { searchName }`, at most 500 members per auction.
 

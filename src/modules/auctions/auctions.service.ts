@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/core/prisma/client';
 import { AppError } from '@/core/errors/AppError';
 import { logger } from '@/core/logger/logger';
@@ -5,6 +6,15 @@ import { offsetArgs, pageMeta } from '@/core/http/pagination';
 import { buildAuctionDetail } from './auction-detail.service';
 import { resetEndingSoon } from '@/modules/watchlist/watchlist.service';
 import { getSetting } from '@/modules/settings/settings.service';
+import {
+  categoriesWithCounts as categoryCounts,
+  categoryContext,
+  resolveActiveCategory,
+  resolveBrowseCategoryIds,
+  SOLD_WINDOW_DAYS,
+} from '@/modules/categories/categories.service';
+import { validateAttributes, type AttributeDef } from '@/modules/categories/categories.rules';
+import { assertEstimate, assertShipping, CONDITION_REPORT_MAX } from './listing.rules';
 import { getCheckoutMode } from '@/modules/settings/checkout-mode';
 import { assertWithinMaxPrice, getMaxPricePaise } from '@/modules/settings/max-price';
 import { toPaise, toPaiseOrNull } from '@/core/money';
@@ -13,6 +23,7 @@ import { auctionInclude, effectiveStatus, toCard, toDetail, type AuctionRow } fr
 import { effectivePrice, listWhere, orderFor, statusWhere } from './auctions.query';
 import {
   checkTimeWindow,
+  createAuctionSchema,
   sanitizeDescription,
   type CreateAuctionInput,
   type ListQuery,
@@ -22,6 +33,7 @@ import {
 
 const DEFAULT_MIN_INCREMENT_PAISE = 10_000;
 const HOME_LIMIT = 8;
+const SIMILAR_LIMIT = 6;
 
 type Actor = { sub: string; role: 'BIDDER' | 'AUCTIONEER' | 'SUPER_ADMIN' };
 
@@ -58,7 +70,8 @@ async function fetchCards(where: object, orderBy: object[], skip?: number, take?
 }
 
 export async function listAuctions(q: ListQuery, now = new Date()) {
-  const where = listWhere(q, now);
+  const categoryIds = q.category ? ((await resolveBrowseCategoryIds(q.category)) ?? undefined) : undefined;
+  const where = listWhere(q, now, categoryIds);
   const paging = { page: q.page, pageSize: q.pageSize };
 
   if (q.sort === 'priceAsc' || q.sort === 'priceDesc') {
@@ -91,7 +104,7 @@ export async function listAuctions(q: ListQuery, now = new Date()) {
 
   const { skip, take } = offsetArgs(paging);
   const [rows, total] = await Promise.all([
-    fetchCards(where, orderFor(q.status, q.sort), skip, take),
+    fetchCards(where, orderFor(q.sold ? 'ended' : q.status, q.sort), skip, take),
     prisma.auction.count({ where }),
   ]);
   return { items: rows.map((r) => toCard(r, now)), meta: pageMeta(total, paging) };
@@ -110,25 +123,7 @@ export async function homeFeed(now = new Date()) {
   };
 }
 
-export async function getCategoryNames(): Promise<string[]> {
-  const raw = await getSetting('auction.categories');
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-export async function categoriesWithCounts(now = new Date()) {
-  const [names, groups] = await Promise.all([
-    getCategoryNames(),
-    prisma.auction.groupBy({ by: ['category'], where: statusWhere('live', now), _count: { _all: true } }),
-  ]);
-  const counts = new Map(groups.map((g) => [g.category, g._count._all]));
-  return names.map((name) => ({ name, liveCount: counts.get(name) ?? 0 }));
-}
+export const categoriesWithCounts = categoryCounts;
 
 export async function getAuction(id: string, viewer: Actor | undefined, now = new Date()) {
   const row = (await prisma.auction.findUnique({ where: { id }, include: auctionInclude })) as AuctionRow | null;
@@ -158,6 +153,23 @@ export async function sitemapItems(now = new Date()) {
   return { items: rows.map((r) => ({ id: r.id, updatedAt: r.updatedAt.toISOString() })) };
 }
 
+/** Up to 6 sold lots of the same category that ended in the last 90 days, newest first. */
+export async function similarSold(id: string, now = new Date()) {
+  const a = await prisma.auction.findUnique({ where: { id }, select: { id: true, categoryId: true, status: true, deletedAt: true } });
+  if (!a || a.deletedAt || a.status === 'CANCELLED') throw auctionNotFound();
+  if (!a.categoryId) return { items: [] };
+  const since = new Date(now.getTime() - SOLD_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const rows = await fetchCards(
+    {
+      AND: [statusWhere('ended', now), { winnerId: { not: null } }, { categoryId: a.categoryId }, { id: { not: id } }, { endedAt: { gte: since } }],
+    },
+    [{ endedAt: 'desc' }, { id: 'asc' }],
+    0,
+    SIMILAR_LIMIT,
+  );
+  return { items: rows.map((r) => toCard(r, now)) };
+}
+
 export async function listMine(sellerId: string, q: MineQuery, now = new Date()) {
   const where = { AND: [{ sellerId }, statusWhere(q.status, now)] };
   const { skip, take } = offsetArgs(q);
@@ -178,6 +190,7 @@ async function notifySavedSearches(row: AuctionRow) {
       id: row.id,
       title: row.title,
       category: row.category,
+      categoryId: row.categoryId,
       condition: row.condition,
       startingBidPaise: toPaise(row.startingBidPaise),
       sellerId: row.sellerId,
@@ -187,18 +200,30 @@ async function notifySavedSearches(row: AuctionRow) {
   }
 }
 
-async function assertCategory(category: string) {
-  const names = await getCategoryNames();
-  if (!names.includes(category)) throw invalid('category must be one of the configured categories');
-}
-
 function cleanDescription(html: string) {
   const clean = sanitizeDescription(html);
   if (clean.length < 20) throw invalid('description must contain at least 20 characters of allowed content');
   return clean;
 }
 
-export async function createAuction(memberId: string, input: CreateAuctionInput, now = new Date()) {
+/** Sanitised condition report (null when empty); at most 5,000 characters after sanitising. */
+function cleanReport(html: string | null | undefined): string | null {
+  if (!html) return null;
+  const clean = sanitizeDescription(html);
+  if (clean.length > CONDITION_REPORT_MAX) throw invalid(`conditionReport must be at most ${CONDITION_REPORT_MAX} characters`);
+  return clean || null;
+}
+
+/** validateAttributes against the category schema; an empty result is stored as null. */
+function checkedAttributes(schema: AttributeDef[], input: unknown): Record<string, string | number> | null {
+  const r = validateAttributes(schema, input ?? {});
+  if (!r.ok) throw new AppError(400, 'INVALID_ATTRIBUTES', 'Some attributes are invalid', { fields: r.fields });
+  return Object.keys(r.value).length ? r.value : null;
+}
+
+const jsonOrNull = (v: object | null) => (v === null ? Prisma.DbNull : (v as Prisma.InputJsonValue));
+
+async function assertCanList(memberId: string) {
   const member = await prisma.member.findUnique({ where: { id: memberId }, select: { unpaidCommissionPaise: true } });
   if (!member) throw new AppError(401, 'UNAUTHORIZED', 'Unauthorized');
   if (toPaise(member.unpaidCommissionPaise) > 0) {
@@ -208,41 +233,107 @@ export async function createAuction(memberId: string, input: CreateAuctionInput,
     const payout = await prisma.sellerPayoutAccount.findUnique({ where: { sellerId: memberId }, select: { status: true } });
     if (payout?.status !== 'ACTIVE') throw new AppError(403, 'PAYOUT_ACCOUNT_REQUIRED', 'Set up payouts before listing');
   }
-  await assertCategory(input.category);
+}
+
+type CreateCtx = { maxPaise: number; defaultIncrement: number };
+
+async function createContext(): Promise<CreateCtx> {
+  const setting = Number.parseInt((await getSetting('auction.minIncrementPaise')) ?? '', 10);
+  return {
+    maxPaise: await getMaxPricePaise(),
+    defaultIncrement: Number.isFinite(setting) && setting >= 100 ? setting : DEFAULT_MIN_INCREMENT_PAISE,
+  };
+}
+
+/** Every create rule (category, attributes, prices, ceiling, times, estimate, report, shipping) -> the row data; throws AppError. */
+async function prepareCreate(input: CreateAuctionInput, ctx: CreateCtx, now: Date) {
+  const category = await resolveActiveCategory(input);
+  const attributes = checkedAttributes(category.schema, input.attributes);
   const timeError = checkTimeWindow(input.startTime, input.endTime, now);
   if (timeError) throw invalid(timeError);
-  const maxPaise = await getMaxPricePaise();
-  assertWithinMaxPrice(maxPaise, input.startingBidPaise, input.minIncrementPaise);
+  assertWithinMaxPrice(ctx.maxPaise, input.startingBidPaise, input.minIncrementPaise);
 
-  let minIncrementPaise = input.minIncrementPaise;
-  if (minIncrementPaise === undefined) {
-    const setting = Number.parseInt((await getSetting('auction.minIncrementPaise')) ?? '', 10);
-    minIncrementPaise = Number.isFinite(setting) && setting >= 100 ? setting : DEFAULT_MIN_INCREMENT_PAISE;
-  }
-  assertWithinMaxPrice(maxPaise, minIncrementPaise, input.reservePricePaise ?? undefined, input.buyNowPricePaise ?? undefined);
+  const minIncrementPaise = input.minIncrementPaise ?? ctx.defaultIncrement;
+  assertWithinMaxPrice(ctx.maxPaise, minIncrementPaise, input.reservePricePaise ?? undefined, input.buyNowPricePaise ?? undefined);
   assertReserveBuyNow(input.startingBidPaise, input.reservePricePaise, input.buyNowPricePaise);
+  assertEstimate(input.estimateLowPaise, input.estimateHighPaise, ctx.maxPaise);
 
-  const row = await prisma.auction.create({
-    data: {
-      title: input.title,
-      description: cleanDescription(input.description),
-      category: input.category,
-      condition: input.condition,
-      images: input.images,
-      startingBidPaise: input.startingBidPaise,
-      minIncrementPaise,
-      reservePricePaise: input.reservePricePaise ?? null,
-      buyNowPricePaise: input.buyNowPricePaise ?? null,
-      depositPaise: await depositForStartingBid(input.startingBidPaise),
-      startTime: input.startTime,
-      endTime: input.endTime,
-      status: input.startTime.getTime() <= now.getTime() ? 'LIVE' : 'SCHEDULED',
-      sellerId: memberId,
-    },
-    include: auctionInclude,
+  return {
+    title: input.title,
+    description: cleanDescription(input.description),
+    category: category.name,
+    categoryId: category.id,
+    attributes: jsonOrNull(attributes),
+    condition: input.condition,
+    conditionReport: cleanReport(input.conditionReport),
+    estimateLowPaise: input.estimateLowPaise ?? null,
+    estimateHighPaise: input.estimateHighPaise ?? null,
+    images: input.images,
+    videoUrl: input.videoUrl ?? null,
+    shippingOptions: jsonOrNull(input.shippingOptions ? assertShipping(input.shippingOptions) : null),
+    startingBidPaise: input.startingBidPaise,
+    minIncrementPaise,
+    reservePricePaise: input.reservePricePaise ?? null,
+    buyNowPricePaise: input.buyNowPricePaise ?? null,
+    depositPaise: await depositForStartingBid(input.startingBidPaise),
+    startTime: input.startTime,
+    endTime: input.endTime,
+    status: input.startTime.getTime() <= now.getTime() ? ('LIVE' as const) : ('SCHEDULED' as const),
+  };
+}
+
+export async function createAuction(memberId: string, input: CreateAuctionInput, now = new Date()) {
+  await assertCanList(memberId);
+  const data = await prepareCreate(input, await createContext(), now);
+  const row = (await prisma.auction.create({ data: { ...data, sellerId: memberId }, include: auctionInclude })) as AuctionRow;
+  await notifySavedSearches(row);
+  return withReserve(row, toDetail(row, now, await categoryContext(row.categoryId)));
+}
+
+type RowError = { field: string; message: string };
+
+const CODE_FIELD: Record<string, string> = {
+  INVALID_CATEGORY: 'categoryId',
+  PRICE_TOO_HIGH: 'startingBidPaise',
+  INVALID_RESERVE: 'reservePricePaise',
+  INVALID_BUY_NOW: 'buyNowPricePaise',
+};
+
+function rowErrors(err: AppError): RowError[] {
+  const d = err.details as { fields?: RowError[] } | RowError[] | undefined;
+  if (Array.isArray(d) && d.length) return d;
+  if (d && !Array.isArray(d) && Array.isArray(d.fields) && d.fields.length) return d.fields;
+  return [{ field: CODE_FIELD[err.code] ?? '', message: err.message }];
+}
+
+/** All-or-nothing bulk create: every row is validated first (Joi + service rules); any failure -> 400 BULK_INVALID with per-row errors and nothing is written. */
+export async function createAuctionsBulk(memberId: string, items: unknown[], now = new Date()) {
+  await assertCanList(memberId);
+  const ctx = await createContext();
+  const failed: { index: number; errors: RowError[] }[] = [];
+  const prepared: Awaited<ReturnType<typeof prepareCreate>>[] = [];
+  for (const [index, raw] of items.entries()) {
+    const { error, value } = createAuctionSchema.validate(raw, { abortEarly: false, convert: true, stripUnknown: true });
+    if (error) {
+      failed.push({ index, errors: error.details.map((d) => ({ field: d.path.join('.'), message: d.message.replace(/['"]/g, '') })) });
+      continue;
+    }
+    try {
+      prepared.push(await prepareCreate(value as CreateAuctionInput, ctx, now));
+    } catch (err) {
+      if (!(err instanceof AppError)) throw err;
+      failed.push({ index, errors: rowErrors(err) });
+    }
+  }
+  if (failed.length) throw new AppError(400, 'BULK_INVALID', `${failed.length} of ${items.length} items are invalid`, { rows: failed });
+
+  const rows = await prisma.$transaction(async (tx) => {
+    const out: AuctionRow[] = [];
+    for (const data of prepared) out.push((await tx.auction.create({ data: { ...data, sellerId: memberId }, include: auctionInclude })) as AuctionRow);
+    return out;
   });
-  await notifySavedSearches(row as AuctionRow);
-  return withReserve(row as AuctionRow, toDetail(row as AuctionRow, now));
+  for (const row of rows) await notifySavedSearches(row);
+  return { items: rows.map((r) => toCard(r, now)) };
 }
 
 // Non-owners get 404 (never reveal that the auction exists).
@@ -257,7 +348,27 @@ export async function updateAuction(id: string, actor: Actor, input: UpdateAucti
   if (existing.bidCount > 0) throw hasBids();
   if (['ENDED', 'CANCELLED'].includes(effectiveStatus(existing, now))) throw ended();
 
-  if (input.category !== undefined) await assertCategory(input.category);
+  const data: Record<string, unknown> = {};
+  const categoryChanged = input.categoryId !== undefined || input.category !== undefined;
+  const newCategory = categoryChanged ? await resolveActiveCategory(input) : null;
+  if (newCategory) {
+    data.categoryId = newCategory.id;
+    data.category = newCategory.name;
+  }
+  if (newCategory || input.attributes !== undefined) {
+    const schema = newCategory ? newCategory.schema : (await categoryContext(existing.categoryId)).schema;
+    const attrs = input.attributes !== undefined ? input.attributes : existing.attributes;
+    data.attributes = jsonOrNull(checkedAttributes(schema, attrs));
+  }
+  if (input.estimateLowPaise !== undefined || input.estimateHighPaise !== undefined) {
+    const low = input.estimateLowPaise !== undefined ? input.estimateLowPaise : toPaiseOrNull(existing.estimateLowPaise);
+    const high = input.estimateHighPaise !== undefined ? input.estimateHighPaise : toPaiseOrNull(existing.estimateHighPaise);
+    assertEstimate(low, high, await getMaxPricePaise());
+    data.estimateLowPaise = low;
+    data.estimateHighPaise = high;
+  }
+  if (input.conditionReport !== undefined) data.conditionReport = cleanReport(input.conditionReport);
+  if (input.shippingOptions !== undefined) data.shippingOptions = jsonOrNull(input.shippingOptions ? assertShipping(input.shippingOptions) : null);
   if (input.startingBidPaise !== undefined || input.minIncrementPaise !== undefined) {
     assertWithinMaxPrice(await getMaxPricePaise(), input.startingBidPaise, input.minIncrementPaise);
   }
@@ -279,8 +390,7 @@ export async function updateAuction(id: string, actor: Actor, input: UpdateAucti
     if (timeError) throw invalid(timeError);
   }
 
-  const data: Record<string, unknown> = {};
-  for (const k of ['title', 'category', 'condition', 'images', 'startingBidPaise', 'minIncrementPaise', 'reservePricePaise', 'buyNowPricePaise'] as const) {
+  for (const k of ['title', 'condition', 'images', 'videoUrl', 'startingBidPaise', 'minIncrementPaise', 'reservePricePaise', 'buyNowPricePaise'] as const) {
     if (input[k] !== undefined) data[k] = input[k];
   }
   if (input.description !== undefined) data.description = cleanDescription(input.description);
@@ -297,7 +407,7 @@ export async function updateAuction(id: string, actor: Actor, input: UpdateAucti
   if (count === 0) throw hasBids();
   if (timesChanged) await resetEndingSoon(id);
   const row = (await prisma.auction.findUnique({ where: { id }, include: auctionInclude })) as AuctionRow;
-  return withReserve(row, toDetail(row, now));
+  return withReserve(row, toDetail(row, now, await categoryContext(row.categoryId)));
 }
 
 export async function deleteAuction(id: string, actor: Actor, now = new Date()) {
@@ -351,5 +461,5 @@ export async function republishAuction(
   await resetEndingSoon(id);
   const row = (await prisma.auction.findUnique({ where: { id }, include: auctionInclude })) as AuctionRow;
   await notifySavedSearches(row);
-  return withReserve(row, toDetail(row, now));
+  return withReserve(row, toDetail(row, now, await categoryContext(row.categoryId)));
 }

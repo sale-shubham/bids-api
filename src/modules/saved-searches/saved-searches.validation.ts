@@ -1,5 +1,6 @@
 import Joi from 'joi';
 import { HARD_MAX_PRICE_PAISE } from '@/core/money';
+import { CONDITIONS, type Condition } from '@/modules/auctions/listing.rules';
 
 const price = Joi.number().integer().min(0).max(HARD_MAX_PRICE_PAISE);
 
@@ -7,7 +8,7 @@ export const createSavedSearchSchema = Joi.object({
   name: Joi.string().trim().max(60).allow('').optional(),
   q: Joi.string().trim().max(100).allow('').optional(),
   category: Joi.string().trim().max(100).allow('').optional(),
-  condition: Joi.string().valid('NEW', 'USED').optional(),
+  condition: Joi.string().valid(...CONDITIONS).optional(),
   minPricePaise: price.optional(),
   maxPricePaise: price.optional(),
 })
@@ -24,7 +25,7 @@ export type CreateSavedSearchInput = {
   name?: string;
   q?: string;
   category?: string;
-  condition?: 'NEW' | 'USED';
+  condition?: Condition;
   minPricePaise?: number;
   maxPricePaise?: number;
 };

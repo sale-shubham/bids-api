@@ -15,7 +15,7 @@ Coverage is report-only: `vitest.config.ts` sets no thresholds, so it never fail
 
 ## Layout
 
-- `src/**/*.test.ts` next to the code: unit / service tests (mocked prisma, pure rules such as `bidding.rules.test.ts`, feature suites `reviews/reviews.test.ts`, `questions/questions.test.ts`, `saved-searches/saved-searches.test.ts`, middleware in isolation, e.g. `auth.test.ts`, `errorHandler.test.ts`, `rateLimit.test.ts`).
+- `src/**/*.test.ts` next to the code: unit / service tests (mocked prisma, pure rules such as `bidding.rules.test.ts`, feature suites `categories/categories.test.ts`, `auctions/listing.test.ts` (estimates, shipping, report, attributes, filters, bulk, sold archive), `sales/checkout-delivery.test.ts`, `reviews/reviews.test.ts`, `questions/questions.test.ts`, `saved-searches/saved-searches.test.ts`, middleware in isolation, e.g. `auth.test.ts`, `errorHandler.test.ts`, `rateLimit.test.ts`).
 - `scripts/**/*.test.ts`: tests for the repo scripts (`github-env-sync.test.ts`). Both globs are the `include` list in `vitest.config.ts`.
 - `src/__tests__/http/*.http.test.ts`: black-box HTTP tests through the real Express app (routing, middleware order, guards, Joi schemas, controllers, error envelope, CORS, cookies).
   - `harness.ts` - shared setup (see below).
@@ -23,6 +23,7 @@ Coverage is report-only: `vitest.config.ts` sets no thresholds, so it never fail
   - `validation.http.test.ts` - representative 400 `VALIDATION_ERROR`s per module (password rule, bid amount, auction time window and images, pagination bounds, admin settings / device-limit / legal-page / member-update / retention ranges, contact, leaderboard, commissions, members, uploads, push).
   - `auth.http.test.ts` - signup -> verify -> login, cookie flags (httpOnly, SameSite, host-only, Secure/Domain variants), refresh and logout cookies.
   - `bidding.http.test.ts` - `POST /auctions/:id/bids` (max bids, `amountPaise` alias, proxy rows and events, `outbidByProxy`) 201 shape and every mapped error code, `POST /auctions/:id/buy-now`, reserve / buy-now create rules, anti-sniping, `GET /auctions` envelope (`meta`, `serverTime`), `GET /auctions/:id` 404.
+  - `listing.http.test.ts` - public `/categories` tree + stats, legacy `/auctions/categories`, `similar-sold`, admin categories (201 / 409 / cycle / in use), `POST /auctions/bulk` (`BULK_INVALID` envelope, 201), checkout `DELIVERY_CHOICE_REQUIRED`.
   - `endpoints.http.test.ts` - Razorpay webhook (real HMAC over the raw body), commissions, ws tickets, public settings / legal / leaderboard / contact, watchlist, admin dashboard and settings.
   - `trust.http.test.ts` - 2FA login challenge (no cookies), `/auth/2fa/verify` (code window, recovery code once, bad / expired token), setup / enable / disable / regenerate, missing `TOTP_ENC_KEY` -> 503, `REQUIRE_ADMIN_2FA` on / off, phone OTP send / verify, `POST /reports` rules.
   - `modules.http.test.ts` - uploads, push, members, notifications, admin lists / retention.

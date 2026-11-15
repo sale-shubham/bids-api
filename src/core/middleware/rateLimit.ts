@@ -106,6 +106,18 @@ export const auctionWriteLimiter = rateLimit({
   message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many requests, try later' } },
 });
 
+// Bulk auction create: 5 batches per hour per member (authenticated, so keyed by member id).
+export const bulkLimiter = rateLimit({
+  store: new PgRateLimitStore('rl:bulk:'),
+  passOnStoreError: true,
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.sub ?? ipKeyGenerator(req.ip ?? 'unknown'),
+  message: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many bulk uploads, try again later' } },
+});
+
 // Bidding (money-adjacent, authenticated). Two stacked caps, both keyed by the
 // member and shared across Lambda containers via the Pg store: ~10 bids per
 // 10 s per member per auction (stops a script hammering one auction), and 60

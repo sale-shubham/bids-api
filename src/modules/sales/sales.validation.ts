@@ -27,6 +27,9 @@ export const shipSchema = Joi.object({
   trackingNo: Joi.string().trim().max(60).allow(''),
 });
 
+// Optional body of POST /sales/:id/checkout.
+export const checkoutSchema = Joi.object({ delivery: Joi.string().valid('COURIER', 'PICKUP') });
+
 export const disputeSchema = Joi.object({
   reason: Joi.string().trim().min(10).max(1000).required(),
 });

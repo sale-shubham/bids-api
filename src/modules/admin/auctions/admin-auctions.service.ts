@@ -31,7 +31,7 @@ export async function listAuctions(q: { status?: Status; q?: string; page: numbe
     }),
     prisma.auction.count({ where }),
   ]);
-  const items = rows.map((r) => ({ ...toCard(r as unknown as AuctionRow, now), sellerEmail: r.seller.email }));
+  const items = rows.map((r) => ({ ...toCard(r as unknown as AuctionRow, now), sellerEmail: r.seller.email, depositPaise: toPaiseOrNull(r.depositPaise) }));
   return { items, meta: pageMeta(total, q) };
 }
 

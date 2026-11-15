@@ -46,6 +46,7 @@ All three use `path: '/'` (the web app's middleware needs `nb_rt` on every page 
 | `contactLimiter` | `POST /contact` | 5 / hour per IP (each message sends an email) | Postgres |
 | `twoFactorLimiter` | `POST /auth/2fa/verify` (after `authLimiter`) | 5 / 10 min per member id from the verified challenge token (IP fallback) | Postgres (`rl:2fa:`) |
 | `reportLimiter` | `POST /reports` | 20 / day per member (IP fallback) | Postgres (`rl:report:`) |
+| `bulkLimiter` | `POST /auctions/bulk` | 5 / hour per member (IP fallback) | Postgres (`rl:bulk:`) |
 | `qaLimiter` | `POST /auctions/:id/questions` | 10 / hour per member (IP fallback) | Postgres (`rl:qa:`) |
 | `apiLimiter` | `POST /ws/ticket`, `POST /push/subscribe`, `POST /push/unsubscribe` | 60 / 60 s, keyed by `req.user?.sub` (falls back to per-IP) | in-memory |
 | `auctionWriteLimiter` | `POST /auctions`, `PATCH /auctions/:id`, `POST /auctions/:id/republish` | 10 / 60 s per member (IP fallback) | in-memory |

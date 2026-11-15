@@ -25,7 +25,6 @@ const prisma = new PrismaClient({
 const DEMO_EMAIL = 'demo.seller@noblebid.local';
 const H = 3_600_000;
 const D = 24 * H;
-const FALLBACK_CATEGORIES = ['Electronics', 'Fashion', 'Home & Garden', 'Collectibles', 'Art', 'Vehicles'];
 
 type Phase = 'live' | 'upcoming' | 'ended';
 const ITEMS: { title: string; condition: 'NEW' | 'USED'; startingBidPaise: number; phase: Phase }[] = [
@@ -54,14 +53,8 @@ async function main() {
     console.log(`[seed-demo] ${DEMO_EMAIL} already exists - nothing to do`);
     return;
   }
-  const catRow = await prisma.appSetting.findUnique({ where: { key: 'auction.categories' } });
-  let categories = FALLBACK_CATEGORIES;
-  try {
-    const parsed: unknown = catRow ? JSON.parse(catRow.value) : null;
-    if (Array.isArray(parsed) && parsed.length) categories = parsed.filter((c): c is string => typeof c === 'string');
-  } catch {
-    /* keep fallback */
-  }
+  const roots = await prisma.category.findMany({ where: { parentId: null, isActive: true }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }], select: { id: true, name: true } });
+  if (roots.length === 0) throw new Error('No categories: run `npm run prisma:seed` first');
   const incRow = await prisma.appSetting.findUnique({ where: { key: 'auction.minIncrementPaise' } });
   const minIncrementPaise = Number.parseInt(incRow?.value ?? '', 10) || 10000;
 
@@ -85,7 +78,8 @@ async function main() {
       data: {
         title: item.title,
         description: `<p>${item.title}. Demo listing created for development and testing.</p><p>Condition: <strong>${item.condition === 'NEW' ? 'new' : 'pre-owned'}</strong>. Pickup or tracked shipping available.</p>`,
-        category: categories[i % categories.length],
+        category: roots[i % roots.length].name,
+        categoryId: roots[i % roots.length].id,
         condition: item.condition,
         images: [1, 2, 3].map((k) => `https://picsum.photos/seed/noblebid-${n}${k > 1 ? `-${k}` : ''}/800/600`),
         startingBidPaise: item.startingBidPaise,

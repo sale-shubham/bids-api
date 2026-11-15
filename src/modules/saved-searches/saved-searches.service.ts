@@ -1,6 +1,8 @@
 import { prisma } from '@/core/prisma/client';
 import { AppError, NotFound } from '@/core/errors/AppError';
 import { toPaiseOrNull } from '@/core/money';
+import type { Condition } from '@/modules/auctions/listing.rules';
+import { findCategoryByTerm } from '@/modules/categories/categories.service';
 import type { CreateSavedSearchInput } from './saved-searches.validation';
 
 export const MAX_SAVED_SEARCHES = 10;
@@ -10,7 +12,7 @@ type Row = {
   name: string | null;
   q: string | null;
   category: string | null;
-  condition: 'NEW' | 'USED' | null;
+  condition: Condition | null;
   minPricePaise: bigint | number | null;
   maxPricePaise: bigint | number | null;
   createdAt: Date;
@@ -38,12 +40,14 @@ export async function createSavedSearch(memberId: string, input: CreateSavedSear
   if ((await prisma.savedSearch.count({ where: { memberId } })) >= MAX_SAVED_SEARCHES) {
     throw new AppError(409, 'SAVED_SEARCH_LIMIT', `You can save at most ${MAX_SAVED_SEARCHES} searches`);
   }
+  // A category given as slug or name is stored as its canonical name; matching includes descendants (saved-search.matcher).
+  const category = input.category ? ((await findCategoryByTerm(input.category, false))?.name ?? input.category) : null;
   const row = await prisma.savedSearch.create({
     data: {
       memberId,
       name: input.name || null,
       q: input.q || null,
-      category: input.category || null,
+      category,
       condition: input.condition ?? null,
       minPricePaise: input.minPricePaise ?? null,
       maxPricePaise: input.maxPricePaise ?? null,

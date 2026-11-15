@@ -52,6 +52,18 @@ export async function create(req: Request, res: Response) {
   return ok(res, { auction }, 201);
 }
 
+export async function bulkCreate(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const svc = await import('./auctions.service');
+  return ok(res, await svc.createAuctionsBulk(req.user!.sub, (req.body as { items: unknown[] }).items), 201);
+}
+
+export async function similarSold(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const svc = await import('./auctions.service');
+  return ok(res, await svc.similarSold(param(req, 'id')));
+}
+
 export async function update(req: Request, res: Response) {
   const { ok } = await import('@/core/http/response');
   const svc = await import('./auctions.service');

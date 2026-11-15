@@ -1,5 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const ELECTRONICS = vi.hoisted(() => ({
+  id: 'cat1',
+  slug: 'electronics',
+  name: 'Electronics',
+  description: null,
+  parentId: null,
+  sortOrder: 0,
+  isActive: true,
+  attributeSchema: [] as unknown[],
+}));
 const db = vi.hoisted(() => ({
   auction: {
     findUnique: vi.fn(),
@@ -20,6 +30,11 @@ const db = vi.hoisted(() => ({
   strike: { count: vi.fn(async () => 0) },
   sellerPayoutAccount: { findUnique: vi.fn(async () => null as unknown) },
   savedSearch: { findMany: vi.fn(async () => []) },
+  category: {
+    findFirst: vi.fn(async ({ where }: { where: { OR: { slug?: string }[] } }) => (where.OR[0].slug === 'electronics' ? ELECTRONICS : null)),
+    findUnique: vi.fn(async ({ where }: { where: { id: string } }) => (where.id === 'cat1' ? ELECTRONICS : null)),
+    findMany: vi.fn(async () => [{ id: 'cat1', parentId: null }]),
+  },
 }));
 vi.mock('@/core/prisma/client', () => ({ prisma: db }));
 vi.mock('@/core/config/env', () => ({
@@ -261,7 +276,7 @@ describe('service ownership / 409 rules', () => {
     db.member.findUnique.mockResolvedValue({ unpaidCommissionPaise: 1 });
     expect(await code(svc.createAuction('seller', input, now))).toBe('403:COMMISSION_UNPAID');
     db.member.findUnique.mockResolvedValue({ unpaidCommissionPaise: 0 });
-    expect(await code(svc.createAuction('seller', { ...input, category: 'Nope' }, now))).toBe('400:VALIDATION_ERROR');
+    expect(await code(svc.createAuction('seller', { ...input, category: 'Nope' }, now))).toBe('400:INVALID_CATEGORY');
     expect(db.auction.create).not.toHaveBeenCalled();
   });
   it('create in checkout mode required: no ACTIVE payout account -> 403 PAYOUT_ACCOUNT_REQUIRED (after COMMISSION_UNPAID)', async () => {

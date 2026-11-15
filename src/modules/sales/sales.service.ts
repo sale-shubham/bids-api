@@ -5,6 +5,7 @@ import { logger } from '@/core/logger/logger';
 import { offsetArgs, pageMeta } from '@/core/http/pagination';
 import { enqueueNotification } from '@/modules/notify/notify.queue';
 import { ORDER_REUSE_MS } from '@/modules/commissions/commissions.service';
+import { toShippingDTO } from '@/modules/auctions/listing.rules';
 import { toOfferDTO, type OfferStatusValue } from '@/modules/second-chance/second-chance.rules';
 import {
   ADMIN_RELEASABLE,
@@ -12,6 +13,8 @@ import {
   DISPUTABLE,
   REFUNDABLE,
   payoutPaise,
+  resolveDelivery,
+  type DeliveryChoice,
   type SaleStatus,
 } from './sales.rules';
 
@@ -19,7 +22,7 @@ const REF_TYPE = 'SALE';
 
 const person = { select: { id: true, name: true, email: true, phone: true } } as const;
 export const saleInclude = {
-  auction: { select: { id: true, title: true, images: true } },
+  auction: { select: { id: true, title: true, images: true, shippingOptions: true } },
   buyer: person,
   seller: person,
   secondChanceOffer: {
@@ -36,6 +39,7 @@ export type SaleRow = {
   status: SaleStatus;
   itemPaise: bigint | number;
   shippingFeePaise: bigint | number;
+  deliveryChoice?: string | null;
   amountPaise: bigint | number;
   commissionPaise: bigint | number;
   payBy: Date;
@@ -51,7 +55,7 @@ export type SaleRow = {
   refundedAt: Date | null;
   cancelledAt: Date | null;
   createdAt: Date;
-  auction: { id: string; title: string; images: string[] };
+  auction: { id: string; title: string; images: string[]; shippingOptions?: unknown };
   buyer: Person;
   seller: Person;
   secondChanceOffer?: {
@@ -92,6 +96,8 @@ export function toSaleDTO(s: SaleRow, role: SaleRole, now = new Date()) {
     status: s.status,
     itemPaise: toPaise(s.itemPaise),
     shippingFeePaise: toPaise(s.shippingFeePaise),
+    deliveryChoice: s.deliveryChoice === 'COURIER' || s.deliveryChoice === 'PICKUP' ? s.deliveryChoice : null,
+    shippingOptions: toShippingDTO(s.auction.shippingOptions),
     amountPaise,
     payBy: s.payBy,
     paidAt: s.paidAt,
@@ -175,7 +181,7 @@ export { notifySale };
  * Create (or reuse) a Razorpay order for one AWAITING_PAYMENT sale, with the seller's share
  * attached as an ON-HOLD Route transfer (amount - platform commission). Same payload as commissions.
  */
-export async function checkout(memberId: string, saleId: string, now = new Date()) {
+export async function checkout(memberId: string, saleId: string, now = new Date(), delivery?: DeliveryChoice) {
   const sale = await prisma.sale.findFirst({
     where: { id: saleId, buyerId: memberId },
     select: {
@@ -183,9 +189,12 @@ export async function checkout(memberId: string, saleId: string, now = new Date(
       status: true,
       payBy: true,
       sellerId: true,
+      itemPaise: true,
+      shippingFeePaise: true,
+      deliveryChoice: true,
       amountPaise: true,
       commissionPaise: true,
-      auction: { select: { title: true } },
+      auction: { select: { title: true, shippingOptions: true } },
     },
   });
   if (!sale) throw saleNotFound();
@@ -202,8 +211,26 @@ export async function checkout(memberId: string, saleId: string, now = new Date(
   const member = await prisma.member.findUnique({ where: { id: memberId }, select: { name: true, email: true, phone: true } });
   if (!member) throw new AppError(401, 'UNAUTHORIZED', 'Unauthorized');
 
+  // Delivery choice fixes the shipping fee; the order amount follows (commission stays on the item price, the seller gets amount - commission).
+  const decision = resolveDelivery(toShippingDTO(sale.auction.shippingOptions), delivery);
+  if (decision.kind === 'required') {
+    throw new AppError(400, 'DELIVERY_CHOICE_REQUIRED', 'Choose COURIER or PICKUP for this order', [{ field: 'delivery', message: 'delivery is required' }]);
+  }
+  let saleAmount: bigint | number = sale.amountPaise;
+  if (decision.kind === 'chosen') {
+    const newAmount = toPaise(sale.itemPaise) + decision.shippingFeePaise;
+    if (decision.choice !== sale.deliveryChoice || decision.shippingFeePaise !== toPaise(sale.shippingFeePaise) || newAmount !== toPaise(sale.amountPaise)) {
+      const { count } = await prisma.sale.updateMany({
+        where: { id: sale.id, status: 'AWAITING_PAYMENT' },
+        data: { deliveryChoice: decision.choice, shippingFeePaise: decision.shippingFeePaise, amountPaise: newAmount },
+      });
+      if (count === 0) throw new AppError(409, 'SALE_NOT_PAYABLE', 'This sale can no longer be paid');
+    }
+    saleAmount = newAmount;
+  }
+
   const { paymentProvider } = await import('@/providers/payment');
-  const amountPaise = toPaise(sale.amountPaise);
+  const amountPaise = toPaise(saleAmount);
   const description = `Payment for "${sale.auction.title}"`.slice(0, 255);
   const respond = (orderId: string, keyId: string) => ({
     orderId,
@@ -220,7 +247,7 @@ export async function checkout(memberId: string, saleId: string, now = new Date(
       referenceType: REF_TYPE,
       referenceId: sale.id,
       status: 'CREATED',
-      amountPaise: sale.amountPaise,
+      amountPaise: saleAmount,
       createdAt: { gte: new Date(now.getTime() - ORDER_REUSE_MS) },
     },
     orderBy: { createdAt: 'desc' },
@@ -246,7 +273,7 @@ export async function checkout(memberId: string, saleId: string, now = new Date(
     data: {
       memberId,
       gatewayOrderId: created.gatewayOrderId,
-      amountPaise: sale.amountPaise,
+      amountPaise: saleAmount,
       referenceType: REF_TYPE,
       referenceId: sale.id,
       idempotencyKey: `sale:${sale.id}:${created.gatewayOrderId}`,

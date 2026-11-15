@@ -25,8 +25,9 @@ bids-api/
 │   └── modules/
 │       ├── auth/             # signup/verify/login/password flows, token, session, device, otp-challenge, password rule
 │       ├── members/          # GET/PATCH /members/me, GET /members/:id/public, member.select.ts
-│       ├── uploads/          # POST /uploads/presign (auctions, avatars; images, 5 MB; size + type signed into the PUT)
-│       ├── auctions/         # catalogue, home, categories, detail, create/patch/delete/republish, mine
+│       ├── uploads/          # POST /uploads/presign (auctions, avatars: images 5 MB; auction-videos: mp4 / webm 50 MB; size + type signed into the PUT)
+│       ├── auctions/         # catalogue, home, detail, create/patch/delete/republish, bulk create, mine, similar-sold; listing.rules (estimates, shipping, conditions)
+│       ├── categories/       # GET /categories, GET /categories/:slug/stats; categories.rules (validateAttributes, tree, slugs), categories.service (resolution, stats, admin CRUD)
 │       │                     #   (routes, controller, service, validation + sanitiser, serializer + effectiveStatus, query helpers)
 │       │                     #   + bidding.rules.ts (pure: resolveMaxBid, reserveMet, validateBuyNow), auction-detail.service, auction-close.service, auction-events (WebSocket fan-out)
 │       ├── bids/             # POST/GET /auctions/:id/bids (max bids), POST /auctions/:id/buy-now, GET /bids/mine
@@ -50,7 +51,7 @@ bids-api/
 │       ├── reports/          # POST /reports (reportLimiter), reports.service (target rules, admin notify)
 │       ├── leaderboard/      # GET /leaderboard (spent|won)
 │       ├── contact/          # POST /contact (rate limited, emails ADMIN_EMAIL with reply-to)
-│       └── admin/            # dashboard, members (PATCH), auctions, commissions (+waive), payments, sales (list, release, refund), reviews (list, hide), reports (queue, resolve), settings (+legal), retention, strikes (remove), risk (review queue)
+│       └── admin/            # dashboard, members (PATCH), auctions (+deposit), categories (CRUD), commissions (+waive), payments, sales (list, release, refund), reviews (list, hide), reports (queue, resolve), settings (+legal), retention, strikes (remove), risk (review queue)
 ├── readme/                   # ARCHITECTURE.md, methods/, flows/ (auth, reports, auctions, bidding, notifications, payments, checkout, deposits, strikes, risk, payouts, websocket, watchlist, reviews, questions, saved-searches, leaderboard, admin, legal-pages, deployment)
 ├── docs/DOC_SYNC.md
 └── .claude/ .husky/ .github/workflows/

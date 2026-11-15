@@ -32,9 +32,26 @@ export function priceFilter(minPrice?: number, maxPrice?: number): Where | undef
   return { OR: [{ bidCount: 0, startingBidPaise: range }, { bidCount: { gt: 0 }, currentBidPaise: range }] };
 }
 
-export function listWhere(q: ListQuery, now: Date): Where {
-  const and: Where[] = [statusWhere(q.status, now)];
-  if (q.category) and.push({ category: q.category });
+/** `attr.<key>=value`: exact match on the JSON attributes; a numeric value also matches the stored number. */
+export function attributeFilters(attrs: Record<string, string> | undefined): Where[] {
+  return Object.entries(attrs ?? {}).map(([key, value]) => {
+    const exact: Where = { attributes: { path: [key], equals: value } };
+    const n = Number(value);
+    if (value.trim() === '' || !Number.isFinite(n)) return exact;
+    return { OR: [exact, { attributes: { path: [key], equals: n } }] };
+  });
+}
+
+/**
+ * `categoryIds` = the resolved category plus its descendants (see categories.service
+ * resolveBrowseCategoryIds); undefined falls back to the legacy name column match.
+ */
+export function listWhere(q: ListQuery, now: Date, categoryIds?: string[]): Where {
+  // sold=true means effective ENDED with a winner, whatever `status` says.
+  const and: Where[] = [statusWhere(q.sold ? 'ended' : q.status, now)];
+  if (q.sold) and.push({ winnerId: { not: null } });
+  if (q.category) and.push(categoryIds ? { categoryId: { in: categoryIds } } : { category: q.category });
+  and.push(...attributeFilters(q.attrs));
   if (q.sellerId) and.push({ sellerId: q.sellerId });
   if (q.condition) and.push({ condition: q.condition });
   if (q.verified) and.push({ seller: { verifiedAt: { not: null } } });
@@ -57,6 +74,8 @@ export function orderFor(status: ListQuery['status'] | 'cancelled', sort?: ListQ
   switch (sort) {
     case 'newest':
       return [{ createdAt: 'desc' }, tie];
+    case 'recentlySold':
+      return [{ endedAt: { sort: 'desc', nulls: 'last' } }, tie];
     case 'mostBids':
       return [{ bidCount: 'desc' }, { endTime: 'asc' }, tie];
     case 'endingSoon':

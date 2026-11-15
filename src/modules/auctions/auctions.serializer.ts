@@ -2,6 +2,9 @@ import type { Prisma } from '@prisma/client';
 import { toPaise, toPaiseOrNull } from '@/core/money';
 import { reserveMet, type BidDTO } from './bidding.rules';
 import { ratingAvg, type ReviewDTO } from '@/modules/reviews/reviews.rules';
+import { buildSpecs } from '@/modules/categories/categories.rules';
+import type { CategoryContext } from '@/modules/categories/categories.service';
+import { toShippingDTO } from './listing.rules';
 
 export type EffectiveStatus = 'SCHEDULED' | 'LIVE' | 'ENDED' | 'CANCELLED';
 
@@ -24,15 +27,20 @@ export function effectiveStatus(a: StatusInput, now: Date = new Date()): Effecti
 }
 
 export const sellerSelect = { id: true, name: true, avatarUrl: true, ratingCount: true, ratingSum: true, verifiedAt: true } as const;
-export const auctionInclude = { seller: { select: sellerSelect } } as const;
+export const auctionInclude = { seller: { select: sellerSelect }, categoryRef: { select: { slug: true } } } as const;
 export type AuctionRow = Prisma.AuctionGetPayload<{ include: typeof auctionInclude }>;
 
 export function toCard(a: AuctionRow, now: Date = new Date()) {
+  const status = effectiveStatus(a, now);
   return {
     id: a.id,
     title: a.title,
     category: a.category,
+    categorySlug: a.categoryRef?.slug ?? null,
     condition: a.condition,
+    estimateLowPaise: toPaiseOrNull(a.estimateLowPaise),
+    estimateHighPaise: toPaiseOrNull(a.estimateHighPaise),
+    hasVideo: !!a.videoUrl,
     coverImage: a.images[0] ?? null,
     startingBidPaise: toPaise(a.startingBidPaise),
     currentBidPaise: toPaise(a.currentBidPaise),
@@ -47,7 +55,9 @@ export function toCard(a: AuctionRow, now: Date = new Date()) {
     }),
     startTime: a.startTime.toISOString(),
     endTime: a.endTime.toISOString(),
-    status: effectiveStatus(a, now),
+    status,
+    sold: status === 'ENDED' && !!a.winnerId,
+    endedAt: a.endedAt ? a.endedAt.toISOString() : null,
     seller: {
       id: a.seller.id,
       name: a.seller.name,
@@ -63,10 +73,16 @@ export type AuctionContact = { role: 'SELLER' | 'WINNER'; name: string; email: s
 
 // recentBids / myHighestBidPaise / contact are filled by auction-detail.service
 // (they need extra queries); create/patch/republish responses carry the empty defaults.
-export function toDetail(a: AuctionRow, now: Date = new Date()) {
+export function toDetail(a: AuctionRow, now: Date = new Date(), cat: CategoryContext = { path: [], schema: [] }) {
   return {
     ...toCard(a, now),
     description: a.description,
+    categoryId: a.categoryId ?? null,
+    categoryPath: cat.path,
+    specs: buildSpecs(cat.schema, a.attributes),
+    conditionReport: a.conditionReport ?? null,
+    videoUrl: a.videoUrl ?? null,
+    shippingOptions: toShippingDTO(a.shippingOptions),
     images: a.images,
     minIncrementPaise: toPaise(a.minIncrementPaise),
     depositPaise: toPaiseOrNull(a.depositPaise),

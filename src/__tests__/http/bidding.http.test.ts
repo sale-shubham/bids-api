@@ -367,9 +367,8 @@ describe('POST /auctions (reserve / buy-now rules)', () => {
 
   beforeEach(() => {
     prismaMock.member.findUnique.mockResolvedValue({ id: 'seller1', isActive: true, unpaidCommissionPaise: 0n });
-    prismaMock.appSetting.findUnique.mockImplementation(async ({ where }: { where: { key: string } }) =>
-      where.key === 'auction.categories' ? { key: where.key, value: JSON.stringify(['Antiques']) } : null,
-    );
+    prismaMock.appSetting.findUnique.mockResolvedValue(null);
+    prismaMock.category.findFirst.mockResolvedValue({ id: 'cat1', slug: 'antiques', name: 'Antiques', isActive: true, attributeSchema: [] });
   });
 
   it('400 INVALID_RESERVE when the reserve is below the starting bid', async () => {

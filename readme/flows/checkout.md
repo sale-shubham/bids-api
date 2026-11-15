@@ -39,7 +39,7 @@ Every transition is a guarded `updateMany` (`WHERE status IN (...)`), so concurr
 |---|---|---|---|
 | GET | `/sales/mine?role=buyer\|seller&status=&page&limit` | any active member | paginated `SaleDTO[]` (default `role=buyer`; `limit` default 20 max 100, `pageSize` accepted as an alias) |
 | GET | `/sales/:id` | buyer, seller, SUPER_ADMIN | `SaleDTO` |
-| POST | `/sales/:id/checkout` | buyer (BIDDER) | same payload as commissions: `{ orderId, amountPaise, currency: 'INR', keyId, description, prefill }`. 409 `SALE_NOT_PAYABLE` (not AWAITING_PAYMENT or past `payBy`), 409 `PAYOUT_ACCOUNT_INACTIVE` |
+| POST | `/sales/:id/checkout` | buyer (BIDDER) | optional body `{ delivery?: 'COURIER'\|'PICKUP' }` (see Delivery choice). Same payload as commissions: `{ orderId, amountPaise, currency: 'INR', keyId, description, prefill }`. 400 `DELIVERY_CHOICE_REQUIRED`, 409 `SALE_NOT_PAYABLE` (not AWAITING_PAYMENT or past `payBy`), 409 `PAYOUT_ACCOUNT_INACTIVE` |
 | POST | `/sales/:id/ship` | seller (AUCTIONEER) | `{ method: 'COURIER'\|'PICKUP', courier? <= 60 (required for COURIER), trackingNo? <= 60 }`; PAID -> SHIPPED; notifies the buyer |
 | POST | `/sales/:id/confirm` | buyer | PAID\|SHIPPED -> DELIVERED, then release -> RELEASED. If the release call fails the sale stays DELIVERED (the job retries); the response is still 200 with the current state |
 | POST | `/sales/:id/dispute` | buyer | `{ reason: 10..1000 }`; PAID\|SHIPPED\|DELIVERED -> DISPUTED; notifies the seller and every active SUPER_ADMIN |
@@ -49,13 +49,23 @@ Every transition is a guarded `updateMany` (`WHERE status IN (...)`), so concurr
 | POST | `/admin/sales/:id/release` | SUPER_ADMIN | DISPUTED\|DELIVERED -> RELEASED (`resolution = RELEASED_BY_ADMIN`, `resolvedAt` when it was disputed); 502 `RELEASE_FAILED` when the gateway call fails |
 | POST | `/admin/sales/:id/refund` | SUPER_ADMIN | `{ note? <= 500 }`; PAID\|SHIPPED\|DELIVERED\|DISPUTED -> REFUNDED; 409 `SALE_NO_PAYMENT` without a payment id; marks the PAID Commission row WAIVED; notifies both |
 
-`SaleDTO` = `{ id, auctionId, auction { id, title, coverImage }, status, itemPaise, shippingFeePaise, amountPaise, payBy, paidAt, shippingMethod, courier, trackingNo, shippedAt, deliveredAt, releasedAt, disputedAt, disputeReason, refundedAt, cancelledAt, createdAt, role 'BUYER'|'SELLER'|'ADMIN', buyer { id, name }, seller { id, name } }` plus `commissionPaise` and `payoutPaise` (seller and admin only), `buyerContact { name, email, phone }` (seller only, once paid), `sellerContact` (buyer only, once paid). The seller view also has `secondChanceOffer: OfferDTO | null` and `canOfferSecondChance: boolean` (`strikes.md`).
+`SaleDTO` = `{ id, auctionId, auction { id, title, coverImage }, status, itemPaise, shippingFeePaise, deliveryChoice: 'COURIER'|'PICKUP'|null, shippingOptions (the auction's, same shape as the auction detail; null for legacy auctions), amountPaise, payBy, paidAt, shippingMethod, courier, trackingNo, shippedAt, deliveredAt, releasedAt, disputedAt, disputeReason, refundedAt, cancelledAt, createdAt, role 'BUYER'|'SELLER'|'ADMIN', buyer { id, name }, seller { id, name } }` plus `commissionPaise` and `payoutPaise` (seller and admin only), `buyerContact { name, email, phone }` (seller only, once paid), `sellerContact` (buyer only, once paid). The seller view also has `secondChanceOffer: OfferDTO | null` and `canOfferSecondChance: boolean` (`strikes.md`).
 
 Auction detail (`GET /auctions/:id`) has `sale: { id, status, payBy } | null` for the buyer, the seller and admins; `GET /bids/mine` rows have `saleId` and `saleStatus`. The admin dashboard has `salesByStatus: { <status>: { count, amountPaise } }` (all statuses, zero-filled).
 
+## Delivery choice
+
+`Auction.shippingOptions` (`auctions.md`) says what the seller offers; `Sale.deliveryChoice` (`'COURIER'|'PICKUP'`, nullable) records the buyer's pick. `POST /sales/:id/checkout` decides with `resolveDelivery` (`sales.rules.ts`) after the state / payout checks and before any gateway call:
+
+- the auction has **no** `shippingOptions` (legacy): behave as before, the sale is not touched (fee 0);
+- both pickup and courier offered: `delivery` is required, else 400 `DELIVERY_CHOICE_REQUIRED`;
+- only one offered: that one is used (a conflicting `delivery` is ignored).
+
+Courier sets `shippingFeePaise` to the auction fee (0 when absent), pickup to 0. The sale is updated (`deliveryChoice`, `shippingFeePaise`, `amountPaise = itemPaise + fee`) with a guarded `updateMany` that only matches `AWAITING_PAYMENT` (count 0 -> 409 `SALE_NOT_PAYABLE`), only when something changed. Commission stays on the item price (`commissionPaise` is unchanged), so the Route transfer to the seller is `amount - commission` and the shipping fee goes to the seller. The order, its amount and the transfer use the updated amount, and the 30 minute order reuse only matches a CREATED order with exactly that amount, so switching delivery never reuses a stale order.
+
 ## Razorpay calls
 
-1. Order (`POST /v1/orders`): `amount` = sale amount, `partial_payment: false`, `transfers: [{ account, amount: amount - commission, currency: 'INR', notes, on_hold: true }]`. A CREATED `PaymentOrder` (`referenceType 'SALE'`, `referenceId` = sale id, `idempotencyKey sale:<id>:<gatewayOrderId>`) younger than 30 min for the same amount is reused. Receipt `s_<12 id chars>_<base36 time>`.
+1. Order (`POST /v1/orders`): `amount` = sale amount, `partial_payment: false`, `transfers: [{ account, amount: amount - commission, currency: 'INR', notes, on_hold: true }]`. A CREATED `PaymentOrder` (`referenceType 'SALE'`, `referenceId` = sale id, `idempotencyKey sale:<id>:<gatewayOrderId>`) younger than 30 min for the same (post-delivery-choice) amount is reused. Receipt `s_<12 id chars>_<base36 time>`.
 2. Settlement (`markSalePaid`, one transaction, shared by `/payments/verify` and the webhook): guarded update AWAITING_PAYMENT -> PAID (+ `paidAt`, `gatewayPaymentId`), `PaymentOrder` -> PAID, and a Commission row with status PAID (`paidAt`, `paymentOrderId`, amount = `commissionPaise`) so admin commission reports stay right. After commit, best-effort `GET /v1/payments/:id/transfers` stores `transferId` (also retried on release and by `transfer.processed`); the seller gets `sale-paid`, the buyer `sale-receipt`. A second call changes nothing. A payment that arrives after the sale was CANCELLED is recorded on the order only (refund manually).
 3. Release: `PATCH /v1/transfers/:id { on_hold: false }` (transfer fetched first when `transferId` is null), then RELEASED + `releasedAt` and `sale-released` to the seller.
 4. Refund: `POST /v1/payments/:id/refund { amount, reverse_all: 1 }`.

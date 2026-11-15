@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const store = vi.hoisted(() => ({ rows: new Map<string, { key: string; value: string; updatedAt: Date }>() }));
+const store = vi.hoisted(() => ({
+  rows: new Map<string, { key: string; value: string; updatedAt: Date }>(),
+  roots: [{ name: 'Books' }, { name: 'Art' }],
+}));
 vi.mock('@/core/prisma/client', () => {
   const upsert = async ({ where, create, update }: any) => {
     const cur = store.rows.get(where.key);
@@ -15,6 +18,7 @@ vi.mock('@/core/prisma/client', () => {
         findMany: async ({ where }: any) => where.key.in.map((k: string) => store.rows.get(k)).filter(Boolean),
         findUnique: async ({ where }: any) => store.rows.get(where.key) ?? null,
       },
+      category: { findMany: vi.fn(async () => store.roots) },
       $transaction: async (ops: Promise<unknown>[]) => Promise.all(ops),
     },
   };
@@ -78,7 +82,7 @@ describe('platform settings validation', () => {
     store.rows.delete('auction.depositThresholdPaise');
     await setPlatformSettings(valid);
   });
-  it('categories: 1-30, unique (case-insensitive), 2-40 chars', () => {
+  it('categories (deprecated, optional): 1-30, unique (case-insensitive), 2-40 chars', () => {
     expect(platformSettingsSchema.validate({ ...valid, categories: [] }).error).toBeDefined();
     expect(platformSettingsSchema.validate({ ...valid, categories: ['Art', 'art'] }).error).toBeDefined();
     expect(platformSettingsSchema.validate({ ...valid, categories: ['A'] }).error).toBeDefined();
@@ -86,7 +90,13 @@ describe('platform settings validation', () => {
     const thirtyOne = Array.from({ length: 31 }, (_, i) => `Cat ${i}`);
     expect(platformSettingsSchema.validate({ ...valid, categories: thirtyOne }).error).toBeDefined();
     expect(platformSettingsSchema.validate({ ...valid, categories: thirtyOne.slice(0, 30) }).error).toBeUndefined();
-    expect(platformSettingsSchema.validate({ ...valid, categories: undefined }).error).toBeDefined();
+    expect(platformSettingsSchema.validate({ ...valid, categories: undefined }).error).toBeUndefined();
+  });
+  it('categories come from the active root Category names (sorted) and a PUT value is ignored', async () => {
+    expect((await getPlatformSettings()).categories).toEqual(['Art', 'Books']);
+    const saved = await setPlatformSettings({ ...valid, categories: ['Ignored'] });
+    expect(saved.categories).toEqual(['Art', 'Books']);
+    expect(store.rows.has('auction.categories')).toBe(false);
   });
   it('round-trips through the AppSetting store', async () => {
     expect(await setPlatformSettings(valid)).toEqual(valid);

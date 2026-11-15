@@ -167,6 +167,36 @@ describe('auctions schemas', () => {
     expectInvalid(await create({ title: 'abc' }), 'title');
   });
 
+  it('rejects a bad categoryId type, attributes shape, estimates type, videoUrl host and shippingOptions shape', async () => {
+    // Own member id: create is limited to 10 writes / minute per member.
+    const createAs = async (over: Record<string, unknown>) =>
+      request(await getApp())
+        .post('/auctions')
+        .set('Authorization', await bearer('AUCTIONEER', 'm3'))
+        .send({ ...base, ...over });
+    const { category: _drop, ...noCategory } = base;
+    expectInvalid(await request(await getApp()).post('/auctions').set('Authorization', await bearer('AUCTIONEER', 'm3')).send(noCategory));
+    expectInvalid(await createAs({ attributes: 'red' }), 'attributes');
+    expectInvalid(await createAs({ estimateLowPaise: 1.5 }), 'estimateLowPaise');
+    expectInvalid(await createAs({ videoUrl: 'https://evil.example.com/v.mp4' }), 'videoUrl');
+    expectInvalid(await createAs({ shippingOptions: 'courier' }), 'shippingOptions');
+    expectInvalid(await createAs({ conditionReport: 'x'.repeat(20001) }), 'conditionReport');
+  });
+
+  it('POST /auctions/bulk needs 1..50 items; PATCH accepts the new fields', async () => {
+    expectInvalid(await send('post', '/auctions/bulk', { as: 'AUCTIONEER', body: {} }), 'items');
+    expectInvalid(await send('post', '/auctions/bulk', { as: 'AUCTIONEER', body: { items: [] } }), 'items');
+    expectInvalid(await send('post', '/auctions/bulk', { as: 'AUCTIONEER', body: { items: Array.from({ length: 51 }, () => ({})) } }), 'items');
+    expectInvalid(await send('post', '/auctions/bulk', { as: 'AUCTIONEER', body: { items: ['x'] } }), 'items');
+  });
+
+  it('GET /auctions validates sold, recentlySold, attr.<key> count and length', async () => {
+    expectInvalid(await send('get', '/auctions?sold=maybe'), 'sold');
+    expectInvalid(await send('get', '/auctions?condition=MINT'), 'condition');
+    expectInvalid(await send('get', '/auctions?' + Array.from({ length: 6 }, (_, i) => `attr.k${i}=v`).join('&')));
+    expectInvalid(await send('get', `/auctions?attr.color=${'x'.repeat(201)}`));
+  });
+
   it('PATCH needs at least one field; republish needs both times', async () => {
     expectInvalid(await send('patch', '/auctions/a1', { as: 'AUCTIONEER', body: {} }));
     expectInvalid(await send('post', '/auctions/a1/republish', { as: 'AUCTIONEER', body: { startTime: iso(HOUR) } }), 'endTime');
@@ -281,6 +311,30 @@ describe('contact, leaderboard, watchlist, notifications, push, uploads, commiss
     expectInvalid(await send('post', '/uploads/presign', { as: 'BIDDER', body: { ...ok, folder: 'etc' } }), 'folder');
     expectInvalid(await send('post', '/uploads/presign', { as: 'BIDDER', body: { ...ok, contentType: 'application/pdf' } }), 'contentType');
     expectInvalid(await send('post', '/uploads/presign', { as: 'BIDDER', body: { ...ok, size: 6 * 1024 * 1024 } }), 'size');
+  });
+
+  it('POST /uploads/presign: videos only for auction-videos (mp4 / webm, 50 MB); images keep 5 MB', async () => {
+    const send_ = (body: object) => send('post', '/uploads/presign', { as: 'BIDDER', body });
+    expectInvalid(await send_({ folder: 'auctions', contentType: 'video/mp4', size: 1000 }), 'contentType');
+    expectInvalid(await send_({ folder: 'auction-videos', contentType: 'image/png', size: 1000 }), 'contentType');
+    expectInvalid(await send_({ folder: 'auction-videos', contentType: 'video/quicktime', size: 1000 }), 'contentType');
+    expectInvalid(await send_({ folder: 'auction-videos', contentType: 'video/mp4', size: 50 * 1024 * 1024 + 1 }), 'size');
+    expectInvalid(await send_({ folder: 'avatars', contentType: 'image/png', size: 5 * 1024 * 1024 + 1 }), 'size');
+  });
+
+  it('POST /sales/:id/checkout rejects an unknown delivery value', async () => {
+    expectInvalid(await send('post', '/sales/s1/checkout', { as: 'BIDDER', body: { delivery: 'DRONE' } }), 'delivery');
+  });
+
+  it('admin categories: name, slug, parentId, attributeSchema, empty patch', async () => {
+    const url = '/admin/categories';
+    expectInvalid(await send('post', url, { as: 'SUPER_ADMIN', body: {} }), 'name');
+    expectInvalid(await send('post', url, { as: 'SUPER_ADMIN', body: { name: 'x'.repeat(61) } }), 'name');
+    expectInvalid(await send('post', url, { as: 'SUPER_ADMIN', body: { name: 'Art', slug: 'Not A Slug' } }), 'slug');
+    expectInvalid(await send('post', url, { as: 'SUPER_ADMIN', body: { name: 'Art', description: 'x'.repeat(501) } }), 'description');
+    expectInvalid(await send('post', url, { as: 'SUPER_ADMIN', body: { name: 'Art', attributeSchema: [{ key: 'Bad', label: 'x', type: 'text' }] } }), 'attributeSchema');
+    expectInvalid(await send('post', url, { as: 'SUPER_ADMIN', body: { name: 'Art', attributeSchema: [{ key: 'a', label: 'x', type: 'select' }] } }), 'attributeSchema');
+    expectInvalid(await send('patch', `${url}/c1`, { as: 'SUPER_ADMIN', body: {} }));
   });
 
   it('POST /push/subscribe only accepts https endpoints with keys', async () => {

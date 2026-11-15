@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const db = vi.hoisted(() => ({
   savedSearch: { findMany: vi.fn(), count: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
+  category: { findFirst: vi.fn(async () => null as unknown), findUnique: vi.fn(async () => null as unknown) },
 }));
 const enqueue = vi.hoisted(() => vi.fn(async (_m: unknown) => undefined));
 vi.mock('@/core/prisma/client', () => ({ prisma: db }));
@@ -28,7 +29,7 @@ describe('validation', () => {
     expect(bad({ q: 'watch' })).toBeUndefined();
     expect(bad({ minPricePaise: 0 })).toBeUndefined();
   });
-  it('min <= max, integer prices in range, bounded text, NEW|USED', () => {
+  it('min <= max, integer prices in range, bounded text, condition grades', () => {
     expect(bad({ minPricePaise: 500, maxPricePaise: 100 })).toMatch(/must not exceed/);
     expect(bad({ minPricePaise: 100, maxPricePaise: 100 })).toBeUndefined();
     expect(bad({ minPricePaise: -1 })).toBeDefined();
@@ -51,6 +52,18 @@ describe('service', () => {
     db.savedSearch.create.mockImplementation(async ({ data }: any) => ({ id: 's1', createdAt: new Date(0), ...data, minPricePaise: 100n }));
     const out = await createSavedSearch('m1', { q: 'watch', minPricePaise: 100 });
     expect(out.savedSearch).toMatchObject({ id: 's1', q: 'watch', minPricePaise: 100, maxPricePaise: null, category: null });
+  });
+  it('create stores a category given as slug under its canonical name', async () => {
+    db.savedSearch.count.mockResolvedValue(0);
+    db.category.findFirst.mockResolvedValueOnce({ id: 'c1', name: 'Watches', slug: 'watches' });
+    db.savedSearch.create.mockImplementation(async ({ data }: any) => ({ id: 's1', createdAt: new Date(0), ...data }));
+    const out = await createSavedSearch('m1', { category: 'watches' });
+    expect(out.savedSearch.category).toBe('Watches');
+  });
+  it('accepts every condition grade', () => {
+    const bad = (v: unknown) => createSavedSearchSchema.validate(v).error;
+    for (const c of ['NEW', 'LIKE_NEW', 'GOOD', 'FAIR', 'USED', 'FOR_PARTS']) expect(bad({ condition: c })).toBeUndefined();
+    expect(bad({ condition: 'BROKEN' })).toBeDefined();
   });
   it('delete: own only, else 404', async () => {
     db.savedSearch.deleteMany.mockResolvedValue({ count: 0 });
@@ -86,13 +99,22 @@ describe('matcher', () => {
     await onAuctionPublished(auction);
     const where = db.savedSearch.findMany.mock.calls[0][0].where;
     expect(where.AND).toEqual([
-      { OR: [{ category: null }, { category: 'Watches' }] },
+      { OR: [{ category: null }, { category: { in: ['Watches'] } }] },
       { OR: [{ condition: null }, { condition: 'USED' }] },
       { OR: [{ minPricePaise: null }, { minPricePaise: { lte: 50_000 } }] },
       { OR: [{ maxPricePaise: null }, { maxPricePaise: { gte: 50_000 } }] },
     ]);
     expect(where.memberId).toEqual({ not: 's1' });
     expect(where.member).toEqual({ isActive: true });
+  });
+  it('a search for a parent category matches descendants: names and slugs of every ancestor are accepted', async () => {
+    db.category.findUnique
+      .mockResolvedValueOnce({ name: 'Wrist watches', slug: 'wrist-watches', parentId: 'c1' })
+      .mockResolvedValueOnce({ name: 'Watches', slug: 'watches', parentId: null });
+    db.savedSearch.findMany.mockResolvedValue([]);
+    await onAuctionPublished({ ...auction, category: 'Wrist watches', categoryId: 'c2' });
+    const where = db.savedSearch.findMany.mock.calls[0][0].where;
+    expect(where.AND[0]).toEqual({ OR: [{ category: null }, { category: { in: ['Wrist watches', 'wrist-watches', 'Watches', 'watches'] } }] });
   });
   it('notifies one member once, filtering by title words, with the dedupe key', async () => {
     db.savedSearch.findMany.mockResolvedValue([
