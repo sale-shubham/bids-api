@@ -4,12 +4,13 @@ import { fileURLToPath } from 'node:url';
 import ejs from 'ejs';
 import { env } from '@/core/config/env';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// Not named __dirname: the Lambda bundle banner (scripts/build-lambda.mjs) already declares one.
+const moduleDir = dirname(fileURLToPath(import.meta.url));
 // Source run (tsx): src/providers/email → src/templates. Lambda bundle:
 // dist/index.mjs → dist/templates (copied by scripts/build-lambda.mjs).
-const templatesDir = existsSync(join(__dirname, 'templates'))
-  ? join(__dirname, 'templates')
-  : join(__dirname, '../../templates');
+const templatesDir = existsSync(join(moduleDir, 'templates'))
+  ? join(moduleDir, 'templates')
+  : join(moduleDir, '../../templates');
 
 export interface RenderedEmail {
   html: string;
