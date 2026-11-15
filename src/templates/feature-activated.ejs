@@ -1,0 +1,6 @@
+<%- include('_head', { heading: 'Your listing is featured', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  <strong><%= auctionTitle %></strong> is now featured<% if (until) { %> until <strong><%= until %></strong><% } %>.
+                </p>
+<%- include('_foot', { ctaUrl: auctionUrl, ctaLabel: 'View auction', frontendUrl }) %>

@@ -242,9 +242,16 @@ describe('formatInr + templates', () => {
       score: 70,
       reasons: 'SHARED_DEVICE',
       riskUrl: 'https://app.test/admin/risk',
+      until: '20 Nov 2026',
+      reward: 'Rs 100',
+      creditsUrl: 'https://app.test/profile?tab=referrals',
+      invoiceNo: 'NB/2026-27/000001',
+      invoicesUrl: 'https://app.test/profile?tab=invoices',
     });
-    expect(out.html).toContain('Vintage Watch');
-    expect(out.text).toContain('Vintage Watch');
+    if (type !== 'referral-rewarded') {
+      expect(out.html).toContain('Vintage Watch');
+      expect(out.text).toContain('Vintage Watch');
+    }
     expect(out.text).toContain('Support: https://www.test/contact');
     expect(out.html).toContain('https://www.test/contact');
     expect(out.html).not.toContain('https://app.test/contact');

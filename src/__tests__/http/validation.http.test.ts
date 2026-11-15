@@ -544,6 +544,61 @@ describe('trust 2: deposits, strikes, risk', () => {
   });
 });
 
+describe('engagement 2: featured, credits, invoices, GSTIN', () => {
+  it('POST /auctions/:id/feature/checkout: days must be 1, 3 or 7; useCredits boolean', async () => {
+    const url = '/auctions/a1/feature/checkout';
+    expectInvalid(await send('post', url, { as: 'AUCTIONEER', body: {} }), 'days');
+    expectInvalid(await send('post', url, { as: 'AUCTIONEER', body: { days: 2 } }), 'days');
+    expectInvalid(await send('post', url, { as: 'AUCTIONEER', body: { days: 3, useCredits: 'yes' } }), 'useCredits');
+  });
+
+  it('GET /auctions/promoted bounds limit to 1..4', async () => {
+    expectInvalid(await send('get', '/auctions/promoted?limit=5'), 'limit');
+    expectInvalid(await send('get', '/auctions/promoted?limit=0'), 'limit');
+  });
+
+  it('POST /commissions/:id/checkout rejects a non-boolean useCredits', async () => {
+    expectInvalid(await send('post', '/commissions/c1/checkout', { as: 'AUCTIONEER', body: { useCredits: 'x' } }), 'useCredits');
+  });
+
+  it('GET /members/me/credits and /invoices/mine bound paging', async () => {
+    expectInvalid(await send('get', '/members/me/credits?pageSize=101', { as: 'BIDDER' }), 'pageSize');
+    expectInvalid(await send('get', '/invoices/mine?page=0', { as: 'BIDDER' }), 'page');
+  });
+
+  it('POST /admin/members/:id/credits: non-zero int within 10_000_000, note 3..200', async () => {
+    const url = '/admin/members/m2/credits';
+    const ok = { amountPaise: 500, note: 'goodwill' };
+    expectInvalid(await send('post', url, { as: 'SUPER_ADMIN', body: { ...ok, amountPaise: 0 } }), 'amountPaise');
+    expectInvalid(await send('post', url, { as: 'SUPER_ADMIN', body: { ...ok, amountPaise: 10_000_001 } }), 'amountPaise');
+    expectInvalid(await send('post', url, { as: 'SUPER_ADMIN', body: { ...ok, amountPaise: -10_000_001 } }), 'amountPaise');
+    expectInvalid(await send('post', url, { as: 'SUPER_ADMIN', body: { ...ok, amountPaise: 1.5 } }), 'amountPaise');
+    expectInvalid(await send('post', url, { as: 'SUPER_ADMIN', body: { ...ok, note: 'ab' } }), 'note');
+  });
+
+  it('GET /admin/invoices bounds type / paging', async () => {
+    expectInvalid(await send('get', '/admin/invoices?type=BOGUS', { as: 'SUPER_ADMIN' }), 'type');
+    expectInvalid(await send('get', '/admin/invoices?pageSize=500', { as: 'SUPER_ADMIN' }), 'pageSize');
+  });
+
+  it('PUT /admin/settings/invoice validates GSTIN, state code, rate and SAC', async () => {
+    const url = '/admin/settings/invoice';
+    const ok = { legalName: 'NobleBid', gstin: '27ABCDE1234F1Z5', address: 'Mumbai', stateCode: '27', gstRateBps: 1800, commissionInclusive: true, sacCode: '998599' };
+    expectInvalid(await send('put', url, { as: 'SUPER_ADMIN', body: { ...ok, gstin: '123' } }), 'gstin');
+    expectInvalid(await send('put', url, { as: 'SUPER_ADMIN', body: { ...ok, stateCode: '7' } }), 'stateCode');
+    expectInvalid(await send('put', url, { as: 'SUPER_ADMIN', body: { ...ok, gstRateBps: 9000 } }), 'gstRateBps');
+    expectInvalid(await send('put', url, { as: 'SUPER_ADMIN', body: { ...ok, sacCode: 'abc' } }), 'sacCode');
+  });
+
+  it('PATCH /members/me validates gstin and billingState; a mismatch is 400 INVALID_GSTIN', async () => {
+    expectInvalid(await send('patch', '/members/me', { as: 'BIDDER', body: { gstin: 'bad' } }), 'gstin');
+    expectInvalid(await send('patch', '/members/me', { as: 'BIDDER', body: { billingState: '00' } }), 'billingState');
+    const res = await send('patch', '/members/me', { as: 'BIDDER', body: { gstin: '27ABCDE1234F1Z5', billingState: '29' } });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_GSTIN');
+  });
+});
+
 describe('engagement: follows, preferences, analytics', () => {
   it('GET /members/me/following bounds page / pageSize', async () => {
     expectInvalid(await send('get', '/members/me/following?pageSize=101', { as: 'BIDDER' }), 'pageSize');

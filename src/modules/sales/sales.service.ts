@@ -5,6 +5,8 @@ import { logger } from '@/core/logger/logger';
 import { offsetArgs, pageMeta } from '@/core/http/pagination';
 import { enqueueNotification } from '@/modules/notify/notify.queue';
 import { ORDER_REUSE_MS } from '@/modules/commissions/commissions.service';
+import { issueCommissionInvoice } from '@/modules/invoices/invoices.service';
+import { qualifyReferralBestEffort } from '@/modules/referrals/referrals.service';
 import { toShippingDTO } from '@/modules/auctions/listing.rules';
 import { toOfferDTO, type OfferStatusValue } from '@/modules/second-chance/second-chance.rules';
 import {
@@ -297,12 +299,12 @@ export async function markSalePaid(
 ): Promise<{ applied: boolean; saleId: string | null }> {
   const result = await prisma.$transaction(async (tx) => {
     const order = await tx.paymentOrder.findUnique({ where: { id: input.paymentOrderId } });
-    if (!order || order.referenceType !== REF_TYPE || !order.referenceId) return { ...NOTHING, sale: null };
+    if (!order || order.referenceType !== REF_TYPE || !order.referenceId) return { ...NOTHING, sale: null, commissionId: null as string | null };
     const sale = await tx.sale.findUnique({
       where: { id: order.referenceId },
       select: { id: true, auctionId: true, buyerId: true, sellerId: true, amountPaise: true, commissionPaise: true, rateBps: true },
     });
-    if (!sale) return { ...NOTHING, sale: null };
+    if (!sale) return { ...NOTHING, sale: null, commissionId: null as string | null };
 
     const moved = await tx.sale.updateMany({
       where: { id: sale.id, status: 'AWAITING_PAYMENT' },
@@ -314,8 +316,9 @@ export async function markSalePaid(
       data: { status: 'PAID', gatewayPaymentId: input.gatewayPaymentId ?? null },
     });
     const applied = moved.count === 1;
+    let commissionId: string | null = null;
     if (applied) {
-      await tx.commission.create({
+      const created = await tx.commission.create({
         data: {
           auctionId: sale.auctionId,
           sellerId: sale.sellerId,
@@ -326,11 +329,13 @@ export async function markSalePaid(
           paidAt: now,
           paymentOrderId: order.id,
         },
+        select: { id: true },
       });
+      commissionId = created?.id ?? null;
     } else {
       logger.info({ saleId: sale.id, orderId: order.id }, 'sale already settled (or not payable), payment effect skipped');
     }
-    return { applied, saleId: sale.id as string | null, sale };
+    return { applied, saleId: sale.id as string | null, sale, commissionId };
   });
 
   if (result.applied && result.sale) {
@@ -338,6 +343,7 @@ export async function markSalePaid(
     await storeTransferId(sale.id, input.gatewayPaymentId ?? null);
     await notifySale('sale-paid', sale.sellerId, sale, 'SELLER');
     await notifySale('sale-receipt', sale.buyerId, sale, 'BUYER');
+    if (result.commissionId) await issueCommissionInvoice(result.commissionId, now);
   }
   return { applied: result.applied, saleId: result.saleId };
 }
@@ -447,7 +453,10 @@ export async function releaseSale(
         ...(wasDisputed ? { resolvedAt: now, resolution: opts.resolution ?? 'RELEASED' } : {}),
       },
     });
-    if (count === 1) await notifySale('sale-released', sale.sellerId, sale, 'SELLER');
+    if (count === 1) {
+      await notifySale('sale-released', sale.sellerId, sale, 'SELLER');
+      await qualifyReferralBestEffort([sale.buyerId, sale.sellerId], now);
+    }
     return { released: count === 1 };
   } catch (err) {
     logger.error({ err, saleId }, 'sale: release failed, will be retried');

@@ -30,6 +30,7 @@ export const signupSchema = Joi.object({
   email,
   password: newPassword,
   role: Joi.string().valid('BIDDER', 'AUCTIONEER').required(),
+  referralCode: Joi.string().trim().max(32).allow('', null),
 });
 
 export const verifySignupSchema = Joi.object({ email, code });

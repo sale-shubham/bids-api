@@ -41,6 +41,7 @@ export function toCard(a: AuctionRow, now: Date = new Date()) {
     estimateLowPaise: toPaiseOrNull(a.estimateLowPaise),
     estimateHighPaise: toPaiseOrNull(a.estimateHighPaise),
     hasVideo: !!a.videoUrl,
+    promoted: status === 'LIVE' && !!a.featuredUntil && a.featuredUntil.getTime() > now.getTime(),
     coverImage: a.images[0] ?? null,
     startingBidPaise: toPaise(a.startingBidPaise),
     currentBidPaise: toPaise(a.currentBidPaise),

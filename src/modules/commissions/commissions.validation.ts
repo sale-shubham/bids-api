@@ -7,3 +7,6 @@ export const mineQuerySchema = Joi.object({
 });
 
 export type MineQuery = { status: 'due' | 'paid' | 'waived' | 'all'; page: number; pageSize: number };
+
+// POST /commissions/:id/checkout: useCredits pays the whole commission from the credit balance.
+export const checkoutBodySchema = Joi.object({ useCredits: Joi.boolean().default(false) });

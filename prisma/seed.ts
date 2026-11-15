@@ -42,6 +42,17 @@ const SETTINGS: Record<string, string> = {
   'checkout.mode': 'optional',
   'auction.depositThresholdPaise': '10000000',
   'auction.depositRateBps': '1000',
+  'featured.enabled': 'true',
+  'featured.prices': JSON.stringify({ '1': 9900, '3': 24900, '7': 49900 }),
+  'referral.enabled': 'true',
+  'referral.rewardPaise': '10000',
+  'referral.maxRewardsPerMember': '20',
+  'invoice.legalName': 'NobleBid',
+  'invoice.address': '',
+  'invoice.stateCode': '27',
+  'invoice.gstRateBps': '1800',
+  'invoice.commissionInclusive': 'true',
+  'invoice.sacCode': '998599',
 };
 
 async function main() {

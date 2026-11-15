@@ -58,6 +58,11 @@ export class S3Storage implements StorageProvider {
     return { key, url: this.url(key) };
   }
 
+  async putObject(key: string, body: Buffer, contentType: string): Promise<void> {
+    const { sdk, client } = await this.sdk();
+    await client.send(new sdk.PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }));
+  }
+
   async delete(key: string): Promise<void> {
     try {
       const { sdk, client } = await this.sdk();

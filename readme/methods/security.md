@@ -136,6 +136,10 @@ Flat, non-env-configurable values live in `src/core/config/constants.ts`, not `e
 
 Seller onboarding (`POST /payouts/account`) forwards the PAN and the full bank account number to Razorpay and stores neither: `SellerPayoutAccount` keeps only the Razorpay ids, status, legal / beneficiary name, IFSC and the last 4 digits of the account. The pino logger redacts `pan` and `accountNumber` (`src/core/logger/logger.ts`), and the payouts code never logs request bodies. See `flows/payouts.md`.
 
+## Invoice PDFs
+
+Generated invoice PDFs are private: stored under `invoices/<financialYear>/<id>.pdf` (the bucket policy publicly exposes only `auctions/` and `avatars/`), never returned by `url()`. `GET /invoices/:id/pdf` allows the owner or SUPER_ADMIN (anyone else gets 404) and returns a 5-minute presigned GET URL minted per request.
+
 ## Uploads
 
 `POST /uploads/presign` (authenticated, active member, `sensitiveLimiter`) mints a presigned S3 `PUT` URL valid for 60 s. The key is generated server-side (`<folder>/<uuid>-<timestamp><ext>`); `folder` is `auctions` or `avatars`; `contentType` must be `image/jpeg`, `image/png` or `image/webp`; `size` at most 5 MB. Both `ContentType` and `ContentLength` are signed into the URL, so S3 rejects a body of another type or size. Without `AWS_BUCKET_NAME` the route answers 503 `SERVICE_UNAVAILABLE`.

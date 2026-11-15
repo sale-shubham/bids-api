@@ -8,7 +8,7 @@ import { reviewListQuerySchema } from '@/modules/reviews/reviews.validation';
 import { authLimiter, otpIpLimiter, otpLimiter } from '@/core/middleware/rateLimit';
 import { followingQuerySchema } from '@/modules/follows/follows.validation';
 import { updatePreferencesSchema, whatsappOptSchema } from '@/modules/notification-preferences/notification-preferences.validation';
-import { phoneOtpSchema, phoneVerifySchema, updateMeSchema } from './members.validation';
+import { creditsQuerySchema, phoneOtpSchema, phoneVerifySchema, updateMeSchema } from './members.validation';
 
 const router = Router();
 
@@ -41,6 +41,28 @@ router.put(
   asyncHandler(ctrl.putNotificationPreferences),
 );
 router.post('/me/whatsapp', authenticate, requireActiveMember, validate(whatsappOptSchema), asyncHandler(ctrl.setWhatsapp));
+router.get(
+  '/me/referral',
+  authenticate,
+  requireActiveMember,
+  asyncHandler(async (req, res) => {
+    const { ok } = await import('@/core/http/response');
+    const svc = await import('@/modules/referrals/referrals.service');
+    return ok(res, await svc.getReferralSummary(req.user!.sub));
+  }),
+);
+router.get(
+  '/me/credits',
+  authenticate,
+  requireActiveMember,
+  validate(creditsQuerySchema, 'query'),
+  asyncHandler(async (req, res) => {
+    const { paginated } = await import('@/core/http/response');
+    const svc = await import('@/modules/credits/credits.service');
+    const { items, meta, balancePaise } = await svc.listLedger(req.user!.sub, req.query as unknown as { page: number; pageSize: number });
+    return paginated(res, items, meta, { balancePaise });
+  }),
+);
 // Declared after /me so "me" is never read as an id.
 router.get('/:id/public', optionalAuthenticate, asyncHandler(ctrl.publicProfile));
 router.get('/:id/reviews', validate(reviewListQuerySchema, 'query'), asyncHandler(reviewsCtrl.listForSeller));

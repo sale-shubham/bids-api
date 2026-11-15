@@ -1,9 +1,10 @@
 import { prisma } from '@/core/prisma/client';
-import { BadRequest } from '@/core/errors/AppError';
+import { AppError, BadRequest } from '@/core/errors/AppError';
 import { env } from '@/core/config/env';
 import { ratingAvg } from '@/modules/reviews/reviews.rules';
 import { memberProfileSelect, memberPublicSelect, withMemberMoney, withMemberTrust } from './member.select';
 import { refreshSellerVerification } from './verification.service';
+import { gstinMatchesState } from '@/modules/invoices/invoice.rules';
 import { activeStrikeCount } from '@/modules/strikes/strikes.service';
 
 export { memberProfileSelect, memberPublicSelect };
@@ -63,10 +64,16 @@ export function isOwnMediaUrl(url: string, bases: string[] = allowedMediaBases()
 // Empty strings clear the optional fields.
 export async function updateProfile(
   memberId: string,
-  input: { name?: string; phone?: string | null; address?: string | null; avatarUrl?: string | null },
+  input: { name?: string; phone?: string | null; address?: string | null; avatarUrl?: string | null; gstin?: string | null; billingState?: string | null },
 ) {
   if (input.avatarUrl && !isOwnMediaUrl(input.avatarUrl)) {
     throw BadRequest('avatarUrl must be an uploaded image from this platform');
+  }
+  if (input.gstin !== undefined || input.billingState !== undefined) {
+    const cur = await prisma.member.findUnique({ where: { id: memberId }, select: { gstin: true, billingState: true } });
+    const gstin = input.gstin !== undefined ? input.gstin || null : (cur?.gstin ?? null);
+    const state = input.billingState !== undefined ? input.billingState || null : (cur?.billingState ?? null);
+    if (!gstinMatchesState(gstin, state)) throw new AppError(400, 'INVALID_GSTIN', 'The GSTIN does not match the billing state');
   }
   const data: Record<string, string | Date | null> = {};
   let phoneChanged = false;
@@ -80,7 +87,7 @@ export async function updateProfile(
     }
   }
   if (input.name !== undefined) data.name = input.name;
-  for (const k of ['phone', 'address', 'avatarUrl'] as const) {
+  for (const k of ['phone', 'address', 'avatarUrl', 'gstin', 'billingState'] as const) {
     if (input[k] !== undefined) data[k] = input[k] || null;
   }
   const updated = await prisma.member.update({ where: { id: memberId }, data, select: memberProfileSelect });

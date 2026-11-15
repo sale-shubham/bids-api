@@ -47,6 +47,10 @@ bids-api/
 │       ├── follows/          # POST|DELETE /sellers/:id/follow, GET /members/me/following (follows.service)
 │       ├── notification-preferences/ # GET|PUT /members/me/notification-preferences, POST /members/me/whatsapp; catalogue in notify/notify.catalogue.ts
 │       ├── analytics/        # POST /auctions/:id/view (recordView), GET /analytics/seller, /analytics/auctions/:id; analytics.rules (IST days, viewer key)
+│       ├── featured/         # POST|GET /auctions/:id/feature(/checkout); featured.rules (featuredUntil math, prices), featured.service (checkout, markFeaturePaid); promoted feed lives in auctions.service
+│       ├── referrals/        # referral codes, signup attach, qualification + reward (referrals.service, referrals.rules); GET /members/me/referral
+│       ├── credits/          # MemberCredit ledger (credits.service: debit under row lock, admin adjust); GET /members/me/credits
+│       ├── invoices/         # GST invoices: invoice.rules (FY, tax, words), invoices.service (issue, list, pdf url), invoice.pdf (pdfkit), invoice.settings; /invoices, /admin/invoices
 │       ├── deposits/         # POST /auctions/:id/deposit/checkout; deposits.rules (amounts, release decision), deposits.service (checkout, markDepositHeld), deposits.jobs (runDepositRelease)
 │       ├── strikes/          # strikes.rules / service (unpaid-sale strikes, policy, suspendMember, admin list / remove)
 │       ├── second-chance/    # /second-chance-offers (mine, :id, accept, decline); runner-up selection, offer DTO, expiry (POST /sales/:id/second-chance is in sales/)
@@ -55,7 +59,7 @@ bids-api/
 │       ├── leaderboard/      # GET /leaderboard (spent|won)
 │       ├── contact/          # POST /contact (rate limited, emails ADMIN_EMAIL with reply-to)
 │       └── admin/            # dashboard, members (PATCH), auctions (+deposit), categories (CRUD), commissions (+waive), payments, sales (list, release, refund), reviews (list, hide), reports (queue, resolve), settings (+legal), retention, strikes (remove), risk (review queue)
-├── readme/                   # ARCHITECTURE.md, methods/, flows/ (auth, reports, auctions, bidding, notifications, payments, checkout, deposits, strikes, risk, payouts, websocket, watchlist, reviews, questions, saved-searches, follows, notification-preferences, analytics, leaderboard, admin, legal-pages, deployment)
+├── readme/                   # ARCHITECTURE.md, methods/, flows/ (auth, reports, auctions, bidding, notifications, payments, checkout, deposits, strikes, risk, payouts, websocket, watchlist, reviews, questions, saved-searches, follows, notification-preferences, analytics, featured, referrals, invoices, leaderboard, admin, legal-pages, deployment)
 ├── docs/DOC_SYNC.md
 └── .claude/ .husky/ .github/workflows/
 ```

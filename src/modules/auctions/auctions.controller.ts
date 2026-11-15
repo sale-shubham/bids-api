@@ -19,6 +19,13 @@ export async function home(_req: Request, res: Response) {
   return ok(res, { ...(await svc.homeFeed()), serverTime: serverTime() });
 }
 
+export async function promoted(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const svc = await import('./auctions.service');
+  const { category, limit } = req.query as unknown as { category?: string; limit: number };
+  return ok(res, await svc.promotedAuctions({ category, limit }));
+}
+
 export async function categories(_req: Request, res: Response) {
   const { ok } = await import('@/core/http/response');
   const svc = await import('./auctions.service');

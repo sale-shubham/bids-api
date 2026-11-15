@@ -33,6 +33,8 @@ Code: `src/modules/auth/*`, `src/modules/members/*`, `src/modules/uploads/*`, `s
 
 `passwordHash` is never returned: all member reads go through `member.select.ts`.
 
+`POST /auth/signup` also accepts an optional `referralCode` (invalid, own or disabled codes are ignored silently; a valid one creates a PENDING referral, see `referrals.md`). `PATCH /members/me` accepts `gstin` and `billingState` (GSTIN format, prefix must equal the state, else 400 `INVALID_GSTIN`; see `invoices.md`).
+
 ## Error codes
 
 | Status | `code` | When |

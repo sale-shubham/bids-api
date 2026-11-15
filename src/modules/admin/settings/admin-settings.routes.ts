@@ -4,6 +4,7 @@ import { asyncHandler } from '@/core/middleware/asyncHandler';
 import { authenticate, requireRole } from '@/core/middleware/auth';
 import { validate } from '@/core/middleware/validate';
 import { param } from '@/core/http/params';
+import { invoiceSettingsSchema } from '@/modules/invoices/invoices.validation';
 import { LEGAL_PAGE_SLUGS, type LegalPageSlug } from '@/modules/settings/legal-pages.constants';
 import {
   legalPageBodySchema,
@@ -56,6 +57,27 @@ router.put(
     const { ok } = await import('@/core/http/response');
     const { setLegalPage } = await import('@/modules/settings/legal-pages.service');
     return ok(res, await setLegalPage(param(req, 'slug') as LegalPageSlug, req.body));
+  }),
+);
+
+// GET /admin/settings/invoice -> platform billing identity (admin-only, never public).
+router.get(
+  '/invoice',
+  asyncHandler(async (_req, res) => {
+    const { ok } = await import('@/core/http/response');
+    const { getInvoiceSettings } = await import('@/modules/invoices/invoice.settings');
+    return ok(res, await getInvoiceSettings());
+  }),
+);
+
+// PUT /admin/settings/invoice (whole object; gstin optional, must match stateCode)
+router.put(
+  '/invoice',
+  validate(invoiceSettingsSchema),
+  asyncHandler(async (req, res) => {
+    const { ok } = await import('@/core/http/response');
+    const { setInvoiceSettings } = await import('@/modules/invoices/invoice.settings');
+    return ok(res, await setInvoiceSettings({ ...req.body, gstin: req.body.gstin || null }));
   }),
 );
 

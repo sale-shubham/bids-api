@@ -17,6 +17,13 @@ export async function update(req: Request, res: Response) {
   return ok(res, { member: await svc.updateMember(param(req, 'id'), req.user!.sub, req.body) });
 }
 
+// POST /admin/members/:id/credits { amountPaise, note } -> { creditBalancePaise }
+export async function adjustCredits(req: Request, res: Response) {
+  const { ok } = await import('@/core/http/response');
+  const svc = await import('@/modules/credits/credits.service');
+  return ok(res, await svc.adminAdjust(param(req, 'id'), req.user!.sub, req.body), 201);
+}
+
 // GET /admin/members/:id/strikes -> { items }
 export async function strikes(req: Request, res: Response) {
   const { ok } = await import('@/core/http/response');

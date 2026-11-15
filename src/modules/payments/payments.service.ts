@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { getCommissionDTO, markCommissionPaid } from '@/modules/commissions/commissions.service';
 import { getSaleDTO, markSalePaid, storeTransferId } from '@/modules/sales/sales.service';
 import { getDepositDTO, markDepositHeld } from '@/modules/deposits/deposits.service';
+import { getFeaturePurchaseDTO, markFeaturePaid } from '@/modules/featured/featured.service';
 import { mapActivationStatus } from '@/providers/payment/route-status';
 import { refreshSellerVerification } from '@/modules/members/verification.service';
 
@@ -51,6 +52,12 @@ export async function verifyPayment(
     const deposit = depositId ? await getDepositDTO(depositId) : null;
     if (!deposit) throw new AppError(404, 'DEPOSIT_NOT_FOUND', 'Deposit not found');
     return { referenceType: 'DEPOSIT' as const, deposit };
+  }
+  if (order.referenceType === 'FEATURE') {
+    const { purchaseId } = await markFeaturePaid({ paymentOrderId: order.id, gatewayPaymentId: input.paymentId });
+    const purchase = purchaseId ? await getFeaturePurchaseDTO(purchaseId) : null;
+    if (!purchase) throw new AppError(404, 'FEATURE_PURCHASE_NOT_FOUND', 'Featured purchase not found');
+    return { referenceType: 'FEATURE' as const, purchase };
   }
   if (order.referenceType !== 'COMMISSION') {
     throw new AppError(409, 'ORDER_REFERENCE_UNKNOWN', 'This payment order cannot be settled');
@@ -177,6 +184,10 @@ async function processEvent(event: WebhookEvent) {
   }
   if (order.referenceType === 'DEPOSIT') {
     await markDepositHeld({ paymentOrderId: order.id, gatewayPaymentId: paymentId });
+    return;
+  }
+  if (order.referenceType === 'FEATURE') {
+    await markFeaturePaid({ paymentOrderId: order.id, gatewayPaymentId: paymentId });
     return;
   }
   if (order.referenceType !== 'COMMISSION') {

@@ -4,6 +4,8 @@
 
 Code: `src/modules/commissions/` (list, summary, checkout, settlement, reminders), `src/modules/payments/` (verify + webhook), `src/providers/payment/` (Razorpay + stub drivers).
 
+> Also settled here: `PaymentOrder.referenceType = 'FEATURE'` (paid featured listings, `featured.md`): verify and the webhook call `markFeaturePaid`; verify answers `{ referenceType: 'FEATURE', purchase }`. Credits (`referrals.md`) can pay a whole commission: `POST /commissions/:id/checkout` with `{ useCredits: true }` answers `{ paidWithCredits: true, commission }` (`409 INSUFFICIENT_CREDITS` if the balance does not cover it; no partial use, D15). A commission becoming PAID (any path) also issues a GST invoice and may qualify the seller's referral, both best-effort (`invoices.md`).
+
 ## Business rule
 
 When an auction sells, the close job creates a `Commission` (rate from `commission.rateBps` setting, default 5%; status `DUE`; `dueAt` = +7 days) and adds it to `Member.unpaidCommissionPaise`. While that is > 0 the seller cannot create auctions (`403 COMMISSION_UNPAID`). The seller pays through Razorpay Orders (one-time orders, no subscriptions). Money is integer paise.

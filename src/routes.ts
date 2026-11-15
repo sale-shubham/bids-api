@@ -35,6 +35,7 @@ import categoryRoutes from '@/modules/categories/categories.routes';
 import adminCategoriesRoutes from '@/modules/admin/categories/admin-categories.routes';
 import adminRiskRoutes from '@/modules/admin/risk/admin-risk.routes';
 
+import invoiceRoutes, { adminInvoicesRouter } from '@/modules/invoices/invoices.routes';
 import followRoutes from '@/modules/follows/follows.routes';
 import analyticsRoutes from '@/modules/analytics/analytics.routes';
 
@@ -49,6 +50,7 @@ router.use('/analytics', analyticsRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/commissions', commissionRoutes);
+router.use('/invoices', invoiceRoutes);
 router.use('/sales', salesRoutes);
 router.use('/payouts', payoutRoutes);
 router.use('/ws', wsRoutes);
@@ -67,6 +69,7 @@ router.use('/saved-searches', savedSearchRoutes);
 router.use('/admin/auctions', adminAuctionsRoutes);
 router.use('/admin/categories', adminCategoriesRoutes);
 router.use('/admin/commissions', adminCommissionsRoutes);
+router.use('/admin/invoices', adminInvoicesRouter);
 router.use('/admin/sales', adminSalesRoutes);
 router.use('/admin/payments', adminPaymentsRoutes);
 router.use('/admin/members', adminMembersRoutes);

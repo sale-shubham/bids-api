@@ -1,5 +1,7 @@
 # Admin (SUPER_ADMIN only)
 
+Engagement 2 additions: `POST /admin/members/:id/credits` (credit ledger adjustment, `referrals.md`), `creditBalancePaise` on the admin member DTO, `GET /admin/invoices?type=&q=&page&pageSize`, `GET/PUT /admin/settings/invoice` (billing identity, `invoices.md`), and the optional `featuredEnabled`, `featuredPrices`, `referralEnabled`, `referralRewardPaise`, `referralMaxRewardsPerMember` fields of `PUT /admin/settings` (also in `GET /settings/public`).
+
 All routes are under `/admin` and require `authenticate` + `requireRole('SUPER_ADMIN')`. Code: `src/modules/admin/{dashboard,members,auctions,commissions,payments,sales,reviews,reports,settings,retention,strikes,risk}`. With `REQUIRE_ADMIN_2FA=true` every route here answers 403 `TWO_FACTOR_SETUP_REQUIRED` for a Super Admin who has not enabled 2FA (`auth.md`). Lists use `paginated()` (`meta: { total, page, pageSize, totalPages }`, `page` / `pageSize` max 100).
 
 | Method | Path | Notes |

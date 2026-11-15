@@ -7,6 +7,8 @@ import { auctionBidsRouter, auctionBuyNowRouter } from '@/modules/bids/bids.rout
 import { auctionReviewRouter } from '@/modules/reviews/reviews.routes';
 import { auctionQuestionsRouter } from '@/modules/questions/questions.routes';
 import { auctionDepositRouter } from '@/modules/deposits/deposits.routes';
+import { auctionFeatureRouter } from '@/modules/featured/featured.routes';
+import { promotedQuerySchema } from '@/modules/featured/featured.validation';
 import * as ctrl from './auctions.controller';
 import { viewBodySchema } from '@/modules/analytics/analytics.validation';
 import {
@@ -25,6 +27,7 @@ const seller = [authenticate, requireRole('AUCTIONEER', 'SUPER_ADMIN'), requireA
 router.get('/', validate(listQuerySchema, 'query'), asyncHandler(ctrl.list));
 router.get('/home', asyncHandler(ctrl.home));
 router.get('/categories', asyncHandler(ctrl.categories));
+router.get('/promoted', validate(promotedQuerySchema, 'query'), asyncHandler(ctrl.promoted));
 router.get('/sitemap', asyncHandler(ctrl.sitemap));
 router.get('/mine', ...seller, validate(mineQuerySchema, 'query'), asyncHandler(ctrl.mine));
 router.post('/', ...seller, auctionWriteLimiter, validate(createAuctionSchema), asyncHandler(ctrl.create));
@@ -36,6 +39,7 @@ router.use('/:id/buy-now', auctionBuyNowRouter);
 router.use('/:id/review', auctionReviewRouter);
 router.use('/:id/questions', auctionQuestionsRouter);
 router.use('/:id/deposit', auctionDepositRouter);
+router.use('/:id/feature', auctionFeatureRouter);
 router.post('/:id/view', optionalAuthenticate, viewLimiter, validate(viewBodySchema), asyncHandler(ctrl.recordView));
 router.get('/:id/similar-sold', asyncHandler(ctrl.similarSold));
 router.get('/:id', optionalAuthenticate, asyncHandler(ctrl.detail));

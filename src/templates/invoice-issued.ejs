@@ -1,0 +1,6 @@
+<%- include('_head', { heading: 'Your invoice is ready', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  Invoice <strong><%= invoiceNo %></strong> for <strong><%= amount %></strong> has been issued<% if (auctionTitle) { %> for <strong><%= auctionTitle %></strong><% } %>. You can download it from your profile.
+                </p>
+<%- include('_foot', { ctaUrl: invoicesUrl, ctaLabel: 'Download your invoice', frontendUrl }) %>

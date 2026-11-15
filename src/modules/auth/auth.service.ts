@@ -27,12 +27,13 @@ export const AccountSuspended = () =>
 
 const hash = (password: string) => bcrypt.hash(password, BCRYPT_COST);
 
-export async function signup(input: { name: string; email: string; password: string; role: 'BIDDER' | 'AUCTIONEER' }) {
+export async function signup(input: { name: string; email: string; password: string; role: 'BIDDER' | 'AUCTIONEER'; referralCode?: string | null }) {
   const email = input.email;
   const existing = await prisma.member.findUnique({ where: { email }, select: { id: true, emailVerifiedAt: true } });
   if (existing?.emailVerifiedAt) throw EmailTaken();
 
   const passwordHash = await hash(input.password);
+  let memberId = existing?.id;
   if (existing) {
     // Unverified signup being retried: take the latest details.
     await prisma.member.update({
@@ -40,9 +41,20 @@ export async function signup(input: { name: string; email: string; password: str
       data: { name: input.name, passwordHash, role: input.role },
     });
   } else {
-    await prisma.member.create({
+    const created = await prisma.member.create({
       data: { email, name: input.name, passwordHash, role: input.role, emailVerifiedAt: null },
+      select: { id: true },
     });
+    memberId = created?.id;
+  }
+  // Invalid / own / disabled referral codes are ignored; a failure here never blocks signup.
+  if (input.referralCode && memberId) {
+    try {
+      const { attachReferral } = await import('@/modules/referrals/referrals.service');
+      await attachReferral(memberId, input.referralCode);
+    } catch (err) {
+      logger.warn({ err }, 'signup: could not attach referral');
+    }
   }
   return issueOtpChallenge(email, 'SIGNUP', { onCooldown: 'skip' });
 }

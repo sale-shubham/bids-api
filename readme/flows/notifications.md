@@ -13,6 +13,10 @@ Code: pipeline in `src/modules/notify/` (`notify.queue.ts`, `notify.service.ts`,
 
 Model `Notification { id, memberId, type, title, body, url, data Json?, dedupeKey @unique, readAt?, createdAt }`, index `(memberId, readAt, createdAt)`, cascade on member delete.
 
+## Engagement 2 types
+
+`feature-activated` (seller, featured listing paid, `featured.md`), `referral-rewarded` (referrer, credits added, `referrals.md`) and `invoice-issued` (FEATURE and DEPOSIT_FORFEIT invoices; email cannot be turned off, `invoices.md`). All three are in `notify.catalogue.ts`; `commission-paid` now also links to `/profile?tab=invoices`.
+
 ## Pipeline
 
 `enqueueNotification({ type, memberId, auctionId?, data?, dedupeKey })`:

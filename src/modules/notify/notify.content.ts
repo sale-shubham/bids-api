@@ -223,13 +223,51 @@ export function buildContent(c: ContentCtx): Content {
     case 'commission-paid': {
       const commission = formatInr(num(c.data.commissionPaise));
       const commissionPath = '/sell/commissions';
+      const invoicesPath = '/profile?tab=invoices';
       return {
         title: 'Commission payment received',
-        body: `We received your ${commission} commission payment for "${c.auctionTitle}". Thank you.`,
+        body: `We received your ${commission} commission payment for "${c.auctionTitle}". Thank you. Download your invoice in your profile.`,
         url: commissionPath,
         subject: `Commission payment of ${commission} received`,
         template: 'commission-paid',
-        templateData: { ...base, commission, commissionUrl: `${env.app.url}${commissionPath}` },
+        templateData: { ...base, commission, commissionUrl: `${env.app.url}${commissionPath}`, invoicesUrl: `${env.app.url}${invoicesPath}` },
+      };
+    }
+    case 'feature-activated': {
+      const days = num(c.data.days);
+      const until = dateText(c.data.featuredUntil);
+      return {
+        title: 'Your listing is featured',
+        body: `"${c.auctionTitle}" is featured${until ? ` until ${until}` : ''}${days ? ` (${days} day${days > 1 ? 's' : ''} purchased)` : ''}.`,
+        url: auctionPath,
+        subject: `"${c.auctionTitle}" is now featured`,
+        template: 'feature-activated',
+        templateData: { ...base, days, until },
+      };
+    }
+    case 'referral-rewarded': {
+      const reward = formatInr(num(c.data.rewardPaise));
+      const creditsPath = '/profile?tab=referrals';
+      return {
+        title: 'Referral reward credited',
+        body: `A member you referred completed their first transaction. ${reward} in credits was added to your account.`,
+        url: creditsPath,
+        subject: `You earned ${reward} in credits`,
+        template: 'referral-rewarded',
+        templateData: { ...base, reward, creditsUrl: `${env.app.url}${creditsPath}` },
+      };
+    }
+    case 'invoice-issued': {
+      const invoiceNo = str(c.data.invoiceNumber);
+      const amount = formatInr(num(c.data.totalPaise));
+      const invoicesPath = '/profile?tab=invoices';
+      return {
+        title: 'Invoice issued',
+        body: `Invoice ${invoiceNo} for ${amount} is ready. Download it from your profile.`,
+        url: invoicesPath,
+        subject: `Your NobleBid invoice ${invoiceNo}`,
+        template: 'invoice-issued',
+        templateData: { ...base, invoiceNo, amount, invoicesUrl: `${env.app.url}${invoicesPath}` },
       };
     }
     case 'report-filed': {

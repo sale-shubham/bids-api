@@ -192,6 +192,7 @@ describe('public reads', () => {
         checkoutMode: 'optional',
         depositThresholdPaise: 10_000_000,
         depositRateBps: 1000,
+        featuredEnabled: true, featuredPrices: { '1': 9900, '3': 24900, '7': 49900 }, referralEnabled: true, referralRewardPaise: 10_000, referralMaxRewardsPerMember: 20,
       },
     });
   });
@@ -309,6 +310,7 @@ describe('admin dashboard', () => {
       checkoutMode: 'required',
       depositThresholdPaise: 5_000_000,
       depositRateBps: 1500,
+      featuredEnabled: true, featuredPrices: { '1': 9900, '3': 24900, '7': 49900 }, referralEnabled: true, referralRewardPaise: 10_000, referralMaxRewardsPerMember: 20,
     };
     prismaMock.appSetting.findMany.mockResolvedValue([
       { key: 'commission.rateBps', value: '600' },

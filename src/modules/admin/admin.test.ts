@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const db = vi.hoisted(() => ({
   member: { findUnique: vi.fn(), update: vi.fn(), count: vi.fn(), findMany: vi.fn() },
   session: { deleteMany: vi.fn() },
+  memberCredit: { aggregate: vi.fn(async () => ({ _sum: { amountPaise: null } })), groupBy: vi.fn(async () => [] as unknown[]) },
   auction: { count: vi.fn(), findMany: vi.fn() },
   bid: { count: vi.fn() },
   commission: { aggregate: vi.fn(), findMany: vi.fn() },

@@ -27,6 +27,9 @@ export const NOTIFY_CATALOGUE: Record<NotifyType, CatalogueEntry> = {
   'deposit-held': { label: 'Bid deposit held', group: 'Payments', whatsappCapable: false },
   'deposit-refunded': { label: 'Bid deposit refunded', group: 'Payments', whatsappCapable: false },
   'deposit-forfeited': { label: 'Bid deposit forfeited', group: 'Payments', whatsappCapable: false },
+  'feature-activated': { label: 'Featured listing activated', group: 'Selling', whatsappCapable: false },
+  'invoice-issued': { label: 'Invoice issued', group: 'Payments', whatsappCapable: false },
+  'referral-rewarded': { label: 'Referral reward credited', group: 'Account', whatsappCapable: false },
   'question-answered': { label: 'Your question was answered', group: 'Community', whatsappCapable: false },
   'saved-search-match': { label: 'New listing matches a saved search', group: 'Community', whatsappCapable: false },
   'followed-seller-listed': { label: 'A seller you follow listed an item', group: 'Community', whatsappCapable: false },
@@ -37,7 +40,7 @@ export const NOTIFY_CATALOGUE: Record<NotifyType, CatalogueEntry> = {
 };
 
 const MANDATORY_PREFIXES = ['sale-', 'deposit-'];
-const MANDATORY_EXACT = ['commission-due', 'commission-paid', 'strike-issued', 'account-suspended', 'auction-won', 'second-chance-offer'];
+const MANDATORY_EXACT = ['commission-due', 'commission-paid', 'strike-issued', 'account-suspended', 'auction-won', 'second-chance-offer', 'invoice-issued'];
 
 /** Email cannot be turned off for these (money, account and win notices). */
 export const isMandatoryEmail = (type: string): boolean =>

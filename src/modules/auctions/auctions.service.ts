@@ -110,17 +110,36 @@ export async function listAuctions(q: ListQuery, now = new Date()) {
   return { items: rows.map((r) => toCard(r, now)), meta: pageMeta(total, paging) };
 }
 
+/** Live auctions with a running paid feature (soonest-expiring first), optionally within a category tree. */
+async function fetchPromoted(now: Date, take: number, categoryIds?: string[]) {
+  const live = statusWhere('live', now);
+  const where = { AND: [live, { featuredUntil: { gt: now } }, ...(categoryIds ? [{ categoryId: { in: categoryIds } }] : [])] };
+  return fetchCards(where, [{ featuredUntil: 'asc' }, { id: 'asc' }], 0, take);
+}
+
 export async function homeFeed(now = new Date()) {
-  const [featured, endingSoon, upcoming] = await Promise.all([
+  const [promoted, mostBids, endingSoon, upcoming] = await Promise.all([
+    fetchPromoted(now, HOME_LIMIT),
     fetchCards(statusWhere('live', now), [{ bidCount: 'desc' }, { endTime: 'asc' }, { id: 'asc' }], 0, HOME_LIMIT),
     fetchCards(statusWhere('live', now), [{ endTime: 'asc' }, { id: 'asc' }], 0, HOME_LIMIT),
     fetchCards(statusWhere('upcoming', now), [{ startTime: 'asc' }, { id: 'asc' }], 0, HOME_LIMIT),
   ]);
+  // Paid placements first, then the most-bid live auctions fill the rest (no duplicates).
+  const seen = new Set(promoted.map((r) => r.id));
+  const featured = [...promoted, ...mostBids.filter((r) => !seen.has(r.id))].slice(0, HOME_LIMIT);
   return {
     featured: featured.map((r) => toCard(r, now)),
     endingSoon: endingSoon.map((r) => toCard(r, now)),
     upcoming: upcoming.map((r) => toCard(r, now)),
   };
+}
+
+/** GET /auctions/promoted: live promoted auctions, category incl. descendants. */
+export async function promotedAuctions(q: { category?: string; limit: number }, now = new Date()) {
+  const categoryIds = q.category ? await resolveBrowseCategoryIds(q.category) : undefined;
+  if (q.category && !categoryIds) return { items: [] };
+  const rows = await fetchPromoted(now, q.limit, categoryIds ?? undefined);
+  return { items: rows.map((r) => toCard(r, now)) };
 }
 
 export const categoriesWithCounts = categoryCounts;

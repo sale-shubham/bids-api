@@ -23,12 +23,14 @@ const result = await build({
   external: ['@aws-sdk/*'],
   // CJS deps (pg, ejs, ioredis, …) call require(); give the ESM bundle one.
   banner: {
-    js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);",
+    js: "import { createRequire as __cr } from 'node:module'; import { fileURLToPath as __fu } from 'node:url'; import { dirname as __dn } from 'node:path'; const require = __cr(import.meta.url); const __dirname = __dn(__fu(import.meta.url));",
   },
   logLevel: 'info',
 });
 
 cpSync('src/templates', 'dist/templates', { recursive: true });
+// pdfkit reads its built-in font metrics (AFM) from __dirname/data at runtime.
+cpSync('node_modules/pdfkit/js/data', 'dist/data', { recursive: true });
 
 const bytes = Object.values(result.metafile.outputs).reduce((n, o) => n + o.bytes, 0);
 console.log(`bundle: ${(bytes / 1024 / 1024).toFixed(2)} MB`);

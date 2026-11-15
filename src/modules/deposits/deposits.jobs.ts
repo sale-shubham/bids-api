@@ -2,6 +2,7 @@ import { prisma } from '@/core/prisma/client';
 import { logger } from '@/core/logger/logger';
 import { toPaise } from '@/core/money';
 import { enqueueNotification } from '@/modules/notify/notify.queue';
+import { issueDepositForfeitInvoice } from '@/modules/invoices/invoices.service';
 import { releaseDecision } from './deposits.rules';
 
 const BATCH = 100;
@@ -58,6 +59,7 @@ export async function runDepositRelease(now = new Date()): Promise<DepositReleas
         });
         if (count === 0) continue;
         counts.forfeited++;
+        await issueDepositForfeitInvoice(d.id, now);
         await enqueueNotification({
           type: 'deposit-forfeited',
           memberId: d.memberId,

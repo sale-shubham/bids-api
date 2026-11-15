@@ -3,6 +3,7 @@ import { offsetArgs, buildOrderBy, type SortOrder } from '@/core/http/pagination
 import { AppError, NotFound } from '@/core/errors/AppError';
 import type { Prisma, Role } from '@prisma/client';
 import { withMemberMoney } from '@/modules/members/member.select';
+import { balancesFor, creditBalance } from '@/modules/credits/credits.service';
 import { refreshSellerVerification } from '@/modules/members/verification.service';
 
 // Backs the admin Members page: list, update (active / role / verified).
@@ -10,7 +11,7 @@ import { refreshSellerVerification } from '@/modules/members/verification.servic
 type AdminMemberRow = Prisma.MemberGetPayload<{ select: ReturnType<typeof memberSelect> }>;
 
 /** Admin DTO: booleans for 2FA / verified, payout status, money as numbers. */
-function toAdminDto(m: AdminMemberRow) {
+function toAdminDto(m: AdminMemberRow, creditBalancePaise = 0) {
   const { twoFactorEnabledAt, verifiedAt, payoutAccount, _count, ...rest } = m;
   return {
     ...withMemberMoney(rest),
@@ -18,6 +19,7 @@ function toAdminDto(m: AdminMemberRow) {
     twoFactorEnabled: !!twoFactorEnabledAt,
     payoutStatus: payoutAccount?.status ?? null,
     activeStrikes: _count?.strikes ?? 0,
+    creditBalancePaise,
   };
 }
 
@@ -83,7 +85,8 @@ export async function listMembers(params: ListParams) {
     getMemberStats(),
   ]);
 
-  return { items: items.map(toAdminDto), total, stats };
+  const balances = await balancesFor(items.map((m) => m.id));
+  return { items: items.map((m) => toAdminDto(m, balances.get(m.id) ?? 0)), total, stats };
 }
 
 // Tab counts — always the full All/Active/Inactive split, independent of the filter.
@@ -131,5 +134,5 @@ export async function updateMember(id: string, actorId: string, input: { isActiv
     const { disconnectMemberConnections } = await import('@/modules/ws/ws.service');
     await disconnectMemberConnections(id).catch(() => {});
   }
-  return toAdminDto(member);
+  return toAdminDto(member, await creditBalance(prisma, id));
 }

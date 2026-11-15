@@ -15,6 +15,8 @@ export const memberProfileSelect = {
   emailVerifiedAt: true,
   phoneVerifiedAt: true,
   whatsappOptInAt: true,
+  gstin: true,
+  billingState: true,
   twoFactorEnabledAt: true,
   verifiedAt: true,
   unpaidCommissionPaise: true,

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const db = vi.hoisted(() => ({
   member: { findUnique: vi.fn(), update: vi.fn() },
+  memberCredit: { aggregate: vi.fn(async () => ({ _sum: { amountPaise: null } })), groupBy: vi.fn(async () => [] as unknown[]) },
 }));
 vi.mock('@/core/prisma/client', () => ({ prisma: db }));
 vi.mock('@/core/config/env', () => ({ env: { storage: { cdnBaseUrl: 'https://cdn.test', s3: { bucket: '', region: 'ap-south-1' } }, twoFactor: { requireAdmin: false } } }));

@@ -77,6 +77,12 @@ const AUTHED: Route[] = [
   ['post', '/second-chance-offers/o1/decline'],
   ['get', '/payouts/account'],
   ['post', '/payouts/account'],
+  ['post', '/auctions/a1/feature/checkout'],
+  ['get', '/auctions/a1/feature'],
+  ['get', '/members/me/referral'],
+  ['get', '/members/me/credits'],
+  ['get', '/invoices/mine'],
+  ['get', '/invoices/i1/pdf'],
 ];
 
 const ADMIN: Route[] = [
@@ -110,6 +116,10 @@ const ADMIN: Route[] = [
   ['post', '/admin/strikes/st1/remove'],
   ['get', '/admin/risk'],
   ['patch', '/admin/risk/r1'],
+  ['post', '/admin/members/m2/credits'],
+  ['get', '/admin/invoices'],
+  ['get', '/admin/settings/invoice'],
+  ['put', '/admin/settings/invoice'],
 ];
 
 const SELLER_ONLY: Route[] = [
@@ -131,6 +141,8 @@ const SELLER_ONLY: Route[] = [
   ['post', '/sales/sale1/second-chance'],
   ['get', '/payouts/account'],
   ['post', '/payouts/account'],
+  ['post', '/auctions/a1/feature/checkout'],
+  ['get', '/auctions/a1/feature'],
 ];
 
 const BIDDER_ONLY: Route[] = [
@@ -162,6 +174,7 @@ const PUBLIC: Route[] = [
   ['get', '/categories'],
   ['get', '/categories/art/stats'],
   ['get', '/auctions/a1/similar-sold'],
+  ['get', '/auctions/promoted'],
   ['get', '/auctions/a1'],
   ['get', '/auctions/a1/bids'],
   ['get', '/members/m1/public'],

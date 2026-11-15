@@ -29,8 +29,8 @@ import { getPlatformSettings, setPlatformSettings } from './settings.service';
 import { getLegalPage, setLegalPage } from './legal-pages.service';
 import { sanitizeLegalHtml } from './legal-pages.sanitize';
 
-const valid = { commissionRateBps: 500, minIncrementPaise: 10000, antiSnipingMinutes: 2, maxPricePaise: 10_000_000_000, categories: ['Art', 'Books'], checkoutMode: 'optional' as const, depositThresholdPaise: 10_000_000, depositRateBps: 1000 };
-const { maxPricePaise: _omit, checkoutMode: _omit2, depositThresholdPaise: _omit3, depositRateBps: _omit4, ...legacy } = valid;
+const valid = { commissionRateBps: 500, minIncrementPaise: 10000, antiSnipingMinutes: 2, maxPricePaise: 10_000_000_000, categories: ['Art', 'Books'], checkoutMode: 'optional' as const, depositThresholdPaise: 10_000_000, depositRateBps: 1000, featuredEnabled: true, featuredPrices: { '1': 9900, '3': 24900, '7': 49900 }, referralEnabled: true, referralRewardPaise: 10_000, referralMaxRewardsPerMember: 20 };
+const { maxPricePaise: _omit, checkoutMode: _omit2, depositThresholdPaise: _omit3, depositRateBps: _omit4, featuredEnabled: _o5, featuredPrices: _o6, referralEnabled: _o7, referralRewardPaise: _o8, referralMaxRewardsPerMember: _o9, ...legacy } = valid;
 
 describe('platform settings validation', () => {
   it('accepts a valid object and enforces ranges', () => {

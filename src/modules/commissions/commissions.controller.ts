@@ -18,6 +18,7 @@ export async function summary(req: Request, res: Response) {
 export async function checkout(req: Request, res: Response) {
   const { ok } = await import('@/core/http/response');
   const svc = await import('./commissions.service');
+  if (req.body?.useCredits) return ok(res, await svc.payWithCredits(req.user!.sub, param(req, 'id')));
   return ok(res, await svc.checkout(req.user!.sub, param(req, 'id')));
 }
 

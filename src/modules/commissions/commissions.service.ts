@@ -4,6 +4,9 @@ import { toPaise, toPaiseOrNull } from '@/core/money';
 import { logger } from '@/core/logger/logger';
 import { offsetArgs, pageMeta } from '@/core/http/pagination';
 import { enqueueNotification } from '@/modules/notify/notify.queue';
+import { debitCredits } from '@/modules/credits/credits.service';
+import { issueCommissionInvoice } from '@/modules/invoices/invoices.service';
+import { qualifyReferralBestEffort } from '@/modules/referrals/referrals.service';
 
 const REF_TYPE = 'COMMISSION';
 export const ORDER_REUSE_MS = 30 * 60 * 1000;
@@ -239,16 +242,47 @@ export async function markCommissionPaid(
     };
   });
 
-  if (result.applied && result.commissionId) {
-    await enqueueNotification({
-      type: 'commission-paid',
-      memberId: result.sellerId,
-      auctionId: result.auctionId ?? undefined,
-      data: { commissionPaise: result.amountPaise },
-      dedupeKey: `commission-paid:${result.commissionId}`,
-    });
-  }
+  if (result.applied && result.commissionId) await afterCommissionPaid({ ...result, commissionId: result.commissionId }, now);
   return { applied: result.applied, commissionId: result.commissionId };
+}
+
+/** Side effects after a commission became PAID (all best-effort after the commit): notice, GST invoice, referral qualification. */
+export async function afterCommissionPaid(
+  c: { commissionId: string; auctionId: string | null; amountPaise: number; sellerId: string },
+  now = new Date(),
+) {
+  await enqueueNotification({
+    type: 'commission-paid',
+    memberId: c.sellerId,
+    auctionId: c.auctionId ?? undefined,
+    data: { commissionPaise: c.amountPaise },
+    dedupeKey: `commission-paid:${c.commissionId}`,
+  });
+  await issueCommissionInvoice(c.commissionId, now);
+  await qualifyReferralBestEffort([c.sellerId], now);
+}
+
+/**
+ * Pay one DUE commission entirely with credits (no partial use). ONE transaction: debit the ledger, then the guarded
+ * DUE -> PAID move, so a concurrent payment either wins the move (and this debit rolls back) or loses it.
+ */
+export async function payWithCredits(memberId: string, commissionId: string, now = new Date()) {
+  const result = await prisma.$transaction(async (tx) => {
+    const commission = await tx.commission.findFirst({
+      where: { id: commissionId, sellerId: memberId },
+      select: { id: true, sellerId: true, auctionId: true, amountPaise: true, status: true },
+    });
+    if (!commission) throw notFound();
+    if (commission.status !== 'DUE') throw notDue();
+    const amountPaise = toPaise(commission.amountPaise);
+    await debitCredits(tx, { memberId, amountPaise, reason: 'COMMISSION_PAYMENT', refType: 'COMMISSION', refId: commission.id });
+    const moved = await tx.commission.updateMany({ where: { id: commission.id, status: 'DUE' }, data: { status: 'PAID', paidAt: now } });
+    if (moved.count !== 1) throw notDue();
+    await decrementUnpaid(tx, commission.sellerId, commission.amountPaise);
+    return { commissionId: commission.id, auctionId: commission.auctionId as string | null, amountPaise, sellerId: commission.sellerId };
+  });
+  await afterCommissionPaid(result, now);
+  return { paidWithCredits: true as const, commission: await getCommissionDTO(result.commissionId, now) };
 }
 
 /** Admin waive (POST /admin/commissions/:id/waive): DUE -> WAIVED, decrement unpaid (clamped). */

@@ -12,6 +12,12 @@ export const listMembersQuery = Joi.object({
   sortOrder: sortOrderSchema,
 });
 
+// POST /admin/members/:id/credits: non-zero, +/- (a debit cannot take the balance below 0).
+export const creditAdjustBody = Joi.object({
+  amountPaise: Joi.number().integer().min(-10_000_000).max(10_000_000).invalid(0).required(),
+  note: Joi.string().trim().min(3).max(200).required(),
+});
+
 // PATCH /admin/members/:id
 export const updateMemberBody = Joi.object({
   isActive: Joi.boolean(),

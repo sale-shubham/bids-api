@@ -44,7 +44,7 @@ Every transition is a guarded `updateMany` (`WHERE status IN (...)`), so concurr
 | POST | `/sales/:id/confirm` | buyer | PAID\|SHIPPED -> DELIVERED, then release -> RELEASED. If the release call fails the sale stays DELIVERED (the job retries); the response is still 200 with the current state |
 | POST | `/sales/:id/dispute` | buyer | `{ reason: 10..1000 }`; PAID\|SHIPPED\|DELIVERED -> DISPUTED; notifies the seller and every active SUPER_ADMIN |
 | POST | `/sales/:id/second-chance` | seller (AUCTIONEER) | offer a CANCELLED sale to the runner-up -> `{ offer }`; see `strikes.md` |
-| POST | `/payments/verify` | order owner | now `{ referenceType: 'COMMISSION', commission }`, `{ referenceType: 'SALE', sale }` or `{ referenceType: 'DEPOSIT', deposit }` (`deposits.md`) |
+| POST | `/payments/verify` | order owner | now `{ referenceType: 'COMMISSION', commission }`, `{ referenceType: 'SALE', sale }`, `{ referenceType: 'DEPOSIT', deposit }` (`deposits.md`) or `{ referenceType: 'FEATURE', purchase }` (`featured.md`) |
 | GET | `/admin/sales?status=&q=&page&limit` | SUPER_ADMIN | paginated `SaleDTO` (role ADMIN) with buyer / seller emails; `q` matches id, auction title, buyer / seller name or email |
 | POST | `/admin/sales/:id/release` | SUPER_ADMIN | DISPUTED\|DELIVERED -> RELEASED (`resolution = RELEASED_BY_ADMIN`, `resolvedAt` when it was disputed); 502 `RELEASE_FAILED` when the gateway call fails |
 | POST | `/admin/sales/:id/refund` | SUPER_ADMIN | `{ note? <= 500 }`; PAID\|SHIPPED\|DELIVERED\|DISPUTED -> REFUNDED; 409 `SALE_NO_PAYMENT` without a payment id; marks the PAID Commission row WAIVED; notifies both |
@@ -77,7 +77,7 @@ Lambda `salesMaintenance`, `rate(1 hour)` (`index.salesMaintenanceHandler`; loca
 
 ## Notifications
 
-`sale-receipt` (buyer), `sale-paid` (seller), `sale-shipped` (buyer), `sale-released` (seller), `sale-disputed` (seller + each SUPER_ADMIN), `sale-refunded` (both), `sale-cancelled` (both). Trust-2 types (`strike-issued`, `account-suspended`, `deposit-*`, `second-chance-*`) are in `strikes.md` / `deposits.md`. Dedupe `<type>:<saleId>` and `:<memberId>` for the multi-recipient ones. Links: buyer `/purchases/<id>`, seller `/sell/sales/<id>`, admin `/admin/sales`. Details in `notifications.md`.
+Hooks (best-effort, never fail the sale): `markSalePaid` issues a COMMISSION GST invoice for the PAID commission row it writes (`invoices.md`); a sale reaching RELEASED qualifies the buyer's and the seller's referral (`referrals.md`). `sale-receipt` (buyer), `sale-paid` (seller), `sale-shipped` (buyer), `sale-released` (seller), `sale-disputed` (seller + each SUPER_ADMIN), `sale-refunded` (both), `sale-cancelled` (both). Trust-2 types (`strike-issued`, `account-suspended`, `deposit-*`, `second-chance-*`) are in `strikes.md` / `deposits.md`. Dedupe `<type>:<saleId>` and `:<memberId>` for the multi-recipient ones. Links: buyer `/purchases/<id>`, seller `/sell/sales/<id>`, admin `/admin/sales`. Details in `notifications.md`.
 
 ## Reviews
 

@@ -106,6 +106,10 @@ model Member {
   followerCount         Int       @default(0)
   // Opted in to WhatsApp alerts (needs a verified phone); cleared when the phone changes.
   whatsappOptInAt       DateTime?
+  // Referral code (8-char uppercase base32), generated lazily; GST details for invoices.
+  referralCode          String?   @unique
+  gstin                 String?
+  billingState          String? // 2-digit GST state code
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -143,6 +147,12 @@ model Member {
   following               Follow[]                 @relation("Following")
   followers               Follow[]                 @relation("Followers")
   notificationPreferences NotificationPreference[]
+
+  featurePurchases FeaturePurchase[]
+  referralsMade    Referral[]        @relation("ReferralsMade")
+  referredBy       Referral?         @relation("ReferredBy")
+  credits          MemberCredit[]
+  invoices         Invoice[]
 
   @@index([role])
 }
@@ -230,6 +240,8 @@ model Auction {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   deletedAt         DateTime?
+  // Paid featured listing runs until this time (capped at endTime); null = never featured.
+  featuredUntil     DateTime?
 
   bids               Bid[]
   maxBids            MaxBid[]
@@ -242,8 +254,10 @@ model Auction {
   secondChanceOffers SecondChanceOffer[]
   shillSignals       ShillSignal[]
   statsDaily         AuctionStatDaily[]
+  featurePurchases   FeaturePurchase[]
 
   @@index([status, endTime])
+  @@index([featuredUntil])
   @@index([status, startTime])
   @@index([sellerId])
   @@index([category, status])
@@ -803,4 +817,116 @@ model AuctionViewer {
 
   @@id([auctionId, viewerKey, date])
   @@index([date])
+}
+
+// ----------------------------------------------------------------------------
+// ENGAGEMENT 2: paid featured listings, referral credits, GST invoices
+// ----------------------------------------------------------------------------
+
+enum FeatureStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+// A seller's purchase of N days of featured placement on one auction.
+model FeaturePurchase {
+  id             String        @id @default(cuid())
+  auction        Auction       @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  auctionId      String
+  seller         Member        @relation(fields: [sellerId], references: [id])
+  sellerId       String
+  days           Int
+  amountPaise    BigInt
+  status         FeatureStatus @default(PENDING)
+  paidWith       String? // 'RAZORPAY' | 'CREDITS'
+  paymentOrderId String?       @unique
+  paidAt         DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([sellerId, createdAt])
+  @@index([auctionId])
+}
+
+enum ReferralStatus {
+  PENDING
+  QUALIFIED
+  REWARDED
+  REJECTED
+}
+
+model Referral {
+  id           String         @id @default(cuid())
+  referrer     Member         @relation("ReferralsMade", fields: [referrerId], references: [id])
+  referrerId   String
+  referee      Member         @relation("ReferredBy", fields: [refereeId], references: [id])
+  refereeId    String         @unique
+  status       ReferralStatus @default(PENDING)
+  qualifiedAt  DateTime?
+  rewardedAt   DateTime?
+  rejectReason String?
+  createdAt    DateTime       @default(now())
+
+  @@index([referrerId, status])
+}
+
+enum CreditReason {
+  REFERRAL_REWARD
+  FEATURE_PURCHASE
+  COMMISSION_PAYMENT
+  ADMIN_ADJUSTMENT
+}
+
+// Platform-credit ledger; balance = SUM(amountPaise). Debits are negative and never take the balance below 0.
+model MemberCredit {
+  id          String       @id @default(cuid())
+  member      Member       @relation(fields: [memberId], references: [id])
+  memberId    String
+  amountPaise BigInt
+  reason      CreditReason
+  refType     String?
+  refId       String?
+  note        String?
+  createdById String?
+  createdAt   DateTime     @default(now())
+
+  @@index([memberId, createdAt])
+}
+
+enum InvoiceType {
+  COMMISSION
+  FEATURE
+  DEPOSIT_FORFEIT
+}
+
+model InvoiceCounter {
+  financialYear String @id
+  seq           Int    @default(0)
+}
+
+model Invoice {
+  id            String      @id @default(cuid())
+  number        String      @unique
+  financialYear String
+  seq           Int
+  type          InvoiceType
+  refId         String
+  member        Member      @relation(fields: [memberId], references: [id])
+  memberId      String
+  buyerName     String
+  buyerGstin    String?
+  buyerState    String?
+  placeOfSupply String?
+  taxablePaise  BigInt
+  cgstPaise     BigInt
+  sgstPaise     BigInt
+  igstPaise     BigInt
+  totalPaise    BigInt
+  isTaxInvoice  Boolean
+  issuedAt      DateTime
+  pdfKey        String?
+  createdAt     DateTime    @default(now())
+
+  @@unique([type, refId])
+  @@index([memberId, issuedAt])
 }

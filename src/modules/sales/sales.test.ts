@@ -28,6 +28,8 @@ vi.mock('@/core/prisma/client', () => ({ prisma: db }));
 vi.mock('@/core/logger/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/providers/payment', () => ({ paymentProvider: provider }));
 vi.mock('@/modules/notify/notify.queue', () => ({ enqueueNotification: enqueue }));
+const referral = vi.hoisted(() => ({ qualifyReferralBestEffort: vi.fn(async (_ids: string[]) => undefined) }));
+vi.mock('@/modules/referrals/referrals.service', () => referral);
 const disconnect = vi.hoisted(() => vi.fn(async (_id: string) => undefined));
 vi.mock('@/modules/ws/ws.service', () => ({ disconnectMemberConnections: disconnect }));
 
@@ -228,6 +230,7 @@ describe('markSalePaid', () => {
     });
     expect(db.commission.create).toHaveBeenCalledWith({
       data: { auctionId: 'a1', sellerId: 's1', rateBps: 500, amountPaise: 5_000n, status: 'PAID', dueAt: now, paidAt: now, paymentOrderId: 'po1' },
+      select: { id: true },
     });
     expect(db.paymentOrder.updateMany).toHaveBeenCalledWith({
       where: { id: 'po1', status: { not: 'PAID' } },
@@ -333,6 +336,18 @@ describe('confirm + release', () => {
       db.sale.findFirst.mockResolvedValue(state(status));
       expect(await code(svc.confirmSale('b1', 'sale1', now))).toBe('409:SALE_INVALID_STATE');
     }
+  });
+
+  it('a release qualifies the referral of buyer and seller; a failed release does not', async () => {
+    db.sale.findUnique.mockResolvedValue({ ...state('DELIVERED'), transferId: 'trf_1' });
+    db.sale.updateMany.mockResolvedValue({ count: 1 });
+    provider.releaseTransfer.mockResolvedValue(undefined);
+    await svc.releaseSale('sale1', { from: ['DELIVERED'] }, now);
+    expect(referral.qualifyReferralBestEffort).toHaveBeenCalledWith(['b1', 's1'], now);
+    referral.qualifyReferralBestEffort.mockClear();
+    provider.releaseTransfer.mockRejectedValue(new Error('gateway down'));
+    await svc.releaseSale('sale1', { from: ['DELIVERED'] }, now);
+    expect(referral.qualifyReferralBestEffort).not.toHaveBeenCalled();
   });
 
   it('releaseSale does nothing when the sale is not in an allowed state', async () => {

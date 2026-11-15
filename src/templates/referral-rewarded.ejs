@@ -1,0 +1,6 @@
+<%- include('_head', { heading: 'Referral reward credited', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  A member you referred completed their first transaction. We added <strong><%= reward %></strong> in credits to your account. Use them for featured listings or commissions.
+                </p>
+<%- include('_foot', { ctaUrl: creditsUrl, ctaLabel: 'View credits', frontendUrl }) %>

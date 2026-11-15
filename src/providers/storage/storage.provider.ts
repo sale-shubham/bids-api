@@ -12,7 +12,7 @@ export interface StorageProvider {
   // Presigned direct-upload support. keyFor builds a deterministic object key
   // under `folder`; presignPut returns a short-lived PUT URL the browser uploads
   // the raw bytes to directly (Content-Type must match `type`, body must be exactly
-  // `size` bytes — both are signed into the URL).
+  // `size` bytes - both are signed into the URL).
   keyFor(folder: string, ext: string): string;
   presignPut(key: string, type: string, size: number, expiresIn?: number): Promise<string>;
 
@@ -21,6 +21,9 @@ export interface StorageProvider {
   // safeguards). Minted fresh on every read; never persisted. Public catalog
   // images keep using the permanent url() above.
   presignGet(key: string, expiresIn?: number): Promise<string>;
+
+  // Server-side upload of a generated private object (invoice PDFs). Read it back with presignGet only.
+  putObject(key: string, body: Buffer, contentType: string): Promise<void>;
 
   // Only public URLs are persisted (e.g. Auction images) â€” this
   // reverses url() to recover the S3 key when deleting.
