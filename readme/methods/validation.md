@@ -84,6 +84,7 @@ Schemas defined inline in their route file (still through `validate()`):
 | Route file | Schema | Fields |
 |---|---|---|
 | `admin/auctions/admin-auctions.routes.ts` | `listQuerySchema` | `status` `live` \| `upcoming` \| `ended` \| `cancelled`, `q` ≤ 100, paging |
+| `admin/commissions/admin-commissions.routes.ts` | `waiveBodySchema` | optional body, `note` trimmed 3-200 chars (defaults to `{}`) |
 | `admin/commissions/admin-commissions.routes.ts` | `listQuerySchema` | `status` `due` (default) \| `paid` \| `waived` \| `all`, paging |
 | `admin/payments/admin-payments.routes.ts` | `listQuerySchema` | `status` `created` \| `paid` \| `failed`, paging |
 | `admin/settings/admin-settings.routes.ts` | `deviceLimitSchema` | `memberLimit`, `superAdminLimit`, each 1-20, both required |

@@ -13,7 +13,7 @@ Code: `src/modules/questions/questions.{routes,controller,service,validation,rul
 | GET | `/auctions/:id/questions` | public, optional auth | `{ items: QuestionDTO[] }`, newest first, max 100, never hidden ones. 404 `AUCTION_NOT_FOUND` (cancelled ones only for the seller / SUPER_ADMIN) |
 | POST | `/auctions/:id/questions` | BIDDER (active), `qaLimiter` | `{ question: trimmed 5..500 }` -> 201 `{ question }` |
 | POST | `/questions/:id/answer` | AUCTIONEER / SUPER_ADMIN (active), must be the auction's seller | `{ answer: trimmed 1..1000 }` -> `{ question }` |
-| POST | `/questions/:id/hide` | AUCTIONEER / SUPER_ADMIN (active): the auction's seller or SUPER_ADMIN | `{ ok: true }`, idempotent |
+| POST | `/questions/:id/hide` | AUCTIONEER / SUPER_ADMIN (active): the auction's seller or SUPER_ADMIN | `{ ok: true }`, idempotent. SUPER_ADMIN may hide any question (also from `/admin/reports`); sellers only on their own auction |
 
 `QuestionDTO = { id, auctionId, question, answer|null, answeredAt|null, createdAt, askerLabel (bidderLabel), isMine }`.
 

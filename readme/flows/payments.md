@@ -44,7 +44,7 @@ The browser callback and the webhook race on purpose: whichever arrives first se
 | POST | `/payments/verify` | any authenticated member who owns the order | `{ referenceType: 'COMMISSION', commission: CommissionDTO }` for a sale order `{ referenceType: 'SALE', sale: SaleDTO }`, or for a bid deposit `{ referenceType: 'DEPOSIT', deposit: DepositDTO }` |
 | POST | `/payments/webhook` | none (Razorpay, `X-Razorpay-Signature`) | `{ processed: true }` or `{ skipped: true }` |
 
-`CommissionDTO` = `{ id, auctionId, auction: { id, title, coverImage, finalBidPaise, endedAt }, rateBps, amountPaise, status: 'DUE'|'PAID'|'WAIVED', dueAt, paidAt, createdAt, isOverdue }` (`isOverdue` = DUE and past `dueAt`).
+`CommissionDTO` (seller-facing, never carries the admin's waive note; the admin list and waive response add `waivedNote: string|null`) = `{ id, auctionId, auction: { id, title, coverImage, finalBidPaise, endedAt }, rateBps, amountPaise, status: 'DUE'|'PAID'|'WAIVED', dueAt, paidAt, createdAt, isOverdue }` (`isOverdue` = DUE and past `dueAt`).
 
 ## Errors
 
@@ -77,7 +77,7 @@ The browser callback and the webhook race on purpose: whichever arrives first se
 
 ## Waive and reminders
 
-- `waiveCommission(commissionId, adminId)` (admin route `POST /admin/commissions/:id/waive`, see `admin.md`): DUE -> WAIVED, unpaid decremented with the same clamp; 409 `COMMISSION_NOT_DUE` otherwise.
+- `waiveCommission(commissionId, adminId, note?, now?)` stores `Commission.waivedNote` (nullable text, migration `20261116030000_commission_waive_note`) (admin route `POST /admin/commissions/:id/waive`, see `admin.md`): DUE -> WAIVED, unpaid decremented with the same clamp; 409 `COMMISSION_NOT_DUE` otherwise.
 - `runCommissionReminders(now)`: DUE commissions past `dueAt` or older than 3 days -> `commission-due` notification with `dedupeKey commission-reminder:<id>:<YYYY-MM-DD>` (UTC date), so at most one per commission per day. Lambda: `commissionReminder` (`rate(1 day)`, `index.commissionReminderHandler`). Local dev server: once at startup, then every 6 h.
 
 ## Stub mode (`PAYMENT_DRIVER=stub`, the default)

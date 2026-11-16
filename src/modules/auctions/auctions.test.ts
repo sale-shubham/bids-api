@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ELECTRONICS = vi.hoisted(() => ({
   id: 'cat1',
@@ -26,7 +26,7 @@ const db = vi.hoisted(() => ({
   maxBid: { findUnique: vi.fn(async () => null as unknown) },
   review: { findUnique: vi.fn(async () => null as unknown) },
   sale: { findUnique: vi.fn(async () => null as unknown), findFirst: vi.fn(async () => null as unknown) },
-  auctionDeposit: { findUnique: vi.fn(async () => null as unknown) },
+  auctionDeposit: { findUnique: vi.fn(async () => null as unknown), findMany: vi.fn(async () => [] as unknown[]) },
   strike: { count: vi.fn(async () => 0) },
   sellerPayoutAccount: { findUnique: vi.fn(async () => null as unknown) },
   savedSearch: { findMany: vi.fn(async () => []) },
@@ -37,6 +37,8 @@ const db = vi.hoisted(() => ({
     findMany: vi.fn(async () => [{ id: 'cat1', parentId: null }]),
   },
 }));
+const enqueue = vi.hoisted(() => vi.fn(async (_m: unknown) => {}));
+vi.mock('@/modules/notify/notify.queue', () => ({ enqueueNotification: enqueue }));
 vi.mock('@/core/prisma/client', () => ({ prisma: db }));
 vi.mock('@/core/config/env', () => ({
   env: { storage: { cdnBaseUrl: 'https://cdn.example.com', s3: { bucket: 'b', region: 'ap-south-1' } } },
@@ -246,6 +248,48 @@ describe('service ownership / 409 rules', () => {
     expect(db.auction.update).toHaveBeenCalledWith({
       where: { id: 'a1' },
       data: { status: 'CANCELLED', deletedAt: now },
+    });
+  });
+  describe('cancel notifications', () => {
+    const admin = { sub: 'admin', role: 'SUPER_ADMIN' as const };
+    const sent = () => enqueue.mock.calls.map((c) => c[0] as { memberId: string; type: string; dedupeKey: string; data: Record<string, unknown> });
+    beforeEach(() => {
+      enqueue.mockClear();
+      db.auction.findUnique.mockResolvedValue({ sellerId: 'seller', bidCount: 3, deletedAt: null });
+      db.auction.update.mockResolvedValue({});
+      db.bid.findMany.mockResolvedValue([{ bidderId: 'b1' }, { bidderId: 'b2' }] as never);
+      db.auctionDeposit.findMany.mockResolvedValue([{ memberId: 'b2' }, { memberId: 'd1' }]);
+    });
+    afterEach(() => {
+      db.bid.findMany.mockReset();
+      db.bid.findMany.mockImplementation(async () => []);
+      db.auctionDeposit.findMany.mockReset();
+      db.auctionDeposit.findMany.mockImplementation(async () => []);
+    });
+    it('admin cancel: bidders, deposit holders (deduped) and the seller are notified', async () => {
+      await svc.deleteAuction('a1', admin, now);
+      const msgs = sent();
+      expect(msgs.map((m) => m.memberId).sort()).toEqual(['b1', 'b2', 'd1', 'seller']);
+      expect(msgs.every((m) => m.type === 'auction-cancelled')).toBe(true);
+      expect(msgs.find((m) => m.memberId === 'b1')!.data).toMatchObject({ audience: 'bidder', deposit: false });
+      expect(msgs.find((m) => m.memberId === 'b2')!.data).toMatchObject({ deposit: true });
+      expect(msgs.find((m) => m.memberId === 'd1')!.data).toMatchObject({ deposit: true });
+      expect(msgs.find((m) => m.memberId === 'seller')!.data).toMatchObject({ audience: 'seller' });
+      expect(msgs.find((m) => m.memberId === 'b1')!.dedupeKey).toBe('auction-cancelled:a1:b1');
+      expect(db.auctionDeposit.findMany).toHaveBeenCalledWith({ where: { auctionId: 'a1', status: 'HELD' }, select: { memberId: true } });
+    });
+    it('seller cancel: the seller is not notified', async () => {
+      db.auction.findUnique.mockResolvedValue({ sellerId: 'seller', bidCount: 0, deletedAt: null });
+      db.auction.updateMany.mockResolvedValue({ count: 1 });
+      db.bid.findMany.mockResolvedValue([] as never);
+      await svc.deleteAuction('a1', seller, now);
+      expect(sent().map((m) => m.memberId)).toEqual(['b2', 'd1']);
+    });
+    it('a failing enqueue or lookup never fails the cancel', async () => {
+      enqueue.mockRejectedValueOnce(new Error('sqs down'));
+      expect(await svc.deleteAuction('a1', admin, now)).toEqual({ id: 'a1' });
+      db.bid.findMany.mockRejectedValueOnce(new Error('db down'));
+      expect(await svc.deleteAuction('a1', admin, now)).toEqual({ id: 'a1' });
     });
   });
   it('republish: only effective ENDED with zero bids', async () => {

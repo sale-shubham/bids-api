@@ -168,6 +168,21 @@ describe('formatInr + templates', () => {
     expect(buildContent({ ...ctx, type: 'reserve-not-met', data: {} })).toMatchObject({ template: 'reserve-not-met' });
   });
 
+  it('auction-cancelled: bidder copy, deposit refund line, seller copy, both templates render', async () => {
+    const ctx = { auctionId: 'a1', auctionTitle: 'Vintage Watch', memberName: 'Ramesh' };
+    const plain = buildContent({ ...ctx, type: 'auction-cancelled', data: { audience: 'bidder', deposit: false } });
+    const dep = buildContent({ ...ctx, type: 'auction-cancelled', data: { audience: 'bidder', deposit: true } });
+    const sel = buildContent({ ...ctx, type: 'auction-cancelled', data: { audience: 'seller' } });
+    expect(plain).toMatchObject({ template: 'auction-cancelled', url: '/auctions/a1' });
+    expect(plain.body).not.toMatch(/refunded/);
+    expect(dep.body).toMatch(/deposit will be refunded automatically/);
+    expect(sel.body).toMatch(/administrator cancelled your auction/);
+    const html = await renderEmail('auction-cancelled', { ...dep.templateData, auctionUrl: 'https://app.test/auctions/a1' });
+    expect(html.text).toMatch(/refunded automatically/);
+    const sellerHtml = await renderEmail('auction-cancelled', { ...sel.templateData, auctionUrl: 'https://app.test/auctions/a1' });
+    expect(sellerHtml.text).toMatch(/administrator cancelled/);
+  });
+
   it('builds content for the review / question / saved-search types', () => {
     const ctx = { auctionId: 'a1', auctionTitle: 'Vintage Watch', memberName: 'Ramesh' };
     expect(buildContent({ ...ctx, type: 'review-received', data: { rating: 4, sellerId: 's1' } })).toMatchObject({

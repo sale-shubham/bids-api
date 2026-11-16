@@ -24,6 +24,7 @@ const commissionSelect = {
   dueAt: true,
   paidAt: true,
   createdAt: true,
+  waivedNote: true,
   auction: { select: { id: true, title: true, images: true, currentBidPaise: true, endedAt: true } },
 } as const;
 
@@ -36,6 +37,7 @@ type CommissionRow = {
   dueAt: Date;
   paidAt: Date | null;
   createdAt: Date;
+  waivedNote?: string | null;
   auction: { id: string; title: string; images: string[]; currentBidPaise: bigint | number; endedAt: Date | null };
 };
 
@@ -119,7 +121,7 @@ export async function listAll(q: { status: CommissionStatusFilter; page: number;
     }),
     prisma.commission.count({ where }),
   ]);
-  const items = rows.map((r) => ({ ...toCommissionDTO(r as unknown as CommissionRow, now), seller: r.seller }));
+  const items = rows.map((r) => ({ ...toCommissionDTO(r as unknown as CommissionRow, now), waivedNote: r.waivedNote ?? null, seller: r.seller }));
   return { items, meta: pageMeta(total, q) };
 }
 
@@ -286,7 +288,12 @@ export async function payWithCredits(memberId: string, commissionId: string, now
 }
 
 /** Admin waive (POST /admin/commissions/:id/waive): DUE -> WAIVED, decrement unpaid (clamped). */
-export async function waiveCommission(commissionId: string, adminId: string, now = new Date()): Promise<CommissionDTO> {
+export async function waiveCommission(
+  commissionId: string,
+  adminId: string,
+  note: string | null = null,
+  now = new Date(),
+): Promise<CommissionDTO & { waivedNote: string | null }> {
   await prisma.$transaction(async (tx) => {
     const commission = await tx.commission.findUnique({
       where: { id: commissionId },
@@ -295,13 +302,15 @@ export async function waiveCommission(commissionId: string, adminId: string, now
     if (!commission) throw notFound();
     const moved = await tx.commission.updateMany({
       where: { id: commissionId, status: 'DUE' },
-      data: { status: 'WAIVED' },
+      data: { status: 'WAIVED', waivedNote: note },
     });
     if (moved.count !== 1) throw notDue();
     await decrementUnpaid(tx, commission.sellerId, commission.amountPaise);
   });
   logger.info({ commissionId, adminId }, 'commission waived');
-  return getCommissionDTO(commissionId, now);
+  const row = await prisma.commission.findUnique({ where: { id: commissionId }, select: commissionSelect });
+  if (!row) throw notFound();
+  return { ...toCommissionDTO(row as CommissionRow, now), waivedNote: (row as CommissionRow).waivedNote ?? null };
 }
 
 // ---------------------------------------------------------------- reminders

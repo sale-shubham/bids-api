@@ -1,0 +1,17 @@
+<%= fromName %> - Auction cancelled
+
+Hi <%= name %>,
+
+<% if (locals.seller) { -%>
+An administrator cancelled your auction "<%= auctionTitle %>".
+<% } else { -%>
+The auction "<%= auctionTitle %>" was cancelled, so no one will win it.
+<% if (locals.deposit) { -%>
+
+Your deposit will be refunded automatically to your original payment method.
+<% } -%>
+<% } -%>
+
+View auction: <%= auctionUrl %>
+
+Support: <%= websiteUrl %>/contact

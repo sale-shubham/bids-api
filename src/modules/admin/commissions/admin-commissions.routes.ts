@@ -27,13 +27,17 @@ router.get(
   }),
 );
 
-// POST /admin/commissions/:id/waive -> { commission }   (409 COMMISSION_NOT_DUE)
+// Optional body; a request with no body still works.
+const waiveBodySchema = Joi.object({ note: Joi.string().trim().min(3).max(200) }).default({});
+
+// POST /admin/commissions/:id/waive  body { note?: 3-200 chars } -> { commission (with waivedNote) }   (409 COMMISSION_NOT_DUE)
 router.post(
   '/:id/waive',
+  validate(waiveBodySchema),
   asyncHandler(async (req, res) => {
     const { ok } = await import('@/core/http/response');
     const svc = await import('@/modules/commissions/commissions.service');
-    return ok(res, { commission: await svc.waiveCommission(param(req, 'id'), req.user!.sub) });
+    return ok(res, { commission: await svc.waiveCommission(param(req, 'id'), req.user!.sub, req.body.note ?? null) });
   }),
 );
 

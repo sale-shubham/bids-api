@@ -7,6 +7,7 @@ export const NOTIFY_CATALOGUE: Record<NotifyType, CatalogueEntry> = {
   outbid: { label: 'You were outbid', group: 'Bidding' },
   'ending-soon': { label: 'Watched auction ending soon', group: 'Bidding' },
   'auction-won': { label: 'You won an auction', group: 'Bidding' },
+  'auction-cancelled': { label: 'Auction cancelled', group: 'Bidding' },
   'reserve-not-met': { label: 'Auction ended below the reserve', group: 'Bidding' },
   'second-chance-offer': { label: 'Second-chance offer', group: 'Bidding' },
   'auction-sold': { label: 'Your auction sold', group: 'Selling' },

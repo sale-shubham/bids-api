@@ -325,6 +325,7 @@ model Commission {
   status         CommissionStatus @default(DUE)
   dueAt          DateTime
   paidAt         DateTime?
+  waivedNote     String? // admin's reason when waived; admin DTO only
   paymentOrder   PaymentOrder?    @relation(fields: [paymentOrderId], references: [id])
   paymentOrderId String?
   createdAt      DateTime         @default(now())

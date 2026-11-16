@@ -34,7 +34,7 @@ List filters (`auctions.query.ts` `statusWhere`) mirror this in SQL: live = `sta
 | POST | `/auctions` | AUCTIONEER / SUPER_ADMIN | 201 `{ auction }` |
 | POST | `/auctions/bulk` | AUCTIONEER / SUPER_ADMIN | `{ items: CreateAuctionInput[] (1..50) }` -> 201 `{ items: AuctionCard[] }`; see Bulk create |
 | PATCH | `/auctions/:id` | seller | all fields optional -> `{ auction }` |
-| DELETE | `/auctions/:id` | seller / SUPER_ADMIN | soft delete -> `{ id }`. A SUPER_ADMIN may cancel any auction, including ones with bids (no refund or notification; it is logged). This is the admin cancel action. |
+| DELETE | `/auctions/:id` | seller / SUPER_ADMIN | soft delete -> `{ id }`. A SUPER_ADMIN may cancel any auction, including ones with bids (it is logged). After the cancel commits, `notifyCancelled` (best effort, never fails the cancel) sends `auction-cancelled` to every distinct bidder and every member with a HELD deposit (copy says the deposit is refunded automatically; the deposit job refunds cancelled auctions), plus the seller when an admin cancelled it. This is the admin cancel action. |
 | POST | `/auctions/:id/republish` | seller | `{ startTime, endTime }` -> `{ auction }` |
 | POST / GET | `/auctions/:id/bids` | BIDDER / public | place a (max) bid / list bids; see `bidding.md` |
 | POST | `/auctions/:id/buy-now` | BIDDER | Buy It Now; see `bidding.md` |
@@ -114,7 +114,7 @@ Writes use `updateMany` with `bidCount: 0` in the WHERE, so a bid landing betwee
 
 Create and a successful republish call `onAuctionPublished` (`saved-searches.md`) best-effort: failures are logged, never fail the request.
 
-DELETE = soft delete: `status = CANCELLED`, `deletedAt = now`. SUPER_ADMIN may delete regardless of bids (and any seller's auction). Republish sets the new times and status, clears `endedAt`, `winnerId`, `highestBidderId` and keeps `reservePricePaise` / `buyNowPricePaise`. Relisting after an auction ended below its reserve is a client-side pre-fill of `/sell/new` (no endpoint, decision D9).
+DELETE = soft delete: `status = CANCELLED`, `deletedAt = now`, then `auction-cancelled` notifications (dedupe `auction-cancelled:<auctionId>:<memberId>`). SUPER_ADMIN may delete regardless of bids (and any seller's auction). Republish sets the new times and status, clears `endedAt`, `winnerId`, `highestBidderId` and keeps `reservePricePaise` / `buyNowPricePaise`. Relisting after an auction ended below its reserve is a client-side pre-fill of `/sell/new` (no endpoint, decision D9).
 
 All the new listing fields (category, attributes, condition, report, estimates, video, shipping) are editable under the existing rule: PATCH is refused (409 `AUCTION_HAS_BIDS`) once bids exist. Republish keeps them.
 

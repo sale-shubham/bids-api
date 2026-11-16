@@ -264,6 +264,17 @@ describe('settings / admin schemas', () => {
     expectInvalid(await send('get', path, { as: 'SUPER_ADMIN' }));
   });
 
+  it('POST /admin/commissions/:id/waive: note is optional, 3-200 chars when present', async () => {
+    expectInvalid(await send('post', '/admin/commissions/c1/waive', { as: 'SUPER_ADMIN', body: { note: 'ab' } }), 'note');
+    expectInvalid(await send('post', '/admin/commissions/c1/waive', { as: 'SUPER_ADMIN', body: { note: '  a  ' } }), 'note');
+    expectInvalid(await send('post', '/admin/commissions/c1/waive', { as: 'SUPER_ADMIN', body: { note: 'x'.repeat(201) } }), 'note');
+    expectInvalid(await send('post', '/admin/commissions/c1/waive', { as: 'SUPER_ADMIN', body: { note: 5 } }), 'note');
+    // valid note / no note pass validation (the mocked DB then yields a non-400 result)
+    expect((await send('post', '/admin/commissions/c1/waive', { as: 'SUPER_ADMIN', body: { note: 'Goodwill' } })).status).not.toBe(400);
+    expect((await send('post', '/admin/commissions/c1/waive', { as: 'SUPER_ADMIN' })).status).not.toBe(400);
+    expect((await send('post', '/admin/commissions/c1/waive', { as: 'SUPER_ADMIN', body: { note: 'x'.repeat(200) } })).status).not.toBe(400);
+  });
+
   it('PATCH /admin/members/:id needs a valid, non-empty body; purge bounds are 1..365', async () => {
     expectInvalid(await send('patch', '/admin/members/m2', { as: 'SUPER_ADMIN', body: {} }));
     expectInvalid(await send('patch', '/admin/members/m2', { as: 'SUPER_ADMIN', body: { role: 'GOD' } }), 'role');

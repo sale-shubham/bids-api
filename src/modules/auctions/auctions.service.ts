@@ -19,6 +19,7 @@ import { getCheckoutMode } from '@/modules/settings/checkout-mode';
 import { assertWithinMaxPrice, getMaxPricePaise } from '@/modules/settings/max-price';
 import { toPaise, toPaiseOrNull } from '@/core/money';
 import { depositForStartingBid } from '@/modules/deposits/deposits.service';
+import { enqueueNotification } from '@/modules/notify/notify.queue';
 import { auctionInclude, effectiveStatus, toCard, toDetail, type AuctionRow } from './auctions.serializer';
 import { effectivePrice, listWhere, orderFor, statusWhere } from './auctions.query';
 import {
@@ -443,7 +444,45 @@ export async function deleteAuction(id: string, actor: Actor, now = new Date()) 
     const { count } = await prisma.auction.updateMany({ where: { id, bidCount: 0 }, data });
     if (count === 0) throw hasBids();
   }
+  await notifyCancelled(id, row.sellerId, actor.sub);
   return { id };
+}
+
+/**
+ * Best effort, after the cancel committed: every distinct bidder and every HELD-deposit
+ * holder is told the auction was cancelled (deposit holders: refunded automatically by the
+ * deposit job). An admin cancel also tells the seller. Never throws.
+ */
+async function notifyCancelled(auctionId: string, sellerId: string, actorId: string) {
+  try {
+    const [bids, deposits] = await Promise.all([
+      prisma.bid.findMany({ where: { auctionId }, select: { bidderId: true }, distinct: ['bidderId'] }),
+      prisma.auctionDeposit.findMany({ where: { auctionId, status: 'HELD' }, select: { memberId: true } }),
+    ]);
+    const depositors = new Set(deposits.map((d) => d.memberId));
+    const recipients = new Set<string>([...bids.map((b) => b.bidderId), ...depositors]);
+    recipients.delete(sellerId);
+    for (const memberId of recipients) {
+      await enqueueNotification({
+        type: 'auction-cancelled',
+        memberId,
+        auctionId,
+        data: { audience: 'bidder', deposit: depositors.has(memberId) },
+        dedupeKey: `auction-cancelled:${auctionId}:${memberId}`,
+      });
+    }
+    if (actorId !== sellerId) {
+      await enqueueNotification({
+        type: 'auction-cancelled',
+        memberId: sellerId,
+        auctionId,
+        data: { audience: 'seller' },
+        dedupeKey: `auction-cancelled:${auctionId}:${sellerId}`,
+      });
+    }
+  } catch (err) {
+    logger.warn({ err, auctionId }, 'auction cancel: notifications failed');
+  }
 }
 
 export async function republishAuction(

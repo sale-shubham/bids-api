@@ -341,6 +341,20 @@ export function buildContent(c: ContentCtx): Content {
         template: 'account-suspended',
         templateData: { ...base, strikeCount: num(c.data.strikeCount) || 3 },
       };
+    case 'auction-cancelled': {
+      const seller = c.data.audience === 'seller';
+      const deposit = c.data.deposit === true;
+      return {
+        title: 'Auction cancelled',
+        body: seller
+          ? `An administrator cancelled your auction "${c.auctionTitle}".`
+          : `The auction "${c.auctionTitle}" was cancelled.${deposit ? ' Your deposit will be refunded automatically.' : ''}`,
+        url: auctionPath,
+        subject: `Auction cancelled: "${c.auctionTitle}"`,
+        template: 'auction-cancelled',
+        templateData: { ...base, seller, deposit },
+      };
+    }
     case 'second-chance-offer': {
       const amount = formatInr(num(c.data.amountPaise));
       const offerPath = `/purchases/offers/${str(c.data.offerId)}`;

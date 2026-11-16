@@ -1,0 +1,17 @@
+<%- include('_head', { heading: 'Auction cancelled', logoUrl, fromName }) %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">Hi <%= name %>,</p>
+<% if (locals.seller) { %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  An administrator cancelled your auction <strong><%= auctionTitle %></strong>.
+                </p>
+<% } else { %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  The auction <strong><%= auctionTitle %></strong> was cancelled, so no one will win it.
+                </p>
+<% if (locals.deposit) { %>
+                <p style="font-size: 14px; margin: 0 0 12px 0">
+                  Your deposit will be refunded automatically to your original payment method.
+                </p>
+<% } %>
+<% } %>
+<%- include('_foot', { ctaUrl: auctionUrl, ctaLabel: 'View auction', frontendUrl }) %>

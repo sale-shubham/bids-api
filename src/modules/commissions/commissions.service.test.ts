@@ -222,9 +222,16 @@ describe('markCommissionPaid', () => {
 describe('waiveCommission', () => {
   it('DUE -> WAIVED and decrements unpaid (clamped)', async () => {
     state.members.m1.unpaidCommissionPaise = 20_000;
-    const dto = await waiveCommission('c1_abcdefghijklmnop', 'admin1', NOW);
+    const dto = await waiveCommission('c1_abcdefghijklmnop', 'admin1', null, NOW);
     expect(dto.status).toBe('WAIVED');
+    expect(dto.waivedNote).toBeNull();
     expect(state.members.m1.unpaidCommissionPaise).toBe(0);
+  });
+
+  it('stores the note and returns it as waivedNote', async () => {
+    const dto = await waiveCommission('c1_abcdefghijklmnop', 'admin1', 'Goodwill after dispute', NOW);
+    expect(dto.waivedNote).toBe('Goodwill after dispute');
+    expect(state.commissions[0].waivedNote).toBe('Goodwill after dispute');
   });
 
   it('409 when not DUE, 404 when missing', async () => {
