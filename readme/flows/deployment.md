@@ -48,6 +48,10 @@ Stack outputs (printed in the job summary after each deploy): `HttpApiUrl`, `Web
 `MediaBaseUrl`, `CloudFrontDomainName` (only with the CDN), `NotifyQueueUrl`, and `CustomDomainTarget` (only with a
 custom domain).
 
+## Binary responses (PDF)
+
+`index.js` passes `binarySettings: { contentTypes: ['image/*', 'application/pdf'] }` to serverless-express. By default only `image/*` bodies are base64-encoded for API Gateway; without `application/pdf` the invoice PDF (`GET /invoices/:id/pdf`) would reach the client as mangled UTF-8.
+
 ## CORS
 
 Deployed stages: API Gateway answers CORS (`serverless.yml` `provider.httpApi.cors`) with an explicit origin list in `cors.allowedOrigins` (a YAML list, because Serverless v4 variables cannot split a comma string; same pattern as P2X), `allowCredentials: true`, preflight cached 2h. API Gateway answers `OPTIONS` itself (no Lambda invoke) because the API route lists explicit methods (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD` on `/{proxy+}`) with no `OPTIONS` or `ANY` route (an `ANY` route would catch preflights and invoke the Lambda). It also ignores CORS headers from Express. Local dev (`npm run dev`): the Express `cors()` middleware (`src/app.ts`) uses `CORS_ORIGINS` (comma separated, no trailing slash, falls back to `APP_URL`, exact match per origin). To add a browser origin (app, marketing website, `http://localhost:3002`), edit `provider.httpApi.cors.allowedOrigins` in `serverless.yml` AND `CORS_ORIGINS`, then deploy. Live (`dev` stage): `https://bidsapp.shubsale.in` and `https://noblebids.shubsale.in` (the website's contact form POSTs `/contact`).

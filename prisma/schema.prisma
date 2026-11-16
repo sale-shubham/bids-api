@@ -904,7 +904,7 @@ model Invoice {
   totalPaise    BigInt
   isTaxInvoice  Boolean
   issuedAt      DateTime
-  pdfKey        String?
+  pdfKey        String? // legacy: the PDF used to be cached in S3; it is now rendered per request, so this is unused
   createdAt     DateTime    @default(now())
 
   @@unique([type, refId])

@@ -5,7 +5,7 @@ import { validate } from '@/core/middleware/validate';
 import { param } from '@/core/http/params';
 import { adminListQuerySchema, mineQuerySchema, type AdminListQuery, type MineQuery } from './invoices.validation';
 
-// GET /invoices/mine, GET /invoices/:id/pdf (owner or SUPER_ADMIN)
+// GET /invoices/mine, GET /invoices/:id/pdf (owner or SUPER_ADMIN; streams application/pdf)
 const router = Router();
 
 router.get(
@@ -26,9 +26,14 @@ router.get(
   authenticate,
   requireActiveMember,
   asyncHandler(async (req, res) => {
-    const { ok } = await import('@/core/http/response');
     const svc = await import('./invoices.service');
-    return ok(res, await svc.getPdfUrl({ sub: req.user!.sub, role: req.user!.role }, param(req, 'id')));
+    const { number, pdf } = await svc.getInvoicePdf({ sub: req.user!.sub, role: req.user!.role }, param(req, 'id'));
+    const filename = `${number.replace(/[^A-Za-z0-9-]+/g, '-')}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Content-Length', String(pdf.length));
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.end(pdf);
   }),
 );
 

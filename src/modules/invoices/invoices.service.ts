@@ -9,8 +9,6 @@ import { computeInvoiceTax, financialYearOf, invoiceDescription, invoiceNumber, 
 import { getInvoiceSettings } from './invoice.settings';
 import type { AdminListQuery, MineQuery } from './invoices.validation';
 
-export const PDF_URL_TTL_SEC = 5 * 60;
-
 type InvoiceRow = {
   id: string;
   number: string;
@@ -205,35 +203,29 @@ async function describeInvoice(type: InvoiceTypeValue, refId: string): Promise<s
 }
 
 /**
- * GET /invoices/:id/pdf: owner or SUPER_ADMIN (anyone else gets 404). The PDF is rendered and stored privately on the
- * first request, then every call returns a fresh 5-minute presigned URL.
+ * GET /invoices/:id/pdf: owner or SUPER_ADMIN (anyone else gets 404). The PDF is rendered on every request and the
+ * bytes are streamed back; nothing is written to storage. `Invoice.pdfKey` is a legacy column (the PDF used to be
+ * cached in S3) and is no longer read or written.
  */
-export async function getPdfUrl(viewer: { sub: string; role: string }, id: string): Promise<{ url: string }> {
+export async function getInvoicePdf(viewer: { sub: string; role: string }, id: string): Promise<{ number: string; pdf: Buffer }> {
   const inv = await prisma.invoice.findUnique({ where: { id } });
   if (!inv || (inv.memberId !== viewer.sub && viewer.role !== 'SUPER_ADMIN')) throw invoiceNotFound();
-  const { storage } = await import('@/providers/storage');
 
-  let key = inv.pdfKey;
-  if (!key) {
-    const [settings, description, { renderInvoicePdf }] = await Promise.all([getInvoiceSettings(), describeInvoice(inv.type, inv.refId), import('./invoice.pdf')]);
-    const pdf = await renderInvoicePdf({
-      number: inv.number,
-      issuedAt: inv.issuedAt,
-      isTaxInvoice: inv.isTaxInvoice,
-      platform: { legalName: settings.legalName, gstin: settings.gstin, address: settings.address, stateCode: settings.stateCode },
-      buyer: { name: inv.buyerName, gstin: inv.buyerGstin, state: inv.buyerState, placeOfSupply: inv.placeOfSupply },
-      description,
-      sacCode: settings.sacCode,
-      gstRateBps: settings.gstRateBps,
-      taxablePaise: toPaise(inv.taxablePaise),
-      cgstPaise: toPaise(inv.cgstPaise),
-      sgstPaise: toPaise(inv.sgstPaise),
-      igstPaise: toPaise(inv.igstPaise),
-      totalPaise: toPaise(inv.totalPaise),
-    });
-    key = `invoices/${inv.financialYear}/${inv.id}.pdf`;
-    await storage.putObject(key, pdf, 'application/pdf');
-    await prisma.invoice.update({ where: { id: inv.id }, data: { pdfKey: key } });
-  }
-  return { url: await storage.presignGet(key, PDF_URL_TTL_SEC) };
+  const [settings, description, { renderInvoicePdf }] = await Promise.all([getInvoiceSettings(), describeInvoice(inv.type, inv.refId), import('./invoice.pdf')]);
+  const pdf = await renderInvoicePdf({
+    number: inv.number,
+    issuedAt: inv.issuedAt,
+    isTaxInvoice: inv.isTaxInvoice,
+    platform: { legalName: settings.legalName, gstin: settings.gstin, address: settings.address, stateCode: settings.stateCode },
+    buyer: { name: inv.buyerName, gstin: inv.buyerGstin, state: inv.buyerState, placeOfSupply: inv.placeOfSupply },
+    description,
+    sacCode: settings.sacCode,
+    gstRateBps: settings.gstRateBps,
+    taxablePaise: toPaise(inv.taxablePaise),
+    cgstPaise: toPaise(inv.cgstPaise),
+    sgstPaise: toPaise(inv.sgstPaise),
+    igstPaise: toPaise(inv.igstPaise),
+    totalPaise: toPaise(inv.totalPaise),
+  });
+  return { number: inv.number, pdf };
 }

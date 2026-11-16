@@ -1,4 +1,5 @@
 import { amountInWords } from './invoice.rules';
+import { drawHeaderLogo, drawWatermark, HEADER_LOGO_SIZE } from '@/core/pdf/brand';
 
 export type InvoicePdfData = {
   number: string;
@@ -31,6 +32,7 @@ export async function renderInvoicePdf(d: InvoicePdfData): Promise<Buffer> {
     doc.on('error', reject);
   });
 
+  drawWatermark(doc);
   const left = 50;
   const right = 545;
   doc.font('Helvetica-Bold').fontSize(20).text(d.isTaxInvoice ? 'Tax invoice' : 'Receipt', left, 50);
@@ -38,11 +40,14 @@ export async function renderInvoicePdf(d: InvoicePdfData): Promise<Buffer> {
   doc.text(`Invoice no: ${d.number}`, left, 54, { width: right - left, align: 'right' });
   doc.text(`Date: ${dateIst(d.issuedAt)}`, left, 68, { width: right - left, align: 'right' });
 
-  doc.fillColor('#000').font('Helvetica-Bold').fontSize(12).text(d.platform.legalName, left, 100);
+  // Logo beside the legal name; the name and its details sit to the right of it so nothing overlaps.
+  drawHeaderLogo(doc, left, 94);
+  const textLeft = left + HEADER_LOGO_SIZE + 8;
+  doc.fillColor('#000').font('Helvetica-Bold').fontSize(12).text(d.platform.legalName, textLeft, 100, { width: 340 - textLeft - 10 });
   doc.font('Helvetica').fontSize(10);
-  if (d.platform.address) doc.text(d.platform.address, { width: 260 });
-  if (d.platform.gstin) doc.text(`GSTIN: ${d.platform.gstin}`);
-  doc.text(`State code: ${d.platform.stateCode}`);
+  if (d.platform.address) doc.text(d.platform.address, textLeft, undefined, { width: 340 - textLeft - 10 });
+  if (d.platform.gstin) doc.text(`GSTIN: ${d.platform.gstin}`, textLeft);
+  doc.text(`State code: ${d.platform.stateCode}`, textLeft);
 
   doc.font('Helvetica-Bold').fontSize(11).text('Billed to', 340, 100);
   doc.font('Helvetica').fontSize(10).text(d.buyer.name, 340, 116, { width: right - 340 });

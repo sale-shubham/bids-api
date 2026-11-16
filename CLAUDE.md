@@ -30,7 +30,7 @@ Current state: feature-complete and merged into `dev`: email + password auth, me
 | `AGENTS.md` | Agent / deployment notes, vendored skills |
 | `PROJECT_STRUCTURE.md` | Current file layout |
 | `readme/ARCHITECTURE.md` | Lambdas, request path, data, integrations |
-| `readme/methods/*.md` | validation, prisma, security (env + rate limits), http, testing conventions |
+| `readme/methods/*.md` | validation, prisma, security (env + rate limits), http, testing, pdf (branding helpers) conventions |
 | `docs/DOC_SYNC.md` | Which docs to update for which change |
 | `docs/GO-LIVE.md` | Go-live checklist |
 | `docs/DECISIONS.md` | History (old MERN app, P2X scaffold), product decisions D1–D16 (D16 removed SMS phone verification, WhatsApp and TOTP 2FA; D15 paid featured listings, referral credits, GST invoices; D14 follows, notification preferences, seller analytics; D7 domains decided, D9 bidding model, D10 winner checkout, D11 trust and safety, D12 deposits / strikes / second chance / shill signals, D13 category table), known limits |

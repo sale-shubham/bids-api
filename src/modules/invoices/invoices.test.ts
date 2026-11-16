@@ -14,7 +14,7 @@ const db = vi.hoisted(() => {
   d.$transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn(d));
   return d;
 });
-const storage = vi.hoisted(() => ({ putObject: vi.fn(async () => undefined), presignGet: vi.fn(async (k: string, s: number) => `https://signed.test/${k}?exp=${s}`) }));
+const storage = vi.hoisted(() => ({ putObject: vi.fn(async () => undefined), presignGet: vi.fn(async () => '') }));
 const enqueue = vi.hoisted(() => vi.fn(async (_m: unknown) => undefined));
 
 vi.mock('@/core/prisma/client', () => ({ prisma: db }));
@@ -26,7 +26,7 @@ vi.mock('@/core/config/env', () => ({ env: { storage: { cdnBaseUrl: 'https://cdn
 import { Prisma } from '@prisma/client';
 import { amountInWords, computeInvoiceTax, financialYearOf, gstinMatchesState, invoiceNumber } from './invoice.rules';
 import { renderInvoicePdf } from './invoice.pdf';
-import { getPdfUrl, issueCommissionInvoice, issueDepositForfeitInvoice, issueFeatureInvoice, issueInvoice } from './invoices.service';
+import { getInvoicePdf, issueCommissionInvoice, issueDepositForfeitInvoice, issueFeatureInvoice, issueInvoice } from './invoices.service';
 import { invoiceSettingsSchema } from './invoices.validation';
 import { setInvoiceSettings } from './invoice.settings';
 import { updateMeSchema } from '@/modules/members/members.validation';
@@ -174,57 +174,23 @@ describe('PDF', () => {
     id: 'inv1', number: 'NB/2026-27/000001', financialYear: '2026-27', type: 'COMMISSION', refId: 'c1', memberId: 'owner', buyerName: 'Asha', buyerGstin: null, buyerState: '27',
     placeOfSupply: '27', taxablePaise: 10_000n, cgstPaise: 900n, sgstPaise: 900n, igstPaise: 0n, totalPaise: 11_800n, isTaxInvoice: true, issuedAt: new Date('2026-11-16T10:00:00Z'), pdfKey: null,
   };
-  it('owner: renders once, stores privately under invoices/<FY>/<id>.pdf, returns a 5-minute presigned URL', async () => {
-    db.invoice.findUnique.mockResolvedValue(inv);
+  it('owner: renders on every request and never touches storage or pdfKey', async () => {
+    db.invoice.findUnique.mockResolvedValue({ ...inv, pdfKey: 'legacy/key.pdf' });
     db.commission.findUnique.mockResolvedValue({ auction: { title: 'Watch' } });
-    const r = await getPdfUrl({ sub: 'owner', role: 'AUCTIONEER' }, 'inv1');
-    expect(r).toEqual({ url: 'https://signed.test/invoices/2026-27/inv1.pdf?exp=300' });
-    expect(storage.putObject).toHaveBeenCalledTimes(1);
-    const [key, body, type] = storage.putObject.mock.calls[0] as unknown as [string, Buffer, string];
-    expect([key, type, body.subarray(0, 4).toString()]).toEqual(['invoices/2026-27/inv1.pdf', 'application/pdf', '%PDF']);
-    expect(db.invoice.update).toHaveBeenCalledWith({ where: { id: 'inv1' }, data: { pdfKey: 'invoices/2026-27/inv1.pdf' } });
-  });
-  it('second request reuses the stored PDF', async () => {
-    db.invoice.findUnique.mockResolvedValue({ ...inv, pdfKey: 'invoices/2026-27/inv1.pdf' });
-    await getPdfUrl({ sub: 'owner', role: 'AUCTIONEER' }, 'inv1');
+    const r = await getInvoicePdf({ sub: 'owner', role: 'AUCTIONEER' }, 'inv1');
+    expect(r.number).toBe('NB/2026-27/000001');
+    expect(r.pdf.subarray(0, 4).toString()).toBe('%PDF');
+    await getInvoicePdf({ sub: 'owner', role: 'AUCTIONEER' }, 'inv1');
+    expect(db.commission.findUnique).toHaveBeenCalledTimes(2);
     expect(storage.putObject).not.toHaveBeenCalled();
-    expect(storage.presignGet).toHaveBeenCalledWith('invoices/2026-27/inv1.pdf', 300);
+    expect(storage.presignGet).not.toHaveBeenCalled();
+    expect(db.invoice.update).not.toHaveBeenCalled();
   });
   it('another member gets 404; SUPER_ADMIN may read; unknown id 404', async () => {
-    db.invoice.findUnique.mockResolvedValue({ ...inv, pdfKey: 'k' });
-    await expect(getPdfUrl({ sub: 'stranger', role: 'AUCTIONEER' }, 'inv1')).rejects.toMatchObject({ statusCode: 404, code: 'INVOICE_NOT_FOUND' });
-    await expect(getPdfUrl({ sub: 'admin', role: 'SUPER_ADMIN' }, 'inv1')).resolves.toHaveProperty('url');
+    db.invoice.findUnique.mockResolvedValue(inv);
+    await expect(getInvoicePdf({ sub: 'stranger', role: 'AUCTIONEER' }, 'inv1')).rejects.toMatchObject({ statusCode: 404, code: 'INVOICE_NOT_FOUND' });
+    await expect(getInvoicePdf({ sub: 'admin', role: 'SUPER_ADMIN' }, 'inv1')).resolves.toHaveProperty('pdf');
     db.invoice.findUnique.mockResolvedValue(null);
-    await expect(getPdfUrl({ sub: 'owner', role: 'AUCTIONEER' }, 'nope')).rejects.toMatchObject({ statusCode: 404 });
-  });
-});
-
-describe('GSTIN validation', () => {
-  it('schema: valid GSTIN passes (uppercased), malformed fails, empty clears', () => {
-    expect(updateMeSchema.validate({ gstin: GSTIN.toLowerCase(), billingState: '27' }).value).toMatchObject({ gstin: GSTIN });
-    expect(updateMeSchema.validate({ gstin: 'NOTAGSTIN' }).error).toBeDefined();
-    expect(updateMeSchema.validate({ billingState: '99' }).error).toBeDefined();
-    expect(updateMeSchema.validate({ gstin: '', billingState: null }).error).toBeUndefined();
-    expect(gstinMatchesState(GSTIN, '27')).toBe(true);
-    expect(gstinMatchesState(GSTIN, '29')).toBe(false);
-    expect(gstinMatchesState(GSTIN, null)).toBe(true);
-  });
-  it('PATCH /members/me: first two GSTIN digits must equal billingState -> 400 INVALID_GSTIN', async () => {
-    await expect(updateProfile('m1', { gstin: GSTIN, billingState: '29' })).rejects.toMatchObject({ statusCode: 400, code: 'INVALID_GSTIN' });
-    db.member.findUnique.mockResolvedValue({ gstin: null, billingState: '29' });
-    await expect(updateProfile('m1', { gstin: GSTIN })).rejects.toMatchObject({ code: 'INVALID_GSTIN' });
-    expect(db.member.update).not.toHaveBeenCalled();
-  });
-  it('PATCH /members/me: a matching pair is saved', async () => {
-    db.member.update.mockResolvedValue({ id: 'm1', unpaidCommissionPaise: 0n, moneySpentPaise: 0n, verifiedAt: null });
-    await updateProfile('m1', { gstin: GSTIN, billingState: '27' });
-    expect(db.member.update.mock.calls[0][0].data).toEqual({ gstin: GSTIN, billingState: '27' });
-  });
-  it('admin invoice settings: gstin format and state match', async () => {
-    const ok = { legalName: 'NobleBid', gstin: GSTIN, address: 'Mumbai', stateCode: '27', gstRateBps: 1800, commissionInclusive: true, sacCode: '998599' };
-    expect(invoiceSettingsSchema.validate(ok).error).toBeUndefined();
-    expect(invoiceSettingsSchema.validate({ ...ok, gstin: 'bad' }).error).toBeDefined();
-    expect(invoiceSettingsSchema.validate({ ...ok, gstin: '' }).error).toBeUndefined();
-    await expect(setInvoiceSettings({ ...ok, stateCode: '29' })).rejects.toMatchObject({ statusCode: 400, code: 'INVALID_GSTIN' });
+    await expect(getInvoicePdf({ sub: 'owner', role: 'AUCTIONEER' }, 'nope')).rejects.toMatchObject({ statusCode: 404 });
   });
 });

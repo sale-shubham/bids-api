@@ -14,7 +14,12 @@ import { prisma } from './src/core/prisma/client.ts';
 // the runtime invokes `handler`.
 const app = createApp();
 
-const expressHandler = serverlessExpress({ app });
+// serverless-express only base64-encodes image/* by default; any other binary
+// body (the invoice / receipt PDF) would reach API Gateway as mangled UTF-8.
+const expressHandler = serverlessExpress({
+  app,
+  binarySettings: { contentTypes: ['image/*', 'application/pdf'] },
+});
 
 // Keep-warm ping from the EventBridge schedule on this function (serverless.yml)
 // — short-circuit before serverless-express tries to parse a non-HTTP event.
