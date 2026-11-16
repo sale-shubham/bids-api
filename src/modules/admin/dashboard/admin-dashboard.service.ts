@@ -66,7 +66,7 @@ export async function getDashboard(now = new Date()) {
   const since = windowStart(now);
   const [members, bidders, auctioneers, live, upcoming, ended, bidsToday, paid, due, paidRows, signupRows, recent, saleRows] =
     await Promise.all([
-      prisma.member.count(),
+      prisma.member.count({ where: { role: { not: 'SUPER_ADMIN' } } }),
       prisma.member.count({ where: { role: 'BIDDER' } }),
       prisma.member.count({ where: { role: 'AUCTIONEER' } }),
       prisma.auction.count({ where: statusWhere('live', now) }),

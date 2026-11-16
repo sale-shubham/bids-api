@@ -20,6 +20,7 @@ export async function update(req: Request, res: Response) {
 // POST /admin/members/:id/credits { amountPaise, note } -> { creditBalancePaise }
 export async function adjustCredits(req: Request, res: Response) {
   const { ok } = await import('@/core/http/response');
+  await (await import('./admin-members.service')).assertManageable(param(req, 'id'));
   const svc = await import('@/modules/credits/credits.service');
   return ok(res, await svc.adminAdjust(param(req, 'id'), req.user!.sub, req.body), 201);
 }
@@ -27,6 +28,7 @@ export async function adjustCredits(req: Request, res: Response) {
 // GET /admin/members/:id/strikes -> { items }
 export async function strikes(req: Request, res: Response) {
   const { ok } = await import('@/core/http/response');
+  await (await import('./admin-members.service')).assertManageable(param(req, 'id'));
   const svc = await import('@/modules/strikes/strikes.service');
   return ok(res, await svc.listMemberStrikes(param(req, 'id')));
 }

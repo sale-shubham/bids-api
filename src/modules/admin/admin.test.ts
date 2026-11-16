@@ -13,11 +13,58 @@ const disconnect = vi.hoisted(() => vi.fn(async (_id: string) => undefined));
 vi.mock('@/core/prisma/client', () => ({ prisma: db }));
 vi.mock('@/modules/ws/ws.service', () => ({ disconnectMemberConnections: disconnect }));
 
-import { updateMember } from './members/admin-members.service';
-import { updateMemberBody } from './members/admin-members.validation';
+import { assertManageable, listMembers, getMemberStats, updateMember } from './members/admin-members.service';
+import { listMembersQuery, updateMemberBody } from './members/admin-members.validation';
 import { getDashboard, lastMonths, revenueSeries, signupSeries } from './dashboard/admin-dashboard.service';
 
 beforeEach(() => vi.clearAllMocks());
+
+describe('admin members hide super admins', () => {
+  it('listMembers always excludes SUPER_ADMIN, even with role / status / search filters', async () => {
+    db.member.findMany.mockResolvedValue([]);
+    db.member.count.mockResolvedValue(0);
+    await listMembers({ page: 1, pageSize: 20 });
+    await listMembers({ page: 1, pageSize: 20, role: 'BIDDER', status: 'active', search: 'admin' });
+    const wheres = db.member.findMany.mock.calls.map((c) => c[0].where);
+    expect(wheres).toHaveLength(2);
+    for (const w of wheres) expect(w.AND).toEqual([{ role: { not: 'SUPER_ADMIN' } }]);
+    expect(wheres[1].role).toBe('BIDDER');
+  });
+
+  it('stats tabs exclude SUPER_ADMIN', async () => {
+    db.member.count.mockResolvedValue(1);
+    await getMemberStats();
+    for (const c of db.member.count.mock.calls) expect(c[0].where.role).toEqual({ not: 'SUPER_ADMIN' });
+  });
+
+  it('list role filter accepts BIDDER / AUCTIONEER only', () => {
+    expect(listMembersQuery.validate({ role: 'BIDDER' }).error).toBeUndefined();
+    expect(listMembersQuery.validate({ role: 'AUCTIONEER' }).error).toBeUndefined();
+    expect(listMembersQuery.validate({ role: 'SUPER_ADMIN' }).error).toBeDefined();
+  });
+
+  it('updateMember 404s on a SUPER_ADMIN target; the self guard still wins', async () => {
+    db.member.findUnique.mockResolvedValue({ id: 'sa', role: 'SUPER_ADMIN' });
+    await expect(updateMember('sa', 'me', { isActive: false })).rejects.toMatchObject({ statusCode: 404 });
+    await expect(updateMember('me', 'me', { role: 'BIDDER' })).rejects.toMatchObject({ code: 'CANNOT_MODIFY_SELF' });
+    expect(db.member.update).not.toHaveBeenCalled();
+  });
+
+  it('role change accepts BIDDER / AUCTIONEER only; SUPER_ADMIN is rejected by validation', () => {
+    expect(updateMemberBody.validate({ role: 'BIDDER' }).error).toBeUndefined();
+    expect(updateMemberBody.validate({ role: 'AUCTIONEER' }).error).toBeUndefined();
+    expect(updateMemberBody.validate({ role: 'SUPER_ADMIN' }).error).toBeDefined();
+  });
+
+  it('assertManageable 404s for SUPER_ADMIN, passes for others and unknown ids', async () => {
+    db.member.findUnique.mockResolvedValue({ role: 'SUPER_ADMIN' });
+    await expect(assertManageable('sa')).rejects.toMatchObject({ statusCode: 404 });
+    db.member.findUnique.mockResolvedValue({ role: 'BIDDER' });
+    await expect(assertManageable('b')).resolves.toBeUndefined();
+    db.member.findUnique.mockResolvedValue(null);
+    await expect(assertManageable('nope')).resolves.toBeUndefined();
+  });
+});
 
 describe('admin member self-protection', () => {
   it('409 CANNOT_MODIFY_SELF when changing own role or deactivating self', async () => {
@@ -119,6 +166,20 @@ describe('dashboard zero-fill', () => {
     expect(d.totals.commissionDuePaise).toBe(7);
     expect(d.revenueByMonth.at(-1)!.paidPaise).toBe(3_000_000_000);
     expect(() => JSON.stringify(d)).not.toThrow();
+  });
+
+  it('getDashboard members total excludes SUPER_ADMIN', async () => {
+    db.member.count.mockResolvedValue(0);
+    db.auction.count.mockResolvedValue(0);
+    db.bid.count.mockResolvedValue(0);
+    db.commission.aggregate.mockResolvedValue({ _sum: { amountPaise: null } });
+    db.commission.findMany.mockResolvedValue([]);
+    db.member.findMany.mockResolvedValue([]);
+    db.auction.findMany.mockResolvedValue([]);
+    await getDashboard(now);
+    const wheres = db.member.count.mock.calls.map((c) => c[0]?.where);
+    expect(wheres).toContainEqual({ role: { not: 'SUPER_ADMIN' } });
+    expect(wheres).not.toContain(undefined);
   });
 
   it('getDashboard on an empty database returns zeros and full series', async () => {

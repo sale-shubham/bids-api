@@ -22,9 +22,12 @@ function toAdminDto(m: AdminMemberRow, creditBalancePaise = 0) {
   };
 }
 
+// Super admins are never listed or managed here; every per-member admin route treats them as unknown (404).
+const NOT_SUPER_ADMIN = { role: { not: 'SUPER_ADMIN' as const } };
+
 interface ListParams {
   status?: 'active' | 'inactive';
-  role?: Role;
+  role?: Exclude<Role, 'SUPER_ADMIN'>;
   search?: string;
   page: number;
   pageSize: number;
@@ -60,6 +63,7 @@ const memberSelect = (now = new Date()) => ({
 export async function listMembers(params: ListParams) {
   const search = params.search?.trim();
   const where: Prisma.MemberWhereInput = {
+    AND: [NOT_SUPER_ADMIN], // base clause: filters below can never override it
     ...(params.role ? { role: params.role } : {}),
     ...(params.status === 'active' ? { isActive: true } : {}),
     ...(params.status === 'inactive' ? { isActive: false } : {}),
@@ -86,12 +90,18 @@ export async function listMembers(params: ListParams) {
   return { items: items.map((m) => toAdminDto(m, balances.get(m.id) ?? 0)), total, stats };
 }
 
+/** 404 when the target is a super admin (unknown ids fall through to the caller's own 404). */
+export async function assertManageable(id: string) {
+  const target = await prisma.member.findUnique({ where: { id }, select: { role: true } });
+  if (target?.role === 'SUPER_ADMIN') throw NotFound('Member not found');
+}
+
 // Tab counts — always the full All/Active/Inactive split, independent of the filter.
 export async function getMemberStats() {
   const [total, active, inactive] = await Promise.all([
-    prisma.member.count(),
-    prisma.member.count({ where: { isActive: true } }),
-    prisma.member.count({ where: { isActive: false } }),
+    prisma.member.count({ where: NOT_SUPER_ADMIN }),
+    prisma.member.count({ where: { ...NOT_SUPER_ADMIN, isActive: true } }),
+    prisma.member.count({ where: { ...NOT_SUPER_ADMIN, isActive: false } }),
   ]);
   return { total, active, inactive };
 }
@@ -104,11 +114,15 @@ export const cannotModifySelf = () =>
  * own role or deactivate themselves (no accidental lock-out). Deactivating
  * kills every live Session + WebSocket connection so it takes effect at once.
  */
-export async function updateMember(id: string, actorId: string, input: { isActive?: boolean; role?: Role; verified?: boolean }) {
+export async function updateMember(
+  id: string,
+  actorId: string,
+  input: { isActive?: boolean; role?: Exclude<Role, 'SUPER_ADMIN'>; verified?: boolean },
+) {
   if (id === actorId && (input.isActive === false || input.role !== undefined)) throw cannotModifySelf();
 
-  const existing = await prisma.member.findUnique({ where: { id }, select: { id: true } });
-  if (!existing) throw NotFound('Member not found');
+  const existing = await prisma.member.findUnique({ where: { id }, select: { id: true, role: true } });
+  if (!existing || existing.role === 'SUPER_ADMIN') throw NotFound('Member not found');
 
   const data: Prisma.MemberUpdateInput = {};
   if (input.isActive !== undefined) data.isActive = input.isActive;

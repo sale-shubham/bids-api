@@ -74,7 +74,7 @@ router.put(
 | `contact/contact.validation.ts` | `contactSchema` | `name` 2-80, `email` ≤ 254, `subject` 3-120, `message` 10-4000 |
 | `settings/settings.validation.ts` | `platformSettingsSchema`, `legalSlugParamSchema(slugs)`, `legalPageBodySchema` | Whole-object replace for `PUT /admin/settings`: `commissionRateBps` 0-3000, `minIncrementPaise` 100 to `HARD_MAX_PRICE_PAISE`, `antiSnipingMinutes` 0-30, optional `maxPricePaise` 100,000 to `HARD_MAX_PRICE_PAISE` (absent keeps the stored value), optional, ignored `categories` (1-30 names of 2-40 chars, unique ignoring case). Legal page: `title` 2-120, `content` 1-200,000 (sanitised by the service) |
  Also optional: `depositThresholdPaise` 0..HARD_MAX (0 = off), `depositRateBps` 100..5000.
-| `admin/members/admin-members.validation.ts` | `listMembersQuery`, `updateMemberBody` | List: `status` `active` \| `inactive`, `role`, `q` ≤ 100, paging, `sortBy` allowlist + `sortOrder` (see `http.md`). Update: `isActive` and/or `role`, at least one |
+| `admin/members/admin-members.validation.ts` | `listMembersQuery`, `updateMemberBody` | List: `status` `active` \| `inactive`, `role` `BIDDER` \| `AUCTIONEER` (no `SUPER_ADMIN`), `q` ≤ 100, paging, `sortBy` allowlist + `sortOrder` (see `http.md`). Update: `isActive` and/or `role` (`BIDDER` \| `AUCTIONEER` only; `SUPER_ADMIN` is 400, seed-only), at least one |
 | `admin/retention/admin-retention.validation.ts` | `purgeRetentionSchema` | Optional `otpChallengeDays`, `sessionInactiveDays`, each 1-365 |
 
 Paging fields are the same everywhere: `page` integer ≥ 1 (default 1), `pageSize` 1-100 (default 20).

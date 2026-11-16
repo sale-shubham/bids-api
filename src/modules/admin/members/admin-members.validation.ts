@@ -3,7 +3,8 @@ import { sortOrderSchema } from '@/core/http/pagination';
 
 export const listMembersQuery = Joi.object({
   status: Joi.string().valid('active', 'inactive').optional(),
-  role: Joi.string().valid('BIDDER', 'AUCTIONEER', 'SUPER_ADMIN').optional(),
+  // Super admins are never listed, so SUPER_ADMIN is not a valid filter.
+  role: Joi.string().valid('BIDDER', 'AUCTIONEER').optional(),
   q: Joi.string().trim().allow('').max(100).optional(),
   page: Joi.number().integer().min(1).default(1),
   pageSize: Joi.number().integer().min(1).max(100).default(20),
@@ -18,9 +19,9 @@ export const creditAdjustBody = Joi.object({
   note: Joi.string().trim().min(3).max(200).required(),
 });
 
-// PATCH /admin/members/:id
+// PATCH /admin/members/:id. SUPER_ADMIN is never assignable here; super admins come only from the seed.
 export const updateMemberBody = Joi.object({
   isActive: Joi.boolean(),
-  role: Joi.string().valid('BIDDER', 'AUCTIONEER', 'SUPER_ADMIN'),
+  role: Joi.string().valid('BIDDER', 'AUCTIONEER'),
   verified: Joi.boolean(),
 }).min(1);

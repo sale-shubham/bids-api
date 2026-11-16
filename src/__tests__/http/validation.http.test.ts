@@ -258,6 +258,7 @@ describe('settings / admin schemas', () => {
     ['/admin/commissions?page=0'],
     ['/admin/payments?status=bogus'],
     ['/admin/members?role=OWNER'],
+    ['/admin/members?role=SUPER_ADMIN'],
     ['/admin/members?sortBy=passwordHash'],
     ['/admin/members?pageSize=0'],
   ])('GET %s is rejected', async (path) => {
@@ -278,6 +279,7 @@ describe('settings / admin schemas', () => {
   it('PATCH /admin/members/:id needs a valid, non-empty body; purge bounds are 1..365', async () => {
     expectInvalid(await send('patch', '/admin/members/m2', { as: 'SUPER_ADMIN', body: {} }));
     expectInvalid(await send('patch', '/admin/members/m2', { as: 'SUPER_ADMIN', body: { role: 'GOD' } }), 'role');
+    expectInvalid(await send('patch', '/admin/members/m2', { as: 'SUPER_ADMIN', body: { role: 'SUPER_ADMIN' } }), 'role');
     expectInvalid(await send('post', '/admin/retention/purge', { as: 'SUPER_ADMIN', body: { otpChallengeDays: 0 } }), 'otpChallengeDays');
     expectInvalid(await send('post', '/admin/retention/purge', { as: 'SUPER_ADMIN', body: { sessionInactiveDays: 366 } }), 'sessionInactiveDays');
   });
