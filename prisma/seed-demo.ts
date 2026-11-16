@@ -378,9 +378,9 @@ async function main() {
         paymentOrderId = po.id;
         paidAt = new Date(endMs + 2 * D);
         invoiceReqs.push({ type: 'COMMISSION', refId: cid, memberKey: a.seller, total: commissionPaise, issuedAt: endMs + 2 * D });
-        note('commission-paid', a.seller, 'Commission paid', `Thanks, your commission of ${inr(commissionPaise)} for "${a.title}" is paid.`, '/dashboard/commissions', endMs + 2 * D);
+        note('commission-paid', a.seller, 'Commission paid', `Thanks, your commission of ${inr(commissionPaise)} for "${a.title}" is paid.`, '/sell/commissions', endMs + 2 * D);
       } else {
-        note('commission-due', a.seller, 'Commission due', `Commission of ${inr(commissionPaise)} for "${a.title}" is due.`, '/dashboard/commissions', endMs + H, { commissionPaise, dueAt: new Date(dueAt).toISOString() });
+        note('commission-due', a.seller, 'Commission due', `Commission of ${inr(commissionPaise)} for "${a.title}" is due.`, '/sell/commissions', endMs + H, { commissionPaise, dueAt: new Date(dueAt).toISOString() });
       }
       if (status === 'DUE') ctr(a.seller).unpaid += commissionPaise;
       commissions.push({ id: cid, auctionId: id, sellerId: mid[a.seller], rateBps, amountPaise: big(commissionPaise), status, dueAt: new Date(dueAt), paidAt, paymentOrderId, createdAt: new Date(endMs) });
@@ -412,9 +412,9 @@ async function main() {
         removedById: out.removed ? adminId : null,
         note: out.removed ? 'Buyer proved a payment failure on the bank side. Strike removed.' : null,
       });
-      note('sale-cancelled', winner, 'Sale cancelled', `The sale of "${label}" was cancelled because it was not paid in time.`, `/dashboard/purchases/${saleId}`, cancelledAt);
-      note('strike-issued', winner, 'Strike issued', 'A strike was added to your account for an unpaid sale.', '/dashboard/purchases', cancelledAt + 1000, { depositsRequired: false });
-      note('sale-cancelled', a.seller, 'Sale cancelled', `The buyer of "${label}" did not pay. You can relist it.`, `/dashboard/sales/${saleId}`, cancelledAt);
+      note('sale-cancelled', winner, 'Sale cancelled', `The sale of "${label}" was cancelled because it was not paid in time.`, `/purchases/${saleId}`, cancelledAt);
+      note('strike-issued', winner, 'Strike issued', 'A strike was added to your account for an unpaid sale.', '/purchases', cancelledAt + 1000, { depositsRequired: false });
+      note('sale-cancelled', a.seller, 'Sale cancelled', `The buyer of "${label}" did not pay. You can relist it.`, `/sell/sales/${saleId}`, cancelledAt);
       if (a.deposit) {
         const dp = R(a.deposit);
         const po = order(winner, dp, 'DEPOSIT', `${a.k}:${winner}`, 'PAID', startMs + 2 * D);
@@ -460,9 +460,9 @@ async function main() {
           auctions[auctions.length - 1].winnerId = mid[runner[0]];
           if (paid) {
             commissions.push({ id: uid(), auctionId: id, sellerId: mid[a.seller], rateBps, amountPaise: big(comm2), status: 'PAID', dueAt: new Date(respondedAt + 7 * D), paidAt: new Date(respondedAt + 6 * H), paymentOrderId: po.id, createdAt: new Date(respondedAt) });
-            note('sale-paid', a.seller, 'Buyer paid for your item', `The second-chance buyer paid ${inr(offerAmount)} for "${label}".`, `/dashboard/sales/${newSaleId}`, respondedAt + 6 * H);
+            note('sale-paid', a.seller, 'Buyer paid for your item', `The second-chance buyer paid ${inr(offerAmount)} for "${label}".`, `/sell/sales/${newSaleId}`, respondedAt + 6 * H);
           }
-          note('second-chance-accepted', a.seller, 'Second-chance offer accepted', `The runner-up accepted your second-chance offer for "${label}".`, `/dashboard/sales/${newSaleId}`, respondedAt);
+          note('second-chance-accepted', a.seller, 'Second-chance offer accepted', `The runner-up accepted your second-chance offer for "${label}".`, `/sell/sales/${newSaleId}`, respondedAt);
         }
         offers.push({
           id: offerId,
@@ -476,7 +476,7 @@ async function main() {
           newSaleId,
           createdAt: new Date(created),
         });
-        note('second-chance-offer', runner[0], 'Second-chance offer', `You can still buy "${label}" for ${inr(offerAmount)}. The offer expires in 48 hours.`, `/dashboard/offers`, created + 2000, { amountPaise: offerAmount });
+        note('second-chance-offer', runner[0], 'Second-chance offer', `You can still buy "${label}" for ${inr(offerAmount)}. The offer expires in 48 hours.`, `/purchases/offers`, created + 2000, { amountPaise: offerAmount });
         if (status === 'DECLINED') note('second-chance-declined', a.seller, 'Second-chance offer declined', `The runner-up declined your offer for "${label}".`, `/auctions/${id}`, created + 8 * H);
       }
       continue;
@@ -532,15 +532,15 @@ async function main() {
     }
     sales.push(row);
     saleInfo[saleId] = { buyer: winner, seller: a.seller, status: st, paidAt };
-    note('sale-receipt', winner, 'Payment receipt', `We received ${inr(total)} for "${label}".`, `/dashboard/purchases/${saleId}`, paidAt);
-    note('sale-paid', a.seller, 'Buyer paid for your item', `The buyer paid ${inr(total)} for "${label}". Please ship it.`, `/dashboard/sales/${saleId}`, paidAt);
+    note('sale-receipt', winner, 'Payment receipt', `We received ${inr(total)} for "${label}".`, `/purchases/${saleId}`, paidAt);
+    note('sale-paid', a.seller, 'Buyer paid for your item', `The buyer paid ${inr(total)} for "${label}". Please ship it.`, `/sell/sales/${saleId}`, paidAt);
     if (['PAID', 'SHIPPED', 'DELIVERED', 'RELEASED'].includes(st)) {
       commissions.push({ id: uid(), auctionId: id, sellerId: mid[a.seller], rateBps, amountPaise: big(commissionPaise), status: 'PAID', dueAt: new Date(endMs + 7 * D), paidAt: new Date(paidAt), paymentOrderId: po.id, createdAt: new Date(endMs) });
     }
-    if (['SHIPPED', 'DELIVERED', 'RELEASED'].includes(st)) note('sale-shipped', winner, 'Item shipped', `"${label}" is on its way${row.courier ? ` with ${row.courier}` : ''}.`, `/dashboard/purchases/${saleId}`, shippedAt);
-    if (st === 'RELEASED') note('sale-released', a.seller, 'Payout released', `Your payout for "${label}" was released.`, `/dashboard/sales/${saleId}`, deliveredAt + D);
-    if (st === 'DISPUTED') note('sale-disputed', a.seller, 'Sale disputed', `The buyer opened a dispute on "${label}".`, `/dashboard/sales/${saleId}`, shippedAt + 2 * D);
-    if (st === 'REFUNDED') note('sale-refunded', winner, 'Payment refunded', `Your payment of ${inr(total)} for "${label}" was refunded.`, `/dashboard/purchases/${saleId}`, paidAt + 3 * D);
+    if (['SHIPPED', 'DELIVERED', 'RELEASED'].includes(st)) note('sale-shipped', winner, 'Item shipped', `"${label}" is on its way${row.courier ? ` with ${row.courier}` : ''}.`, `/purchases/${saleId}`, shippedAt);
+    if (st === 'RELEASED') note('sale-released', a.seller, 'Payout released', `Your payout for "${label}" was released.`, `/sell/sales/${saleId}`, deliveredAt + D);
+    if (st === 'DISPUTED') note('sale-disputed', a.seller, 'Sale disputed', `The buyer opened a dispute on "${label}".`, `/sell/sales/${saleId}`, shippedAt + 2 * D);
+    if (st === 'REFUNDED') note('sale-refunded', winner, 'Payment refunded', `Your payment of ${inr(total)} for "${label}" was refunded.`, `/purchases/${saleId}`, paidAt + 3 * D);
 
     if (out.review) {
       const rv = out.review;
@@ -644,7 +644,7 @@ async function main() {
     referralRows.push({ id: rid, referrerId: mid[ref], refereeId: mid[referee], status, qualifiedAt, rewardedAt: rewardedAt ? new Date(rewardedAt) : null, rejectReason: status === 'REJECTED' ? 'SAME_DEVICE' : null, createdAt: new Date(createdMs) });
     if (status === 'REWARDED') {
       creditGrants.push({ m: ref, amount: 10000, reason: 'REFERRAL_REWARD', refType: 'REFERRAL', refId: rid, atMs: rewardedAt! });
-      note('referral-rewarded', ref, 'Referral reward credited', `${memberName[referee]} joined with your code. Rs 100 credit added.`, '/dashboard/credits', rewardedAt!);
+      note('referral-rewarded', ref, 'Referral reward credited', `${memberName[referee]} joined with your code. Rs 100 credit added.`, '/profile?tab=referrals', rewardedAt!);
     }
   }
   // admin goodwill credits and corrections (+ and -)
@@ -871,7 +871,7 @@ async function main() {
       passwordHash,
       phone: `98${String(76_000_000 + i * 1371).padStart(8, '0')}`,
       address: `${12 + i}, MG Road, ${city}`,
-      role: isB ? 'BIDDER' : 'AUCTIONEER',
+      role: 'MEMBER',
       isActive: !SUSPENDED.has(k),
       emailVerifiedAt: at(-memberAge[k] * D),
       verifiedAt: VERIFIED.has(k) ? at(-30 * D) : null,
@@ -891,8 +891,8 @@ async function main() {
 
   // ============================================================ notifications for the remaining members
   note('account-suspended', 'b20', 'Account suspended', 'Your account was suspended after three unpaid-sale strikes. Contact support.', '/contact', NOW - 16 * D, { strikeCount: 3 });
-  for (const k of ['b20']) note('strike-issued', k, 'Strike issued', 'A strike was added to your account for an unpaid sale.', '/dashboard/purchases', NOW - 17 * D);
-  note('strike-issued', 'b18', 'Strike issued', 'Second strike: deposits are now required on every bid.', '/dashboard/purchases', NOW - 9 * D, { strikeCount: 2, depositsRequired: true });
+  for (const k of ['b20']) note('strike-issued', k, 'Strike issued', 'A strike was added to your account for an unpaid sale.', '/purchases', NOW - 17 * D);
+  note('strike-issued', 'b18', 'Strike issued', 'Second strike: deposits are now required on every bid.', '/purchases', NOW - 9 * D, { strikeCount: 2, depositsRequired: true });
   for (const [i, k] of [...Array(21).keys()].map((n) => bk(n + 1)).entries()) {
     if (SUSPENDED.has(k) || notifs.some((x) => x.memberKey === k)) continue;
     const ak = ['L1', 'L3', 'L5', 'L6', 'L7'][i % 5];

@@ -97,7 +97,7 @@ buildOrderBy(sortBy, sortOrder, sortMap, fallback)
 
 Turns a table-header sort click into a real Prisma `orderBy` applied **before** the `offsetArgs` `skip`/`take` slice, so the sort is correct across page boundaries. `sortBy` is never accepted as a raw column name: the module's `*.validation.ts` declares a `.valid(...)` allowlist (Joi rejects anything else with 400), and `sortMap` maps each allowed key to its Prisma fragment. A key with no `sortMap` entry falls back to `fallback`.
 
-Adopter: `GET /admin/members` — `sortBy` one of `name`, `email`, `role`, `createdAt`, `isActive` (`MEMBER_SORT_MAP` in `admin-members.service.ts`), fallback `{ createdAt: 'desc' }`.
+Adopter: `GET /admin/members` — `sortBy` one of `name`, `email`, `createdAt`, `isActive` (`MEMBER_SORT_MAP` in `admin-members.service.ts`), fallback `{ createdAt: 'desc' }`.
 
 ### Keyset (cursor) — unused
 

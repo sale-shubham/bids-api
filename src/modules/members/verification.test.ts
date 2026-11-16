@@ -14,12 +14,11 @@ import { updateMember } from '@/modules/admin/members/admin-members.service';
 import { listWhere } from '@/modules/auctions/auctions.query';
 import { toCard } from '@/modules/auctions/auctions.serializer';
 
-const base = { role: 'AUCTIONEER', payoutStatus: 'ACTIVE', verificationRevokedAt: null };
+const base = { role: 'MEMBER', payoutStatus: 'ACTIVE', verificationRevokedAt: null };
 
 describe('isSellerVerified matrix', () => {
-  it('verified only with AUCTIONEER + ACTIVE payout + not revoked', () => {
+  it('verified only with MEMBER + ACTIVE payout + not revoked (no listing needed)', () => {
     expect(isSellerVerified(base)).toBe(true);
-    expect(isSellerVerified({ ...base, role: 'BIDDER' })).toBe(false);
     expect(isSellerVerified({ ...base, role: 'SUPER_ADMIN' })).toBe(false);
     expect(isSellerVerified({ ...base, payoutStatus: null })).toBe(false);
     for (const s of ['PENDING', 'NEEDS_CLARIFICATION', 'SUSPENDED', 'REJECTED']) {
@@ -31,7 +30,7 @@ describe('isSellerVerified matrix', () => {
 
 describe('refreshSellerVerification', () => {
   const row = (over: Record<string, unknown> = {}) => ({
-    role: 'AUCTIONEER',
+    role: 'MEMBER',
     verifiedAt: null,
     verificationRevokedAt: null,
     payoutAccount: { status: 'ACTIVE' },
@@ -52,12 +51,12 @@ describe('refreshSellerVerification', () => {
     expect(db.member.update).not.toHaveBeenCalled();
   });
 
-  it('clears verifiedAt when the payout account is no longer ACTIVE, it was revoked, or the role is not AUCTIONEER', async () => {
+  it('clears verifiedAt when the payout account is no longer ACTIVE, it was revoked, or the role is not MEMBER', async () => {
     for (const over of [
       { payoutAccount: { status: 'SUSPENDED' } },
       { payoutAccount: null },
       { verificationRevokedAt: new Date() },
-      { role: 'BIDDER' },
+      { role: 'SUPER_ADMIN' },
     ]) {
       db.member.update.mockClear();
       db.member.findUnique.mockResolvedValue(row({ verifiedAt: new Date('2026-10-01'), ...over }));
@@ -79,7 +78,7 @@ describe('admin verified toggle', () => {
     name: 'S',
     email: 's@x.test',
     phone: '9876543210',
-    role: 'AUCTIONEER',
+    role: 'MEMBER',
     isActive: true,
     emailVerifiedAt: new Date(),
     verifiedAt: null,
@@ -109,7 +108,7 @@ describe('admin verified toggle', () => {
   it('verified=true clears the revoke, then re-evaluates the rule', async () => {
     db.member.findUnique
       .mockResolvedValueOnce({ id: 's1' }) // existence check
-      .mockResolvedValueOnce({ role: 'AUCTIONEER', verifiedAt: null, verificationRevokedAt: null, payoutAccount: { status: 'ACTIVE' } })
+      .mockResolvedValueOnce({ role: 'MEMBER', verifiedAt: null, verificationRevokedAt: null, payoutAccount: { status: 'ACTIVE' } })
       .mockResolvedValueOnce(adminRow({ verifiedAt: new Date() }));
     const dto = await updateMember('s1', 'admin1', { verified: true });
     expect(db.member.update.mock.calls[0][0].data).toEqual({ verificationRevokedAt: null });

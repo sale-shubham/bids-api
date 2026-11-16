@@ -25,15 +25,17 @@ describe('passwordRuleError', () => {
 });
 
 describe('auth validation schemas', () => {
-  const good = { name: ' Asha ', email: ' Asha@Example.COM ', password: 'abcdef12', role: 'BIDDER' };
+  const good = { name: ' Asha ', email: ' Asha@Example.COM ', password: 'abcdef12' };
 
   it('signup normalises email + name', () => {
     const { error, value } = signupSchema.validate(good);
     expect(error).toBeUndefined();
     expect(value).toMatchObject({ name: 'Asha', email: 'asha@example.com' });
   });
-  it('signup rejects SUPER_ADMIN role and weak password', () => {
-    expect(signupSchema.validate({ ...good, role: 'SUPER_ADMIN' }).error).toBeDefined();
+  it('signup has no role field: a stale role is stripped; weak password is rejected', () => {
+    const stale = signupSchema.validate({ ...good, role: 'SUPER_ADMIN' }, { stripUnknown: true });
+    expect(stale.error).toBeUndefined();
+    expect(stale.value).not.toHaveProperty('role');
     expect(signupSchema.validate({ ...good, password: 'short1' }).error).toBeDefined();
   });
   it('verify needs a 6-digit code', () => {

@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 type Method = 'get' | 'post' | 'put' | 'patch' | 'delete';
-async function send(method: Method, path: string, opts: { as?: 'BIDDER' | 'AUCTIONEER' | 'SUPER_ADMIN'; body?: unknown } = {}) {
+async function send(method: Method, path: string, opts: { as?: 'MEMBER' | 'SUPER_ADMIN'; body?: unknown } = {}) {
   const req = request(await getApp())[method](path);
   if (opts.as) req.set('Authorization', await bearer(opts.as, opts.as === 'SUPER_ADMIN' ? 'admin1' : 'm1'));
   return req.send((opts.body ?? {}) as object);
@@ -41,7 +41,7 @@ function expectInvalid(res: request.Response, field?: string | RegExp) {
 }
 
 describe('auth schemas', () => {
-  const signup = { name: 'Asha', email: 'asha@example.com', password: 'abcdefg1', role: 'BIDDER' };
+  const signup = { name: 'Asha', email: 'asha@example.com', password: 'abcdefg1' };
 
   it.each([
     ['too short', 'abc1', /at least 8/],
@@ -54,8 +54,8 @@ describe('auth schemas', () => {
     expect(res.body.error.message).toMatch(msg);
   });
 
-  it('signup rejects SUPER_ADMIN as a self-service role, bad email and missing name', async () => {
-    expectInvalid(await send('post', '/auth/signup', { body: { ...signup, role: 'SUPER_ADMIN' } }), 'role');
+  it('signup rejects a bad email and a missing name; a stale role field is stripped, not rejected', async () => {
+    expect((await send('post', '/auth/signup', { body: { ...signup, role: 'SUPER_ADMIN' } })).status).not.toBe(400);
     expectInvalid(await send('post', '/auth/signup', { body: { ...signup, email: 'nope' } }), 'email');
     expectInvalid(await send('post', '/auth/signup', { body: { ...signup, name: undefined } }), 'name');
   });
@@ -76,7 +76,7 @@ describe('auth schemas', () => {
 
   it('change-password enforces the new-password rule (after the guards)', async () => {
     const res = await send('post', '/auth/password/change', {
-      as: 'BIDDER',
+      as: 'MEMBER',
       body: { currentPassword: 'x', newPassword: 'nodigitshere' },
     });
     expectInvalid(res, 'newPassword');
@@ -94,15 +94,15 @@ describe('bids schemas', () => {
   ])('POST /auctions/:id/bids rejects an amount that is %s', async (_n, amountPaise) => {
     // `missing` fails the or() rule (no field named); the others name the field.
     const body = { maxAmountPaise: amountPaise };
-    const res = await send('post', '/auctions/a1/bids', { as: 'BIDDER', body });
+    const res = await send('post', '/auctions/a1/bids', { as: 'MEMBER', body });
     expectInvalid(res, amountPaise === undefined ? undefined : 'maxAmountPaise');
     if (amountPaise !== undefined) {
-      expectInvalid(await send('post', '/auctions/a1/bids', { as: 'BIDDER', body: { amountPaise } }), 'amountPaise');
+      expectInvalid(await send('post', '/auctions/a1/bids', { as: 'MEMBER', body: { amountPaise } }), 'amountPaise');
     }
   });
 
   it('POST /auctions/:id/bids needs maxAmountPaise or the amountPaise alias', async () => {
-    expectInvalid(await send('post', '/auctions/a1/bids', { as: 'BIDDER', body: {} }));
+    expectInvalid(await send('post', '/auctions/a1/bids', { as: 'MEMBER', body: {} }));
   });
 
   it.each([
@@ -114,8 +114,8 @@ describe('bids schemas', () => {
   });
 
   it('GET /bids/mine rejects an unknown tab and an oversized page', async () => {
-    expectInvalid(await send('get', '/bids/mine?tab=nope', { as: 'BIDDER' }), 'tab');
-    expectInvalid(await send('get', '/bids/mine?pageSize=500', { as: 'BIDDER' }), 'pageSize');
+    expectInvalid(await send('get', '/bids/mine?tab=nope', { as: 'MEMBER' }), 'tab');
+    expectInvalid(await send('get', '/bids/mine?pageSize=500', { as: 'MEMBER' }), 'pageSize');
   });
 });
 
@@ -130,7 +130,7 @@ describe('auctions schemas', () => {
     startTime: iso(HOUR),
     endTime: iso(3 * HOUR),
   };
-  const create = (over: Record<string, unknown>) => send('post', '/auctions', { as: 'AUCTIONEER', body: { ...base, ...over } });
+  const create = (over: Record<string, unknown>) => send('post', '/auctions', { as: 'MEMBER', body: { ...base, ...over } });
 
   it('rejects an end time less than 1 hour after the start', async () => {
     const res = await create({ endTime: iso(HOUR + 30 * 60_000) });
@@ -154,7 +154,7 @@ describe('auctions schemas', () => {
     // Another member id: the create route is limited to 10 writes / minute per member.
     const res = await request(await getApp())
       .post('/auctions')
-      .set('Authorization', await bearer('AUCTIONEER', 'm2'))
+      .set('Authorization', await bearer('MEMBER', 'm2'))
       .send({ ...base, reservePricePaise: 99, buyNowPricePaise: HARD_MAX_PRICE_PAISE + 1 });
     expectInvalid(res, /reservePricePaise|buyNowPricePaise/);
   });
@@ -172,10 +172,10 @@ describe('auctions schemas', () => {
     const createAs = async (over: Record<string, unknown>) =>
       request(await getApp())
         .post('/auctions')
-        .set('Authorization', await bearer('AUCTIONEER', 'm3'))
+        .set('Authorization', await bearer('MEMBER', 'm3'))
         .send({ ...base, ...over });
     const { category: _drop, ...noCategory } = base;
-    expectInvalid(await request(await getApp()).post('/auctions').set('Authorization', await bearer('AUCTIONEER', 'm3')).send(noCategory));
+    expectInvalid(await request(await getApp()).post('/auctions').set('Authorization', await bearer('MEMBER', 'm3')).send(noCategory));
     expectInvalid(await createAs({ attributes: 'red' }), 'attributes');
     expectInvalid(await createAs({ estimateLowPaise: 1.5 }), 'estimateLowPaise');
     expectInvalid(await createAs({ videoUrl: 'https://evil.example.com/v.mp4' }), 'videoUrl');
@@ -184,10 +184,10 @@ describe('auctions schemas', () => {
   });
 
   it('POST /auctions/bulk needs 1..50 items; PATCH accepts the new fields', async () => {
-    expectInvalid(await send('post', '/auctions/bulk', { as: 'AUCTIONEER', body: {} }), 'items');
-    expectInvalid(await send('post', '/auctions/bulk', { as: 'AUCTIONEER', body: { items: [] } }), 'items');
-    expectInvalid(await send('post', '/auctions/bulk', { as: 'AUCTIONEER', body: { items: Array.from({ length: 51 }, () => ({})) } }), 'items');
-    expectInvalid(await send('post', '/auctions/bulk', { as: 'AUCTIONEER', body: { items: ['x'] } }), 'items');
+    expectInvalid(await send('post', '/auctions/bulk', { as: 'MEMBER', body: {} }), 'items');
+    expectInvalid(await send('post', '/auctions/bulk', { as: 'MEMBER', body: { items: [] } }), 'items');
+    expectInvalid(await send('post', '/auctions/bulk', { as: 'MEMBER', body: { items: Array.from({ length: 51 }, () => ({})) } }), 'items');
+    expectInvalid(await send('post', '/auctions/bulk', { as: 'MEMBER', body: { items: ['x'] } }), 'items');
   });
 
   it('GET /auctions validates sold, recentlySold, attr.<key> count and length', async () => {
@@ -198,8 +198,8 @@ describe('auctions schemas', () => {
   });
 
   it('PATCH needs at least one field; republish needs both times', async () => {
-    expectInvalid(await send('patch', '/auctions/a1', { as: 'AUCTIONEER', body: {} }));
-    expectInvalid(await send('post', '/auctions/a1/republish', { as: 'AUCTIONEER', body: { startTime: iso(HOUR) } }), 'endTime');
+    expectInvalid(await send('patch', '/auctions/a1', { as: 'MEMBER', body: {} }));
+    expectInvalid(await send('post', '/auctions/a1/republish', { as: 'MEMBER', body: { startTime: iso(HOUR) } }), 'endTime');
   });
 
   it.each([
@@ -215,8 +215,8 @@ describe('auctions schemas', () => {
   });
 
   it('GET /auctions/mine validates status and paging', async () => {
-    expectInvalid(await send('get', '/auctions/mine?status=draft', { as: 'AUCTIONEER' }), 'status');
-    expectInvalid(await send('get', '/auctions/mine?pageSize=0', { as: 'AUCTIONEER' }), 'pageSize');
+    expectInvalid(await send('get', '/auctions/mine?status=draft', { as: 'MEMBER' }), 'status');
+    expectInvalid(await send('get', '/auctions/mine?pageSize=0', { as: 'MEMBER' }), 'pageSize');
   });
 });
 
@@ -257,8 +257,8 @@ describe('settings / admin schemas', () => {
     ['/admin/commissions?status=bogus'],
     ['/admin/commissions?page=0'],
     ['/admin/payments?status=bogus'],
-    ['/admin/members?role=OWNER'],
-    ['/admin/members?role=SUPER_ADMIN'],
+    ['/admin/members?seller=maybe'],
+    ['/admin/members?sortBy=role'],
     ['/admin/members?sortBy=passwordHash'],
     ['/admin/members?pageSize=0'],
   ])('GET %s is rejected', async (path) => {
@@ -278,8 +278,9 @@ describe('settings / admin schemas', () => {
 
   it('PATCH /admin/members/:id needs a valid, non-empty body; purge bounds are 1..365', async () => {
     expectInvalid(await send('patch', '/admin/members/m2', { as: 'SUPER_ADMIN', body: {} }));
-    expectInvalid(await send('patch', '/admin/members/m2', { as: 'SUPER_ADMIN', body: { role: 'GOD' } }), 'role');
-    expectInvalid(await send('patch', '/admin/members/m2', { as: 'SUPER_ADMIN', body: { role: 'SUPER_ADMIN' } }), 'role');
+    // `role` is no longer a field: it is stripped, so a body of only `role` is empty and rejected.
+    expectInvalid(await send('patch', '/admin/members/m2', { as: 'SUPER_ADMIN', body: { role: 'MEMBER' } }));
+    expectInvalid(await send('patch', '/admin/members/m2', { as: 'SUPER_ADMIN', body: { isActive: 'maybe' } }), 'isActive');
     expectInvalid(await send('post', '/admin/retention/purge', { as: 'SUPER_ADMIN', body: { otpChallengeDays: 0 } }), 'otpChallengeDays');
     expectInvalid(await send('post', '/admin/retention/purge', { as: 'SUPER_ADMIN', body: { sessionInactiveDays: 366 } }), 'sessionInactiveDays');
   });
@@ -309,25 +310,25 @@ describe('contact, leaderboard, watchlist, notifications, push, uploads, commiss
   });
 
   it('GET /watchlist and /notifications bound page / pageSize', async () => {
-    expectInvalid(await send('get', '/watchlist?pageSize=101', { as: 'BIDDER' }), 'pageSize');
-    expectInvalid(await send('get', '/watchlist?page=0', { as: 'BIDDER' }), 'page');
-    expectInvalid(await send('get', '/notifications?pageSize=101', { as: 'BIDDER' }), 'pageSize');
+    expectInvalid(await send('get', '/watchlist?pageSize=101', { as: 'MEMBER' }), 'pageSize');
+    expectInvalid(await send('get', '/watchlist?page=0', { as: 'MEMBER' }), 'page');
+    expectInvalid(await send('get', '/notifications?pageSize=101', { as: 'MEMBER' }), 'pageSize');
   });
 
   it('GET /commissions/mine bounds status and paging', async () => {
-    expectInvalid(await send('get', '/commissions/mine?status=maybe', { as: 'AUCTIONEER' }), 'status');
-    expectInvalid(await send('get', '/commissions/mine?pageSize=101', { as: 'AUCTIONEER' }), 'pageSize');
+    expectInvalid(await send('get', '/commissions/mine?status=maybe', { as: 'MEMBER' }), 'status');
+    expectInvalid(await send('get', '/commissions/mine?pageSize=101', { as: 'MEMBER' }), 'pageSize');
   });
 
   it('POST /uploads/presign validates folder, content type and size', async () => {
     const ok = { folder: 'auctions', contentType: 'image/png', size: 1000 };
-    expectInvalid(await send('post', '/uploads/presign', { as: 'BIDDER', body: { ...ok, folder: 'etc' } }), 'folder');
-    expectInvalid(await send('post', '/uploads/presign', { as: 'BIDDER', body: { ...ok, contentType: 'application/pdf' } }), 'contentType');
-    expectInvalid(await send('post', '/uploads/presign', { as: 'BIDDER', body: { ...ok, size: 6 * 1024 * 1024 } }), 'size');
+    expectInvalid(await send('post', '/uploads/presign', { as: 'MEMBER', body: { ...ok, folder: 'etc' } }), 'folder');
+    expectInvalid(await send('post', '/uploads/presign', { as: 'MEMBER', body: { ...ok, contentType: 'application/pdf' } }), 'contentType');
+    expectInvalid(await send('post', '/uploads/presign', { as: 'MEMBER', body: { ...ok, size: 6 * 1024 * 1024 } }), 'size');
   });
 
   it('POST /uploads/presign: videos only for auction-videos (mp4 / webm, 50 MB); images keep 5 MB', async () => {
-    const send_ = (body: object) => send('post', '/uploads/presign', { as: 'BIDDER', body });
+    const send_ = (body: object) => send('post', '/uploads/presign', { as: 'MEMBER', body });
     expectInvalid(await send_({ folder: 'auctions', contentType: 'video/mp4', size: 1000 }), 'contentType');
     expectInvalid(await send_({ folder: 'auction-videos', contentType: 'image/png', size: 1000 }), 'contentType');
     expectInvalid(await send_({ folder: 'auction-videos', contentType: 'video/quicktime', size: 1000 }), 'contentType');
@@ -336,7 +337,7 @@ describe('contact, leaderboard, watchlist, notifications, push, uploads, commiss
   });
 
   it('POST /sales/:id/checkout rejects an unknown delivery value', async () => {
-    expectInvalid(await send('post', '/sales/s1/checkout', { as: 'BIDDER', body: { delivery: 'DRONE' } }), 'delivery');
+    expectInvalid(await send('post', '/sales/s1/checkout', { as: 'MEMBER', body: { delivery: 'DRONE' } }), 'delivery');
   });
 
   it('admin categories: name, slug, parentId, attributeSchema, empty patch', async () => {
@@ -352,17 +353,17 @@ describe('contact, leaderboard, watchlist, notifications, push, uploads, commiss
 
   it('POST /push/subscribe only accepts https endpoints with keys', async () => {
     const sub = { endpoint: 'https://push.example.com/abc', keys: { p256dh: 'k', auth: 'a' } };
-    expectInvalid(await send('post', '/push/subscribe', { as: 'BIDDER', body: { ...sub, endpoint: 'http://169.254.169.254/x' } }), 'endpoint');
-    expectInvalid(await send('post', '/push/subscribe', { as: 'BIDDER', body: { endpoint: sub.endpoint } }), 'keys');
+    expectInvalid(await send('post', '/push/subscribe', { as: 'MEMBER', body: { ...sub, endpoint: 'http://169.254.169.254/x' } }), 'endpoint');
+    expectInvalid(await send('post', '/push/subscribe', { as: 'MEMBER', body: { endpoint: sub.endpoint } }), 'keys');
   });
 
   it('PATCH /members/me rejects an empty / malformed body', async () => {
-    const res = await send('patch', '/members/me', { as: 'BIDDER', body: { name: 12345, phone: { x: 1 } } });
+    const res = await send('patch', '/members/me', { as: 'MEMBER', body: { name: 12345, phone: { x: 1 } } });
     expectInvalid(res);
   });
 
   it('watchlist :auctionId has no format schema: an unknown id is a 404 AUCTION_NOT_FOUND, not a 400', async () => {
-    const res = await send('post', '/watchlist/not-a-real-id', { as: 'BIDDER' });
+    const res = await send('post', '/watchlist/not-a-real-id', { as: 'MEMBER' });
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('AUCTION_NOT_FOUND');
   });
@@ -371,17 +372,17 @@ describe('contact, leaderboard, watchlist, notifications, push, uploads, commiss
 describe('reviews, questions and saved searches', () => {
   it('POST /auctions/:id/review bounds rating and comment', async () => {
     const url = '/auctions/a1/review';
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: {} }), 'rating');
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: { rating: 0 } }), 'rating');
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: { rating: 6 } }), 'rating');
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: { rating: 4.5 } }), 'rating');
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: { rating: 5, comment: 'x'.repeat(1001) } }), 'comment');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: {} }), 'rating');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { rating: 0 } }), 'rating');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { rating: 6 } }), 'rating');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { rating: 4.5 } }), 'rating');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { rating: 5, comment: 'x'.repeat(1001) } }), 'comment');
   });
 
   it('POST /reviews/:id/reply needs a non-empty reply up to 1000 chars', async () => {
-    expectInvalid(await send('post', '/reviews/r1/reply', { as: 'AUCTIONEER', body: {} }), 'reply');
-    expectInvalid(await send('post', '/reviews/r1/reply', { as: 'AUCTIONEER', body: { reply: '   ' } }), 'reply');
-    expectInvalid(await send('post', '/reviews/r1/reply', { as: 'AUCTIONEER', body: { reply: 'x'.repeat(1001) } }), 'reply');
+    expectInvalid(await send('post', '/reviews/r1/reply', { as: 'MEMBER', body: {} }), 'reply');
+    expectInvalid(await send('post', '/reviews/r1/reply', { as: 'MEMBER', body: { reply: '   ' } }), 'reply');
+    expectInvalid(await send('post', '/reviews/r1/reply', { as: 'MEMBER', body: { reply: 'x'.repeat(1001) } }), 'reply');
   });
 
   it('GET /members/:id/reviews bounds paging', async () => {
@@ -391,25 +392,25 @@ describe('reviews, questions and saved searches', () => {
 
   it('POST /auctions/:id/questions needs 5..500 chars', async () => {
     const url = '/auctions/a1/questions';
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: {} }), 'question');
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: { question: 'abcd' } }), 'question');
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: { question: 'x'.repeat(501) } }), 'question');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: {} }), 'question');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { question: 'abcd' } }), 'question');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { question: 'x'.repeat(501) } }), 'question');
   });
 
   it('POST /questions/:id/answer needs 1..1000 chars', async () => {
-    expectInvalid(await send('post', '/questions/q1/answer', { as: 'AUCTIONEER', body: {} }), 'answer');
-    expectInvalid(await send('post', '/questions/q1/answer', { as: 'AUCTIONEER', body: { answer: 'x'.repeat(1001) } }), 'answer');
+    expectInvalid(await send('post', '/questions/q1/answer', { as: 'MEMBER', body: {} }), 'answer');
+    expectInvalid(await send('post', '/questions/q1/answer', { as: 'MEMBER', body: { answer: 'x'.repeat(1001) } }), 'answer');
   });
 
   it('POST /saved-searches needs a criterion, min <= max and sane bounds', async () => {
     const url = '/saved-searches';
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: {} }));
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: { name: 'only a name' } }));
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: { minPricePaise: 500, maxPricePaise: 100 } }));
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: { q: 'watch', maxPricePaise: HARD_MAX_PRICE_PAISE + 1 } }), 'maxPricePaise');
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: { q: 'watch', minPricePaise: 1.5 } }), 'minPricePaise');
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: { q: 'x'.repeat(101) } }), 'q');
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: { q: 'watch', condition: 'BROKEN' } }), 'condition');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: {} }));
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { name: 'only a name' } }));
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { minPricePaise: 500, maxPricePaise: 100 } }));
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { q: 'watch', maxPricePaise: HARD_MAX_PRICE_PAISE + 1 } }), 'maxPricePaise');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { q: 'watch', minPricePaise: 1.5 } }), 'minPricePaise');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { q: 'x'.repeat(101) } }), 'q');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { q: 'watch', condition: 'BROKEN' } }), 'condition');
   });
 
   it('admin reviews: list filter and PATCH body', async () => {
@@ -423,11 +424,11 @@ describe('reviews, questions and saved searches', () => {
 describe('trust: reports', () => {
   it('POST /reports validates target, reason and details', async () => {
     const ok = { targetType: 'AUCTION', targetId: 'a1', reason: 'SPAM' };
-    expectInvalid(await send('post', '/reports', { as: 'BIDDER', body: { ...ok, targetType: 'BID' } }), 'targetType');
-    expectInvalid(await send('post', '/reports', { as: 'BIDDER', body: { ...ok, reason: 'RUDE' } }), 'reason');
-    expectInvalid(await send('post', '/reports', { as: 'BIDDER', body: { ...ok, targetId: '' } }), 'targetId');
-    expectInvalid(await send('post', '/reports', { as: 'BIDDER', body: { ...ok, details: 'x'.repeat(1001) } }), 'details');
-    expectInvalid(await send('post', '/reports', { as: 'BIDDER', body: { targetType: 'AUCTION' } }));
+    expectInvalid(await send('post', '/reports', { as: 'MEMBER', body: { ...ok, targetType: 'BID' } }), 'targetType');
+    expectInvalid(await send('post', '/reports', { as: 'MEMBER', body: { ...ok, reason: 'RUDE' } }), 'reason');
+    expectInvalid(await send('post', '/reports', { as: 'MEMBER', body: { ...ok, targetId: '' } }), 'targetId');
+    expectInvalid(await send('post', '/reports', { as: 'MEMBER', body: { ...ok, details: 'x'.repeat(1001) } }), 'details');
+    expectInvalid(await send('post', '/reports', { as: 'MEMBER', body: { targetType: 'AUCTION' } }));
   });
 
   it('admin reports: list filters, resolve status and note are bounded', async () => {
@@ -455,7 +456,7 @@ describe('checkout: sales, payouts, admin sales, checkout mode', () => {
     beneficiaryName: 'Asha Rao',
     address: { street1: '12 MG Road', city: 'Pune', state: 'Maharashtra', postalCode: '411001' },
   };
-  const create = (over: Record<string, unknown>) => send('post', '/payouts/account', { as: 'AUCTIONEER', body: { ...payout, ...over } });
+  const create = (over: Record<string, unknown>) => send('post', '/payouts/account', { as: 'MEMBER', body: { ...payout, ...over } });
 
   it.each([
     ['pan', { pan: 'ABCDE12345' }],
@@ -470,25 +471,25 @@ describe('checkout: sales, payouts, admin sales, checkout mode', () => {
   });
 
   it('GET /sales/mine bounds role, status and paging', async () => {
-    expectInvalid(await send('get', '/sales/mine?role=admin', { as: 'BIDDER' }), 'role');
-    expectInvalid(await send('get', '/sales/mine?status=maybe', { as: 'BIDDER' }), 'status');
-    expectInvalid(await send('get', '/sales/mine?limit=101', { as: 'BIDDER' }), 'limit');
-    expectInvalid(await send('get', '/sales/mine?page=0', { as: 'BIDDER' }), 'page');
+    expectInvalid(await send('get', '/sales/mine?role=admin', { as: 'MEMBER' }), 'role');
+    expectInvalid(await send('get', '/sales/mine?status=maybe', { as: 'MEMBER' }), 'status');
+    expectInvalid(await send('get', '/sales/mine?limit=101', { as: 'MEMBER' }), 'limit');
+    expectInvalid(await send('get', '/sales/mine?page=0', { as: 'MEMBER' }), 'page');
   });
 
   it('POST /sales/:id/ship needs a method, a courier for COURIER and <= 60 char fields', async () => {
     const url = '/sales/s1/ship';
-    expectInvalid(await send('post', url, { as: 'AUCTIONEER', body: {} }), 'method');
-    expectInvalid(await send('post', url, { as: 'AUCTIONEER', body: { method: 'AIR' } }), 'method');
-    expectInvalid(await send('post', url, { as: 'AUCTIONEER', body: { method: 'COURIER' } }), 'courier');
-    expectInvalid(await send('post', url, { as: 'AUCTIONEER', body: { method: 'PICKUP', trackingNo: 'x'.repeat(61) } }), 'trackingNo');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: {} }), 'method');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { method: 'AIR' } }), 'method');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { method: 'COURIER' } }), 'courier');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { method: 'PICKUP', trackingNo: 'x'.repeat(61) } }), 'trackingNo');
   });
 
   it('POST /sales/:id/dispute needs a 10..1000 char reason', async () => {
     const url = '/sales/s1/dispute';
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: {} }), 'reason');
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: { reason: 'too short' } }), 'reason');
-    expectInvalid(await send('post', url, { as: 'BIDDER', body: { reason: 'x'.repeat(1001) } }), 'reason');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: {} }), 'reason');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { reason: 'too short' } }), 'reason');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { reason: 'x'.repeat(1001) } }), 'reason');
   });
 
   it('admin sales: list filters and refund note are bounded', async () => {
@@ -535,9 +536,9 @@ describe('trust 2: deposits, strikes, risk', () => {
 describe('engagement 2: featured, credits, invoices, GSTIN', () => {
   it('POST /auctions/:id/feature/checkout: days must be 1, 3 or 7; useCredits boolean', async () => {
     const url = '/auctions/a1/feature/checkout';
-    expectInvalid(await send('post', url, { as: 'AUCTIONEER', body: {} }), 'days');
-    expectInvalid(await send('post', url, { as: 'AUCTIONEER', body: { days: 2 } }), 'days');
-    expectInvalid(await send('post', url, { as: 'AUCTIONEER', body: { days: 3, useCredits: 'yes' } }), 'useCredits');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: {} }), 'days');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { days: 2 } }), 'days');
+    expectInvalid(await send('post', url, { as: 'MEMBER', body: { days: 3, useCredits: 'yes' } }), 'useCredits');
   });
 
   it('GET /auctions/promoted bounds limit to 1..4', async () => {
@@ -546,12 +547,12 @@ describe('engagement 2: featured, credits, invoices, GSTIN', () => {
   });
 
   it('POST /commissions/:id/checkout rejects a non-boolean useCredits', async () => {
-    expectInvalid(await send('post', '/commissions/c1/checkout', { as: 'AUCTIONEER', body: { useCredits: 'x' } }), 'useCredits');
+    expectInvalid(await send('post', '/commissions/c1/checkout', { as: 'MEMBER', body: { useCredits: 'x' } }), 'useCredits');
   });
 
   it('GET /members/me/credits and /invoices/mine bound paging', async () => {
-    expectInvalid(await send('get', '/members/me/credits?pageSize=101', { as: 'BIDDER' }), 'pageSize');
-    expectInvalid(await send('get', '/invoices/mine?page=0', { as: 'BIDDER' }), 'page');
+    expectInvalid(await send('get', '/members/me/credits?pageSize=101', { as: 'MEMBER' }), 'pageSize');
+    expectInvalid(await send('get', '/invoices/mine?page=0', { as: 'MEMBER' }), 'page');
   });
 
   it('POST /admin/members/:id/credits: non-zero int within 10_000_000, note 3..200', async () => {
@@ -579,9 +580,9 @@ describe('engagement 2: featured, credits, invoices, GSTIN', () => {
   });
 
   it('PATCH /members/me validates gstin and billingState; a mismatch is 400 INVALID_GSTIN', async () => {
-    expectInvalid(await send('patch', '/members/me', { as: 'BIDDER', body: { gstin: 'bad' } }), 'gstin');
-    expectInvalid(await send('patch', '/members/me', { as: 'BIDDER', body: { billingState: '00' } }), 'billingState');
-    const res = await send('patch', '/members/me', { as: 'BIDDER', body: { gstin: '27ABCDE1234F1Z5', billingState: '29' } });
+    expectInvalid(await send('patch', '/members/me', { as: 'MEMBER', body: { gstin: 'bad' } }), 'gstin');
+    expectInvalid(await send('patch', '/members/me', { as: 'MEMBER', body: { billingState: '00' } }), 'billingState');
+    const res = await send('patch', '/members/me', { as: 'MEMBER', body: { gstin: '27ABCDE1234F1Z5', billingState: '29' } });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('INVALID_GSTIN');
   });
@@ -589,29 +590,29 @@ describe('engagement 2: featured, credits, invoices, GSTIN', () => {
 
 describe('engagement: follows, preferences, analytics', () => {
   it('GET /members/me/following bounds page / pageSize', async () => {
-    expectInvalid(await send('get', '/members/me/following?pageSize=101', { as: 'BIDDER' }), 'pageSize');
-    expectInvalid(await send('get', '/members/me/following?page=0', { as: 'BIDDER' }), 'page');
+    expectInvalid(await send('get', '/members/me/following?pageSize=101', { as: 'MEMBER' }), 'pageSize');
+    expectInvalid(await send('get', '/members/me/following?page=0', { as: 'MEMBER' }), 'page');
   });
 
   it('PUT /members/me/notification-preferences rejects unknown types, duplicates and non-booleans', async () => {
     const url = '/members/me/notification-preferences';
     const item = { type: 'outbid', email: true, push: true };
-    expectInvalid(await send('put', url, { as: 'BIDDER', body: {} }), 'items');
-    expectInvalid(await send('put', url, { as: 'BIDDER', body: { items: [] } }), 'items');
-    expectInvalid(await send('put', url, { as: 'BIDDER', body: { items: [{ ...item, type: 'nope' }] } }), 'type');
-    expectInvalid(await send('put', url, { as: 'BIDDER', body: { items: [item, item] } }), 'items');
-    expectInvalid(await send('put', url, { as: 'BIDDER', body: { items: [{ ...item, push: 'maybe' }] } }), 'push');
+    expectInvalid(await send('put', url, { as: 'MEMBER', body: {} }), 'items');
+    expectInvalid(await send('put', url, { as: 'MEMBER', body: { items: [] } }), 'items');
+    expectInvalid(await send('put', url, { as: 'MEMBER', body: { items: [{ ...item, type: 'nope' }] } }), 'type');
+    expectInvalid(await send('put', url, { as: 'MEMBER', body: { items: [item, item] } }), 'items');
+    expectInvalid(await send('put', url, { as: 'MEMBER', body: { items: [{ ...item, push: 'maybe' }] } }), 'push');
   });
 
   it('following yourself is a 400 INVALID_FOLLOW', async () => {
-    const res = await send('post', '/sellers/m1/follow', { as: 'AUCTIONEER' });
+    const res = await send('post', '/sellers/m1/follow', { as: 'MEMBER' });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('INVALID_FOLLOW');
   });
 
   it('analytics days must be 7, 30 or 90', async () => {
-    expectInvalid(await send('get', '/analytics/seller?days=14', { as: 'AUCTIONEER' }), 'days');
-    expectInvalid(await send('get', '/analytics/auctions/a1?days=abc', { as: 'AUCTIONEER' }), 'days');
+    expectInvalid(await send('get', '/analytics/seller?days=14', { as: 'MEMBER' }), 'days');
+    expectInvalid(await send('get', '/analytics/auctions/a1?days=abc', { as: 'MEMBER' }), 'days');
   });
 
   it('POST /auctions/:id/view answers 204 and ignores an unknown auction', async () => {

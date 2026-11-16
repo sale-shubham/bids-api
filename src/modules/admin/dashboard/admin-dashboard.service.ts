@@ -41,13 +41,11 @@ export function revenueSeries(rows: { amountPaise: bigint | number; paidAt: Date
   return [...sums].map(([month, paidPaise]) => ({ month, paidPaise }));
 }
 
-export function signupSeries(rows: { role: string; createdAt: Date }[], now: Date) {
-  const buckets = new Map(lastMonths(now).map((m) => [m, { month: m, bidders: 0, auctioneers: 0 }]));
+export function signupSeries(rows: { createdAt: Date }[], now: Date) {
+  const buckets = new Map(lastMonths(now).map((m) => [m, { month: m, members: 0 }]));
   for (const r of rows) {
     const b = buckets.get(monthKey(r.createdAt));
-    if (!b) continue;
-    if (r.role === 'BIDDER') b.bidders += 1;
-    else if (r.role === 'AUCTIONEER') b.auctioneers += 1;
+    if (b) b.members += 1;
   }
   return [...buckets.values()];
 }
@@ -64,11 +62,12 @@ export function salesByStatus(rows: { status: string; _count: { _all: number }; 
 
 export async function getDashboard(now = new Date()) {
   const since = windowStart(now);
-  const [members, bidders, auctioneers, live, upcoming, ended, bidsToday, paid, due, paidRows, signupRows, recent, saleRows] =
+  const [members, buyers, sellers, live, upcoming, ended, bidsToday, paid, due, paidRows, signupRows, recent, saleRows] =
     await Promise.all([
-      prisma.member.count({ where: { role: { not: 'SUPER_ADMIN' } } }),
-      prisma.member.count({ where: { role: 'BIDDER' } }),
-      prisma.member.count({ where: { role: 'AUCTIONEER' } }),
+      prisma.member.count({ where: { role: 'MEMBER' } }),
+      // Buyers placed at least one bid; sellers listed at least one auction (any status).
+      prisma.member.count({ where: { role: 'MEMBER', bids: { some: {} } } }),
+      prisma.member.count({ where: { role: 'MEMBER', auctionsSelling: { some: {} } } }),
       prisma.auction.count({ where: statusWhere('live', now) }),
       prisma.auction.count({ where: statusWhere('upcoming', now) }),
       prisma.auction.count({ where: statusWhere('ended', now) }),
@@ -80,8 +79,8 @@ export async function getDashboard(now = new Date()) {
         select: { amountPaise: true, paidAt: true },
       }),
       prisma.member.findMany({
-        where: { role: { in: ['BIDDER', 'AUCTIONEER'] }, createdAt: { gte: since } },
-        select: { role: true, createdAt: true },
+        where: { role: 'MEMBER', createdAt: { gte: since } },
+        select: { createdAt: true },
       }),
       prisma.auction.findMany({
         where: { deletedAt: null },
@@ -95,8 +94,8 @@ export async function getDashboard(now = new Date()) {
   return {
     totals: {
       members,
-      bidders,
-      auctioneers,
+      buyers,
+      sellers,
       liveAuctions: live,
       upcomingAuctions: upcoming,
       endedAuctions: ended,

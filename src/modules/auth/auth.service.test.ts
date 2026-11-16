@@ -16,7 +16,7 @@ vi.mock('./session.service', () => ({ upsertDeviceSession: vi.fn(), touchSession
 import * as auth from './auth.service';
 
 const hash = bcrypt.hashSync('correct1pass', 4);
-const base = { id: 'm1', email: 'a@b.co', name: 'A', role: 'BIDDER', isActive: true, passwordHash: hash, unpaidCommissionPaise: 0n, moneySpentPaise: 0n };
+const base = { id: 'm1', email: 'a@b.co', name: 'A', role: 'MEMBER', isActive: true, passwordHash: hash, unpaidCommissionPaise: 0n, moneySpentPaise: 0n };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -54,19 +54,20 @@ describe('login error mapping', () => {
 });
 
 describe('signup', () => {
-  const input = { name: 'New', email: 'a@b.co', password: 'newpass12', role: 'AUCTIONEER' as const };
+  const input = { name: 'New', email: 'a@b.co', password: 'newpass12' };
 
   it('verified email -> 409 EMAIL_TAKEN', async () => {
     db.member.findUnique.mockResolvedValue({ id: 'm1', emailVerifiedAt: new Date() });
     await expect(auth.signup(input)).rejects.toMatchObject({ statusCode: 409, code: 'EMAIL_TAKEN' });
     expect(db.member.create).not.toHaveBeenCalled();
   });
-  it('existing unverified -> updates name/password/role and resends', async () => {
+  it('existing unverified -> updates name/password (never the role) and resends', async () => {
     db.member.findUnique.mockResolvedValue({ id: 'm1', emailVerifiedAt: null });
     const r = await auth.signup(input);
     expect(db.member.create).not.toHaveBeenCalled();
     const data = db.member.update.mock.calls[0][0].data;
-    expect(data).toMatchObject({ name: 'New', role: 'AUCTIONEER' });
+    expect(data).toMatchObject({ name: 'New' });
+    expect(data).not.toHaveProperty('role');
     expect(await bcrypt.compare('newpass12', data.passwordHash)).toBe(true);
     expect(otp.issueOtpChallenge).toHaveBeenCalledWith('a@b.co', 'SIGNUP', { onCooldown: 'skip' });
     expect(r).toEqual({ resendAfterSec: 30 });
@@ -74,7 +75,7 @@ describe('signup', () => {
   it('new email -> creates unverified member', async () => {
     db.member.findUnique.mockResolvedValue(null);
     await auth.signup(input);
-    expect(db.member.create.mock.calls[0][0].data).toMatchObject({ email: 'a@b.co', emailVerifiedAt: null, role: 'AUCTIONEER' });
+    expect(db.member.create.mock.calls[0][0].data).toMatchObject({ email: 'a@b.co', emailVerifiedAt: null, role: 'MEMBER' });
   });
 });
 

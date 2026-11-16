@@ -3,7 +3,7 @@ import { BadRequest } from '@/core/errors/AppError';
 import { DEFAULT_PREF, NOTIFY_CATALOGUE, isMandatoryEmail } from '@/modules/notify/notify.catalogue';
 import { NOTIFY_TYPES, type NotifyType } from '@/modules/notify/notify.types';
 
-type Role = 'BIDDER' | 'AUCTIONEER' | 'SUPER_ADMIN';
+type Role = 'MEMBER' | 'SUPER_ADMIN';
 export type PreferenceInput = { type: NotifyType; email: boolean; push: boolean };
 
 const visibleTypes = (role: Role) => NOTIFY_TYPES.filter((t) => !NOTIFY_CATALOGUE[t].adminOnly || role === 'SUPER_ADMIN');

@@ -115,30 +115,9 @@ const ADMIN: Route[] = [
   ['put', '/admin/settings/invoice'],
 ];
 
-const SELLER_ONLY: Route[] = [
-  ['get', '/analytics/seller'],
-  ['get', '/analytics/auctions/a1'],
-  ['get', '/auctions/mine'],
-  ['post', '/auctions'],
-  ['post', '/auctions/bulk'],
-  ['patch', '/auctions/a1'],
-  ['delete', '/auctions/a1'],
-  ['post', '/auctions/a1/republish'],
-  ['post', '/reviews/r1/reply'],
-  ['post', '/questions/q1/answer'],
-  ['post', '/questions/q1/hide'],
-  ['get', '/commissions/mine'],
-  ['get', '/commissions/summary'],
-  ['post', '/commissions/c1/checkout'],
-  ['post', '/sales/sale1/ship'],
-  ['post', '/sales/sale1/second-chance'],
-  ['get', '/payouts/account'],
-  ['post', '/payouts/account'],
-  ['post', '/auctions/a1/feature/checkout'],
-  ['get', '/auctions/a1/feature'],
-];
-
-const BIDDER_ONLY: Route[] = [
+// Member-only buy and sell routes: `requireRole('MEMBER')`. A SUPER_ADMIN gets 403 (admins never bid, buy or sell).
+const MEMBER_ONLY: Route[] = [
+  // buying
   ['post', '/auctions/a1/bids'],
   ['post', '/auctions/a1/buy-now'],
   ['get', '/bids/mine'],
@@ -155,6 +134,31 @@ const BIDDER_ONLY: Route[] = [
   ['get', '/second-chance-offers/o1'],
   ['post', '/second-chance-offers/o1/accept'],
   ['post', '/second-chance-offers/o1/decline'],
+  // selling
+  ['post', '/sales/sale1/ship'],
+  ['post', '/sales/sale1/second-chance'],
+  ['get', '/payouts/account'],
+  ['post', '/payouts/account'],
+  ['post', '/auctions/a1/feature/checkout'],
+  ['get', '/auctions/a1/feature'],
+];
+
+// Selling routes that admit `requireRole('MEMBER', 'SUPER_ADMIN')` (admins moderate / read them).
+const MEMBER_OR_ADMIN: Route[] = [
+  ['get', '/analytics/seller'],
+  ['get', '/analytics/auctions/a1'],
+  ['get', '/auctions/mine'],
+  ['post', '/auctions'],
+  ['post', '/auctions/bulk'],
+  ['patch', '/auctions/a1'],
+  ['delete', '/auctions/a1'],
+  ['post', '/auctions/a1/republish'],
+  ['post', '/reviews/r1/reply'],
+  ['post', '/questions/q1/answer'],
+  ['post', '/questions/q1/hide'],
+  ['get', '/commissions/mine'],
+  ['get', '/commissions/summary'],
+  ['post', '/commissions/c1/checkout'],
 ];
 
 const PUBLIC: Route[] = [
@@ -217,21 +221,21 @@ describe('guards: token problems', () => {
 
   it('rejects a token whose session row is gone (evicted device)', async () => {
     prismaMock.session.findUnique.mockResolvedValue(null);
-    const res = await request(await getApp()).get('/members/me').set('Authorization', await bearer('BIDDER'));
+    const res = await request(await getApp()).get('/members/me').set('Authorization', await bearer('MEMBER'));
     expect(res.status).toBe(401);
     expect(res.body.error.message).toMatch(/session expired/i);
   });
 
   it('rejects a session that belongs to a different member', async () => {
     prismaMock.session.findUnique.mockResolvedValue({ id: 's-m1', memberId: 'someone-else' });
-    const res = await request(await getApp()).get('/members/me').set('Authorization', await bearer('BIDDER'));
+    const res = await request(await getApp()).get('/members/me').set('Authorization', await bearer('MEMBER'));
     expect(res.status).toBe(401);
   });
 
   it('accepts the nb_at cookie as well as the bearer header', async () => {
     const res = await request(await getApp())
       .get('/auctions/mine?status=bogus')
-      .set('Cookie', `nb_at=${await tokenFor('AUCTIONEER')}`);
+      .set('Cookie', `nb_at=${await tokenFor('MEMBER')}`);
     // Past authenticate + requireRole + requireActiveMember: validation is what rejects it.
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
@@ -239,35 +243,37 @@ describe('guards: token problems', () => {
 
   it('suspended member -> 403 ACCOUNT_SUSPENDED (isActive read live from the DB)', async () => {
     prismaMock.member.findUnique.mockResolvedValue({ id: 'm1', isActive: false });
-    const res = await request(await getApp()).get('/watchlist/ids').set('Authorization', await bearer('BIDDER'));
+    const res = await request(await getApp()).get('/watchlist/ids').set('Authorization', await bearer('MEMBER'));
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('ACCOUNT_SUSPENDED');
   });
 });
 
 describe('guards: wrong role -> 403 FORBIDDEN', () => {
-  it.each(rows(SELLER_ONLY))('BIDDER cannot %s', async (_l, route) => {
-    const res = await call(route, await bearer('BIDDER'));
+  it.each(rows(MEMBER_ONLY))('SUPER_ADMIN cannot %s', async (_l, route) => {
+    const res = await call(route, await bearer('SUPER_ADMIN', 'admin1'));
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
   });
 
-  it.each(rows(BIDDER_ONLY))('AUCTIONEER cannot %s', async (_l, route) => {
-    const res = await call(route, await bearer('AUCTIONEER'));
+  it.each(rows(ADMIN))('MEMBER cannot %s', async (_l, route) => {
+    const res = await call(route, await bearer('MEMBER'));
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
   });
+});
 
-  it.each(rows(ADMIN))('BIDDER cannot %s', async (_l, route) => {
-    const res = await call(route, await bearer('BIDDER'));
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('FORBIDDEN');
+describe('guards: MEMBER buys and sells with one account', () => {
+  it.each(rows([...MEMBER_ONLY, ...MEMBER_OR_ADMIN]))('MEMBER passes the role guard on %s', async (_l, route) => {
+    const res = await call(route, await bearer('MEMBER'));
+    expect(res.body?.error?.code).not.toBe('FORBIDDEN');
+    expect(res.status).not.toBe(401);
   });
 
-  it.each(rows(ADMIN))('AUCTIONEER cannot %s', async (_l, route) => {
-    const res = await call(route, await bearer('AUCTIONEER'));
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('FORBIDDEN');
+  it.each(rows(MEMBER_OR_ADMIN))('SUPER_ADMIN passes the role guard on %s', async (_l, route) => {
+    const res = await call(route, await bearer('SUPER_ADMIN', 'admin1'));
+    expect(res.body?.error?.code).not.toBe('FORBIDDEN');
+    expect(res.status).not.toBe(401);
   });
 
   it('SUPER_ADMIN passes the seller guard on /auctions/mine (and the active-member check is skipped)', async () => {

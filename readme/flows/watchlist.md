@@ -15,7 +15,7 @@ Code: `src/modules/watchlist/watchlist.{routes,service,validation}.ts`. Table `W
 
 ## Ending-soon job
 
-`runEndingSoon(now)` (`watchlist.service.ts`): watchlist rows with `endingSoonNotifiedAt = null` whose auction is effectively LIVE (not cancelled/ended, `startTime <= now < endTime`) and `endTime <= now + 60 min`. For each, enqueue an `ending-soon` notification (in-app + email + push; templates `ending-soon.ejs` / `.txt.ejs`), then set `endingSoonNotifiedAt = now`. At most 1000 rows per run.
+`runEndingSoon(now)` (`watchlist.service.ts`): watchlist rows with `endingSoonNotifiedAt = null` whose auction is effectively LIVE (not cancelled/ended, `startTime <= now < endTime`) and `endTime <= now + 60 min`. Rows where the watcher is the auction's own seller are marked handled (`endingSoonNotifiedAt = now`) and skipped, so a seller is never alerted about their own auction. For each other row, enqueue an `ending-soon` notification (in-app + email + push; templates `ending-soon.ejs` / `.txt.ejs`), then set `endingSoonNotifiedAt = now`. At most 1000 rows per run.
 
 - dedupeKey: `ending-soon:<auctionId>:<memberId>:<endTime epoch ms>`. The end time is part of the key (a deviation from the plain `ending-soon:<auctionId>:<memberId>`) so that a republished auction, which gets a new endTime, can notify again; without it the old Notification row would swallow the new reminder. Re-runs within one cycle stay no-ops even if marking failed.
 - Reset: `updateAuction` (times changed) and `republishAuction` clear `endingSoonNotifiedAt` for all watchers of the auction.

@@ -1,12 +1,12 @@
 # Saved-search alerts flow
 
-Code: `src/modules/saved-searches/saved-searches.{routes,controller,service,validation}.ts` and `saved-search.matcher.ts`. A bidder saves a browse filter and is notified when a matching auction is published.
+Code: `src/modules/saved-searches/saved-searches.{routes,controller,service,validation}.ts` and `saved-search.matcher.ts`. A member saves a browse filter and is notified when a matching auction is published.
 
 ## Schema
 
 `SavedSearch { id, memberId -> Member (cascade), name?, q?, category?, condition ItemCondition?, minPricePaise BigInt?, maxPricePaise BigInt?, createdAt }`, indexes `(memberId)` and `(category)`.
 
-## Endpoints (BIDDER, active member)
+## Endpoints (MEMBER, active member)
 
 | Method | Path | Notes |
 |---|---|---|

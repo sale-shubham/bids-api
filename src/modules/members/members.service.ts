@@ -35,15 +35,17 @@ export async function getPublicProfile(memberId: string, viewerId?: string, now 
   if (!member) return null;
   const { statusWhere } = await import('@/modules/auctions/auctions.query');
   const { isFollowing } = await import('@/modules/follows/follows.service');
-  const [auctionsSold, activeAuctions, following] = await Promise.all([
+  const [auctionsSold, activeAuctions, following, listedCount] = await Promise.all([
     prisma.auction.count({
       where: { AND: [{ sellerId: memberId }, statusWhere('ended', now), { winnerId: { not: null } }] },
     }),
     prisma.auction.count({ where: { AND: [{ sellerId: memberId }, statusWhere('live', now)] } }),
     viewerId ? isFollowing(viewerId, memberId) : Promise.resolve(false),
+    // Every auction this member ever created, all statuses (a member with 0 cannot be followed).
+    prisma.auction.count({ where: { sellerId: memberId } }),
   ]);
   const { ratingSum, ratingCount, verifiedAt, ...publicFields } = member;
-  return { ...publicFields, verified: !!verifiedAt, ratingAvg: ratingAvg(ratingSum, ratingCount), ratingCount, auctionsSold, activeAuctions, isFollowing: following };
+  return { ...publicFields, verified: !!verifiedAt, ratingAvg: ratingAvg(ratingSum, ratingCount), ratingCount, auctionsSold, activeAuctions, listedCount, isFollowing: following };
 }
 
 // Base URLs an avatar may come from: our CloudFront, or the bucket's S3 URL.

@@ -130,6 +130,11 @@ describe('createReview', () => {
     expect(await code(createReview('w1', 'a1', { rating: 5 }, now))).toBe('403:REVIEW_NOT_ALLOWED');
     expect(db.review.create).not.toHaveBeenCalled();
   });
+  it('403 when the reviewer is the auction seller, even if stamped as winner', async () => {
+    db.auction.findUnique.mockResolvedValue(auction({ winnerId: 's1' }));
+    expect(await code(createReview('s1', 'a1', { rating: 5 }, now))).toBe('403:REVIEW_NOT_ALLOWED');
+    expect(db.review.create).not.toHaveBeenCalled();
+  });
   it('409 ALREADY_REVIEWED, also on the unique-violation race', async () => {
     db.review.findUnique.mockResolvedValue({ id: 'r0' });
     expect(await code(createReview('w1', 'a1', { rating: 5 }, now))).toBe('409:ALREADY_REVIEWED');

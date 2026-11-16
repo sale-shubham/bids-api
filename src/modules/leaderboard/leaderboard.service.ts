@@ -18,7 +18,7 @@ export async function getLeaderboard(by: LeaderboardBy = 'spent', limit = 20) {
       ? [{ auctionsWon: 'desc' as const }, { moneySpentPaise: 'desc' as const }, { createdAt: 'asc' as const }, { id: 'asc' as const }]
       : [{ moneySpentPaise: 'desc' as const }, { auctionsWon: 'desc' as const }, { createdAt: 'asc' as const }, { id: 'asc' as const }];
   const rows = await prisma.member.findMany({
-    where: { role: 'BIDDER', isActive: true, OR: [{ auctionsWon: { gt: 0 } }, { moneySpentPaise: { gt: 0 } }] },
+    where: { role: 'MEMBER', isActive: true, OR: [{ auctionsWon: { gt: 0 } }, { moneySpentPaise: { gt: 0 } }] },
     orderBy,
     take: limit,
     select: { id: true, name: true, avatarUrl: true, auctionsWon: true, moneySpentPaise: true },

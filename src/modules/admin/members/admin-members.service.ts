@@ -1,12 +1,12 @@
 import { prisma } from '@/core/prisma/client';
 import { offsetArgs, buildOrderBy, type SortOrder } from '@/core/http/pagination';
 import { AppError, NotFound } from '@/core/errors/AppError';
-import type { Prisma, Role } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { withMemberMoney } from '@/modules/members/member.select';
 import { balancesFor, creditBalance } from '@/modules/credits/credits.service';
 import { refreshSellerVerification } from '@/modules/members/verification.service';
 
-// Backs the admin Members page: list, update (active / role / verified).
+// Backs the admin Members page: list, update (active / verified).
 
 type AdminMemberRow = Prisma.MemberGetPayload<{ select: ReturnType<typeof memberSelect> }>;
 
@@ -18,6 +18,7 @@ function toAdminDto(m: AdminMemberRow, creditBalancePaise = 0) {
     verified: !!verifiedAt,
     payoutStatus: payoutAccount?.status ?? null,
     activeStrikes: _count?.strikes ?? 0,
+    auctionsListed: _count?.auctionsSelling ?? 0,
     creditBalancePaise,
   };
 }
@@ -27,7 +28,7 @@ const NOT_SUPER_ADMIN = { role: { not: 'SUPER_ADMIN' as const } };
 
 interface ListParams {
   status?: 'active' | 'inactive';
-  role?: Exclude<Role, 'SUPER_ADMIN'>;
+  seller?: boolean;
   search?: string;
   page: number;
   pageSize: number;
@@ -38,7 +39,6 @@ interface ListParams {
 const MEMBER_SORT_MAP: Record<string, (order: SortOrder) => Prisma.MemberOrderByWithRelationInput> = {
   name: (order) => ({ name: order }),
   email: (order) => ({ email: order }),
-  role: (order) => ({ role: order }),
   createdAt: (order) => ({ createdAt: order }),
   isActive: (order) => ({ isActive: order }),
 };
@@ -57,14 +57,15 @@ const memberSelect = (now = new Date()) => ({
   auctionsWon: true,
   moneySpentPaise: true,
   createdAt: true,
-  _count: { select: { strikes: { where: { removedAt: null, expiresAt: { gt: now } } } } },
+  _count: { select: { auctionsSelling: true, strikes: { where: { removedAt: null, expiresAt: { gt: now } } } } },
 }) satisfies Prisma.MemberSelect;
 
 export async function listMembers(params: ListParams) {
   const search = params.search?.trim();
   const where: Prisma.MemberWhereInput = {
     AND: [NOT_SUPER_ADMIN], // base clause: filters below can never override it
-    ...(params.role ? { role: params.role } : {}),
+    ...(params.seller === true ? { auctionsSelling: { some: {} } } : {}),
+    ...(params.seller === false ? { auctionsSelling: { none: {} } } : {}),
     ...(params.status === 'active' ? { isActive: true } : {}),
     ...(params.status === 'inactive' ? { isActive: false } : {}),
     ...(search
@@ -107,26 +108,25 @@ export async function getMemberStats() {
 }
 
 export const cannotModifySelf = () =>
-  new AppError(409, 'CANNOT_MODIFY_SELF', 'You cannot change your own role or deactivate your own account');
+  new AppError(409, 'CANNOT_MODIFY_SELF', 'You cannot deactivate your own account');
 
 /**
- * Update a member's active flag and/or role. An admin can never change their
- * own role or deactivate themselves (no accidental lock-out). Deactivating
+ * Update a member's active flag and/or verified badge. An admin can never
+ * deactivate themselves (no accidental lock-out). Deactivating
  * kills every live Session + WebSocket connection so it takes effect at once.
  */
 export async function updateMember(
   id: string,
   actorId: string,
-  input: { isActive?: boolean; role?: Exclude<Role, 'SUPER_ADMIN'>; verified?: boolean },
+  input: { isActive?: boolean; verified?: boolean },
 ) {
-  if (id === actorId && (input.isActive === false || input.role !== undefined)) throw cannotModifySelf();
+  if (id === actorId && input.isActive === false) throw cannotModifySelf();
 
   const existing = await prisma.member.findUnique({ where: { id }, select: { id: true, role: true } });
   if (!existing || existing.role === 'SUPER_ADMIN') throw NotFound('Member not found');
 
   const data: Prisma.MemberUpdateInput = {};
   if (input.isActive !== undefined) data.isActive = input.isActive;
-  if (input.role !== undefined) data.role = input.role;
   // verified=false revokes (wins over the rule); verified=true lifts the revoke, then the rule re-decides.
   if (input.verified === false) {
     data.verificationRevokedAt = new Date();
@@ -135,7 +135,7 @@ export async function updateMember(
     data.verificationRevokedAt = null;
   }
   let member = await prisma.member.update({ where: { id }, data, select: memberSelect() });
-  if (input.verified === true || input.role !== undefined) {
+  if (input.verified === true) {
     await refreshSellerVerification(id);
     member = (await prisma.member.findUnique({ where: { id }, select: memberSelect() })) ?? member;
   }

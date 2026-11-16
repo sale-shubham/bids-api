@@ -4,6 +4,7 @@ Code: `src/modules/featured/` (`featured.rules`, `featured.service`, `featured.r
 
 ## Rules
 
+- Guard: `requireRole('MEMBER')` (SUPER_ADMIN gets 403) + owner check by member id.
 - `Auction.featuredUntil` (nullable, indexed). Applying a purchase: `featuredUntil = min(max(now, current featuredUntil) + days, auction.endTime)`, so buying again extends a running feature and never runs past the end of the auction.
 - `FeaturePurchase` (`PENDING | PAID | FAILED`, `paidWith` `RAZORPAY | CREDITS`, `amountPaise` BigInt). Seller history is `GET /auctions/:id/feature`.
 - Settings: `featured.enabled` (default true) and `featured.prices` JSON `{ "1": 9900, "3": 24900, "7": 49900 }` paise (keys fixed). Public settings expose `featuredEnabled` and `featuredPrices`; `PUT /admin/settings` accepts both (optional, absent keeps the stored value).
@@ -12,7 +13,7 @@ Code: `src/modules/featured/` (`featured.rules`, `featured.service`, `featured.r
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| POST | `/auctions/:id/feature/checkout` | AUCTIONEER, active, owner (404 otherwise) | body `{ days: 1, 3 or 7, useCredits?: boolean }` |
+| POST | `/auctions/:id/feature/checkout` | MEMBER, active, owner (404 otherwise) | body `{ days: 1, 3 or 7, useCredits?: boolean }` |
 | GET | `/auctions/:id/feature` | owner | `{ featuredUntil, purchases: [{ id, days, amountPaise, status, paidWith, paidAt, createdAt }] }` |
 | GET | `/auctions/promoted?category=<slug>&limit=1..4` | public | `{ items: AuctionCard[] }`, live promoted only (category includes descendants), default limit 2 |
 

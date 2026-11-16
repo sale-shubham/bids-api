@@ -69,7 +69,7 @@ function arrange(over: Record<string, unknown> = {}) {
 const place = async (value: number, who = 'bidder1', field: 'maxAmountPaise' | 'amountPaise' = 'maxAmountPaise') =>
   request(await getApp())
     .post('/auctions/a1/bids')
-    .set('Authorization', await bearer('BIDDER', who))
+    .set('Authorization', await bearer('MEMBER', who))
     .send({ [field]: value });
 
 beforeEach(() => {
@@ -291,7 +291,7 @@ describe('POST /auctions/:id/buy-now', () => {
   const buy = async (who = 'bidder1') =>
     request(await getApp())
       .post('/auctions/a1/buy-now')
-      .set('Authorization', await bearer('BIDDER', who));
+      .set('Authorization', await bearer('MEMBER', who));
 
   it('201: inserts the BUY_NOW bid, ends the auction, books the commission, then publishes bid.placed and auction.ended', async () => {
     const base = arrange({ buyNowPricePaise: 900_000n });
@@ -362,7 +362,7 @@ describe('POST /auctions (reserve / buy-now rules)', () => {
   const create = async (over: Record<string, unknown>) =>
     request(await getApp())
       .post('/auctions')
-      .set('Authorization', await bearer('AUCTIONEER', 'seller1'))
+      .set('Authorization', await bearer('MEMBER', 'seller1'))
       .send({ ...body, ...over });
 
   beforeEach(() => {
@@ -415,7 +415,7 @@ describe('GET /auctions/:id/bids and /bids/mine', () => {
 
   it('GET /bids/mine -> empty paged list when the member never bid', async () => {
     prismaMock.bid.groupBy.mockResolvedValue([]);
-    const res = await request(await getApp()).get('/bids/mine').set('Authorization', await bearer('BIDDER', 'bidder1'));
+    const res = await request(await getApp()).get('/bids/mine').set('Authorization', await bearer('MEMBER', 'bidder1'));
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ success: true, data: [], meta: { total: 0, page: 1, pageSize: 20, totalPages: 1 } });
   });
@@ -464,7 +464,7 @@ describe('GET /auctions/:id', () => {
     const app = await getApp();
     expect((await request(app).get('/auctions/a1')).status).toBe(404);
 
-    const res = await request(app).get('/auctions/a1').set('Authorization', await bearer('AUCTIONEER', 'seller1'));
+    const res = await request(app).get('/auctions/a1').set('Authorization', await bearer('MEMBER', 'seller1'));
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ auction: { id: 'a1', title: 'Telescope' }, serverTime: NOW.toISOString() });
   });
@@ -477,7 +477,7 @@ describe('GET /auctions/:id', () => {
 });
 
 describe('bid deposits', () => {
-  const buy = async () => request(await getApp()).post('/auctions/a1/buy-now').set('Authorization', await bearer('BIDDER', 'bidder1'));
+  const buy = async () => request(await getApp()).post('/auctions/a1/buy-now').set('Authorization', await bearer('MEMBER', 'bidder1'));
 
   it('403 DEPOSIT_REQUIRED with the amount when the auction needs a deposit that is not held; no bid is written', async () => {
     arrange({ depositPaise: 1_000_000n });

@@ -33,10 +33,10 @@ describe('follow rules', () => {
     expect(db.$transaction).not.toHaveBeenCalled();
   });
 
-  it('target must be an active AUCTIONEER (404 SELLER_NOT_FOUND)', async () => {
+  it('target must be an active MEMBER who has listed an auction (404 SELLER_NOT_FOUND)', async () => {
     db.member.findFirst.mockResolvedValue(null);
     expect(await code(followSeller('m1', 's1'))).toBe('404:SELLER_NOT_FOUND');
-    expect(db.member.findFirst).toHaveBeenCalledWith({ where: { id: 's1', role: 'AUCTIONEER', isActive: true }, select: { id: true } });
+    expect(db.member.findFirst).toHaveBeenCalledWith({ where: { id: 's1', role: 'MEMBER', isActive: true, auctionsSelling: { some: {} } }, select: { id: true } });
     expect(await code(unfollowSeller('m1', 's1'))).toBe('404:SELLER_NOT_FOUND');
   });
 });
@@ -116,11 +116,21 @@ describe('public profile', () => {
   it('carries followerCount and isFollowing for the signed-in viewer', async () => {
     const { getPublicProfile } = await import('@/modules/members/members.service');
     db.member.findFirst.mockResolvedValue({
-      id: 's1', name: 'Asha', avatarUrl: null, role: 'AUCTIONEER', ratingCount: 0, ratingSum: 0, followerCount: 7, verifiedAt: null, createdAt: new Date(0),
+      id: 's1', name: 'Asha', avatarUrl: null, role: 'MEMBER', ratingCount: 0, ratingSum: 0, followerCount: 7, verifiedAt: null, createdAt: new Date(0),
     });
     db.auction.count.mockResolvedValue(0);
     db.follow.findUnique.mockResolvedValue({ sellerId: 's1' });
     expect(await getPublicProfile('s1', 'm1')).toMatchObject({ followerCount: 7, isFollowing: true });
     expect(await getPublicProfile('s1')).toMatchObject({ followerCount: 7, isFollowing: false });
+  });
+
+  it('carries listedCount: every auction the member ever created, all statuses', async () => {
+    const { getPublicProfile } = await import('@/modules/members/members.service');
+    db.member.findFirst.mockResolvedValue({
+      id: 's1', name: 'Asha', avatarUrl: null, role: 'MEMBER', ratingCount: 0, ratingSum: 0, followerCount: 0, verifiedAt: null, createdAt: new Date(0),
+    });
+    db.auction.count.mockImplementation(async ({ where }: any) => (where.sellerId === 's1' && !where.AND ? 5 : 0));
+    const p = await getPublicProfile('s1');
+    expect(p).toMatchObject({ role: 'MEMBER', listedCount: 5, auctionsSold: 0, activeAuctions: 0 });
   });
 });

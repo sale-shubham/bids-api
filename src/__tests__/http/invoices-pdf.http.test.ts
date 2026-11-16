@@ -15,7 +15,7 @@ const inv = {
   placeOfSupply: '27', taxablePaise: 10_000n, cgstPaise: 900n, sgstPaise: 900n, igstPaise: 0n, totalPaise: 11_800n, isTaxInvoice: true, issuedAt: new Date('2026-11-16T10:00:00Z'), pdfKey: null,
 };
 
-const get = async (as: 'BIDDER' | 'AUCTIONEER' | 'SUPER_ADMIN', id: string) =>
+const get = async (as: 'MEMBER' | 'SUPER_ADMIN', id: string) =>
   request(await getApp())
     .get('/invoices/inv1/pdf')
     .set('Authorization', await bearer(as, id))
@@ -37,7 +37,7 @@ beforeEach(() => {
 
 describe('GET /invoices/:id/pdf', () => {
   it('owner: 200 streams application/pdf with the filename, length and no-store headers', async () => {
-    const res = await get('AUCTIONEER', 'owner');
+    const res = await get('MEMBER', 'owner');
     const body = res.body as Buffer;
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toBe('application/pdf');
@@ -48,8 +48,8 @@ describe('GET /invoices/:id/pdf', () => {
   });
 
   it('renders on every request: no storage writes, no presign, pdfKey untouched', async () => {
-    await get('AUCTIONEER', 'owner');
-    await get('AUCTIONEER', 'owner');
+    await get('MEMBER', 'owner');
+    await get('MEMBER', 'owner');
     expect(storage.putObject).not.toHaveBeenCalled();
     expect(storage.presignGet).not.toHaveBeenCalled();
     expect(prismaMock.invoice.update).not.toHaveBeenCalled();
@@ -59,7 +59,7 @@ describe('GET /invoices/:id/pdf', () => {
   it('another member: JSON 404 INVOICE_NOT_FOUND', async () => {
     const res = await request(await getApp())
       .get('/invoices/inv1/pdf')
-      .set('Authorization', await bearer('BIDDER', 'stranger'));
+      .set('Authorization', await bearer('MEMBER', 'stranger'));
     expect(res.status).toBe(404);
     expect(res.headers['content-type']).toMatch(/json/);
     expect(res.body).toMatchObject({ success: false, error: { code: 'INVOICE_NOT_FOUND' } });
@@ -69,7 +69,7 @@ describe('GET /invoices/:id/pdf', () => {
     prismaMock.invoice.findUnique.mockResolvedValue(null);
     const res = await request(await getApp())
       .get('/invoices/inv1/pdf')
-      .set('Authorization', await bearer('AUCTIONEER', 'owner'));
+      .set('Authorization', await bearer('MEMBER', 'owner'));
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('INVOICE_NOT_FOUND');
   });

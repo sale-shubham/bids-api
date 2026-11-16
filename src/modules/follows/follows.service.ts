@@ -9,7 +9,7 @@ export type FollowState = { following: boolean; followerCount: number };
 async function assertFollowable(followerId: string, sellerId: string) {
   if (followerId === sellerId) throw new AppError(400, 'INVALID_FOLLOW', 'You cannot follow yourself');
   const seller = await prisma.member.findFirst({
-    where: { id: sellerId, role: 'AUCTIONEER', isActive: true },
+    where: { id: sellerId, role: 'MEMBER', isActive: true, auctionsSelling: { some: {} } },
     select: { id: true },
   });
   if (!seller) throw new AppError(404, 'SELLER_NOT_FOUND', 'Seller not found');

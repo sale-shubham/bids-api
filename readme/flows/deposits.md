@@ -4,7 +4,7 @@ Code: `src/modules/deposits/` (`deposits.{rules,service,jobs,routes}.ts`), pure 
 
 ## Business rule
 
-A bidder may have to pay a **refundable deposit** (Razorpay order, no Route transfers) before bidding or using Buy It Now:
+A member may have to pay a **refundable deposit** (Razorpay order, no Route transfers) before bidding or using Buy It Now:
 
 - **High-value auction:** `Auction.depositPaise` (BigInt?, null = none) = `round(startingBid * depositRateBps / 10000)` when `auction.depositThresholdPaise > 0` and the starting bid is at or above it. Computed on create and when `PATCH /auctions/:id` changes `startingBidPaise` (republish keeps the stored value: the starting bid cannot change there).
 - **Strikes:** a member with 2 or more active strikes (`strikes.md`) needs, on every auction, `max(round(max(startingBid, currentBid) * depositRateBps / 10000), 50_000)` (Rs 500 floor). The auction deposit wins when it is set (they do not stack).
@@ -27,7 +27,7 @@ Admin override: `PATCH /admin/auctions/:id/deposit` `{ depositPaise: integer >= 
 
 | Method | Path | Who | Notes |
 |---|---|---|---|
-| POST | `/auctions/:id/deposit/checkout` | BIDDER, active | no body; payload as the sale / commission checkout `{ orderId, amountPaise, currency: 'INR', keyId, description, prefill }`. 404 `AUCTION_NOT_FOUND` (missing / cancelled), 409 `AUCTION_ENDED` (not open), 403 `OWN_AUCTION`, 409 `DEPOSIT_ALREADY_HELD`, 409 `DEPOSIT_NOT_REQUIRED` |
+| POST | `/auctions/:id/deposit/checkout` | MEMBER, active | no body; payload as the sale / commission checkout `{ orderId, amountPaise, currency: 'INR', keyId, description, prefill }`. 404 `AUCTION_NOT_FOUND` (missing / cancelled), 409 `AUCTION_ENDED` (not open), 403 `OWN_AUCTION`, 409 `DEPOSIT_ALREADY_HELD`, 409 `DEPOSIT_NOT_REQUIRED` |
 
 Checkout upserts the `AuctionDeposit` (PENDING, amount = the required amount), then creates a Razorpay order (`referenceType 'DEPOSIT'`, `referenceId` = deposit id, `idempotencyKey deposit:<id>:<orderId>`, receipt `d_<12 id chars>_<base36 time>`, notes `{ depositId, auctionId, memberId }`, no `transfers`). A CREATED order younger than 30 min for the same deposit and amount is reused.
 

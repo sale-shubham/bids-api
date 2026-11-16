@@ -14,7 +14,7 @@ vi.mock('@/core/prisma/client', () => ({
     member: {
       findUnique: async ({ where }: { where: { id: string } }) => ({
         id: where.id,
-        role: where.id === 'admin' ? 'SUPER_ADMIN' : 'BIDDER',
+        role: where.id === 'admin' ? 'SUPER_ADMIN' : 'MEMBER',
         email: 'a@example.com',
         name: 'A',
         isActive: true,
@@ -42,7 +42,7 @@ async function callMe(sub: string) {
 
 describe('GET /members/me deviceLimit', () => {
   it("returns a member's memberLimit", async () => {
-    expect(await callMe('m1')).toMatchObject({ role: 'BIDDER', deviceLimit: 3, activeStrikes: 1 });
+    expect(await callMe('m1')).toMatchObject({ role: 'MEMBER', deviceLimit: 3, activeStrikes: 1 });
   });
 
   it("returns a super admin's superAdminLimit", async () => {

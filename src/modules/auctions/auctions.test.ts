@@ -164,7 +164,7 @@ describe('priceFilter / statusWhere', () => {
 });
 
 describe('service ownership / 409 rules', () => {
-  const seller = { sub: 'seller', role: 'AUCTIONEER' as const };
+  const seller = { sub: 'seller', role: 'MEMBER' as const };
   const row = (over: Record<string, unknown> = {}) => ({
     id: 'a1',
     sellerId: 'seller',
@@ -242,7 +242,7 @@ describe('service ownership / 409 rules', () => {
   it('delete: seller blocked by bids; admin always; others 404', async () => {
     db.auction.findUnique.mockResolvedValue({ sellerId: 'seller', bidCount: 3, deletedAt: null });
     expect(await code(svc.deleteAuction('a1', seller, now))).toBe('409:AUCTION_HAS_BIDS');
-    expect(await code(svc.deleteAuction('a1', { sub: 'z', role: 'AUCTIONEER' }, now))).toBe('404:AUCTION_NOT_FOUND');
+    expect(await code(svc.deleteAuction('a1', { sub: 'z', role: 'MEMBER' }, now))).toBe('404:AUCTION_NOT_FOUND');
     db.auction.update.mockResolvedValue({});
     expect(await svc.deleteAuction('a1', { sub: 'admin', role: 'SUPER_ADMIN' }, now)).toEqual({ id: 'a1' });
     expect(db.auction.update).toHaveBeenCalledWith({
@@ -358,7 +358,7 @@ describe('service ownership / 409 rules', () => {
   it('detail: cancelled hidden from the public, visible to seller / admin', async () => {
     db.auction.findUnique.mockResolvedValue(row({ status: 'CANCELLED' }));
     expect(await code(svc.getAuction('a1', undefined, now))).toBe('404:AUCTION_NOT_FOUND');
-    expect(await code(svc.getAuction('a1', { sub: 'other', role: 'BIDDER' }, now))).toBe('404:AUCTION_NOT_FOUND');
+    expect(await code(svc.getAuction('a1', { sub: 'other', role: 'MEMBER' }, now))).toBe('404:AUCTION_NOT_FOUND');
     expect(await code(svc.getAuction('a1', seller, now))).toBe('ok');
     expect(await code(svc.getAuction('a1', { sub: 'adm', role: 'SUPER_ADMIN' }, now))).toBe('ok');
   });
@@ -418,7 +418,7 @@ describe('service ownership / 409 rules', () => {
     beforeEach(() => db.auction.findUnique.mockResolvedValue(detailRow()));
 
     it('a stranger, an anonymous viewer and another bidder never see the reserve', async () => {
-      for (const viewer of [undefined, { sub: 'other', role: 'BIDDER' as const }, { sub: 'x', role: 'AUCTIONEER' as const }]) {
+      for (const viewer of [undefined, { sub: 'other', role: 'MEMBER' as const }, { sub: 'x', role: 'MEMBER' as const }]) {
         const d = (await svc.getAuction('a1', viewer, now)) as unknown as Record<string, unknown>;
         expect('reservePricePaise' in d).toBe(false);
         expect(JSON.stringify(d)).not.toContain('20000');
@@ -433,7 +433,7 @@ describe('service ownership / 409 rules', () => {
     });
     it('the viewer gets their own max bid', async () => {
       db.maxBid.findUnique.mockResolvedValue({ maxAmountPaise: 77_000n });
-      const d = (await svc.getAuction('a1', { sub: 'other', role: 'BIDDER' }, now)) as unknown as { myMaxBidPaise: number };
+      const d = (await svc.getAuction('a1', { sub: 'other', role: 'MEMBER' }, now)) as unknown as { myMaxBidPaise: number };
       expect(d.myMaxBidPaise).toBe(77_000);
       db.maxBid.findUnique.mockResolvedValue(null);
       expect(((await svc.getAuction('a1', undefined, now)) as unknown as { myMaxBidPaise: number | null }).myMaxBidPaise).toBeNull();

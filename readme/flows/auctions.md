@@ -15,7 +15,7 @@ List filters (`auctions.query.ts` `statusWhere`) mirror this in SQL: live = `sta
 
 ## Shapes
 
-`AuctionCard` = `{ id, title, category (name), categorySlug|null, condition: NEW|LIKE_NEW|GOOD|FAIR|USED|FOR_PARTS, estimateLowPaise|null, estimateHighPaise|null, hasVideo: boolean, sold: boolean (effective ENDED with a winner), endedAt|null, coverImage|null, startingBidPaise, currentBidPaise, bidCount, buyNowPricePaise: number|null (null when unset or once bidCount > 0), hasReserve: boolean, reserveMet: boolean, startTime, endTime, status, seller: { id, name, avatarUrl, ratingAvg: number|null, ratingCount, verified: boolean } }`. `seller.verified` = the verified-seller badge (`Member.verifiedAt`: AUCTIONEER with verified phone and an ACTIVE payout account, not revoked by an admin; see `auth.md`). `ratingAvg` = round(ratingSum / ratingCount, 1), null when there are no counted reviews (`reviews.md`); `ratingSum` is never exposed.
+`AuctionCard` = `{ id, title, category (name), categorySlug|null, condition: NEW|LIKE_NEW|GOOD|FAIR|USED|FOR_PARTS, estimateLowPaise|null, estimateHighPaise|null, hasVideo: boolean, sold: boolean (effective ENDED with a winner), endedAt|null, coverImage|null, startingBidPaise, currentBidPaise, bidCount, buyNowPricePaise: number|null (null when unset or once bidCount > 0), hasReserve: boolean, reserveMet: boolean, startTime, endTime, status, seller: { id, name, avatarUrl, ratingAvg: number|null, ratingCount, verified: boolean } }`. `seller.verified` = the verified-seller badge (`Member.verifiedAt`: MEMBER with verified phone and an ACTIVE payout account, not revoked by an admin; see `auth.md`). `ratingAvg` = round(ratingSum / ratingCount, 1), null when there are no counted reviews (`reviews.md`); `ratingSum` is never exposed.
 `AuctionDetail` = card + `{ description, categoryId|null, categoryPath: [{ id, slug, name }] (root to leaf), specs: [{ key, label, value, unit|null }] (category schema order; unknown / removed keys omitted), conditionReport|null (sanitised HTML), videoUrl|null, shippingOptions: { pickup, pickupCity|null, courier, shippingFeePaise|null, shipsWithinDays|null }|null (null = legacy auction), images[], minIncrementPaise, highestBidderId|null, winnerId|null, endedAt|null, createdAt, updatedAt, recentBids: BidDTO[], myHighestBidPaise: number|null, myMaxBidPaise: number|null, reservePricePaise?: number|null (owner / SUPER_ADMIN only), contact: { role: 'SELLER'|'WINNER', name, email, phone }|null, isWatching: boolean, watcherCount: number, review: ReviewDTO|null, canReview: boolean }`. `review` is the auction's non-hidden review; `canReview` is true when the viewer is the stamped winner, the auction ended within the last 60 days and no review exists (`reviews.md`); both are `null` / `false` on create, patch and republish. `isWatching` (false for guests) and `watcherCount` come from the Watchlist table (`watchlist.md`) and are `false` / `0` on create, patch and republish. The three extras before them are filled for `GET /auctions/:id` and the bid response (latest 5 bids newest first; the requester's highest bid; post-auction contact card for the winner / seller only) and are `[]` / `null` / `null` on create, patch and republish. See `bidding.md`.
 
 **Reserve exposure:** `reservePricePaise` is never in `toCard` / `toDetail`. `buildAuctionDetail` adds it only when the viewer is the seller or a SUPER_ADMIN (`GET /auctions/:id`); the owner-only endpoints add it too (`/auctions/mine` rows, create / patch / republish responses, via `withReserve` in `auctions.service.ts`). Everyone else only sees `hasReserve` / `reserveMet`. `myMaxBidPaise` is the viewer's own `MaxBid`.
@@ -29,15 +29,15 @@ List filters (`auctions.query.ts` `statusWhere`) mirror this in SQL: live = `sta
 | GET | `/auctions/categories` | public | legacy shape `{ categories: [{ name, liveCount }] }`, now the active root `Category` rows (`categories.md`; `GET /categories` is the full tree) |
 | GET | `/auctions/:id/similar-sold` | public | `{ items: AuctionCard[] }` up to 6: same `categoryId`, sold (effective ENDED, winner set), `endedAt` within 90 days, excluding itself, newest first. 404 `AUCTION_NOT_FOUND` for a missing / cancelled auction; `[]` when the auction has no category |
 | GET | `/auctions/sitemap` | public | `{ items: [{ id, updatedAt }] }`: live + upcoming + ended in the last 90 days, never cancelled, max 5000, newest update first |
-| GET | `/auctions/mine` | AUCTIONEER / SUPER_ADMIN | `status=upcoming\|live\|ended\|cancelled` (default live) + paging -> `paginated(AuctionCard[])` |
+| GET | `/auctions/mine` | MEMBER / SUPER_ADMIN | `status=upcoming\|live\|ended\|cancelled` (default live) + paging -> `paginated(AuctionCard[])` |
 | GET | `/auctions/:id` | public, optional auth | `{ auction: AuctionDetail, serverTime }`; 404 `AUCTION_NOT_FOUND` if missing, or cancelled/deleted unless requester is the seller or SUPER_ADMIN |
-| POST | `/auctions` | AUCTIONEER / SUPER_ADMIN | 201 `{ auction }` |
-| POST | `/auctions/bulk` | AUCTIONEER / SUPER_ADMIN | `{ items: CreateAuctionInput[] (1..50) }` -> 201 `{ items: AuctionCard[] }`; see Bulk create |
+| POST | `/auctions` | MEMBER / SUPER_ADMIN | 201 `{ auction }` |
+| POST | `/auctions/bulk` | MEMBER / SUPER_ADMIN | `{ items: CreateAuctionInput[] (1..50) }` -> 201 `{ items: AuctionCard[] }`; see Bulk create |
 | PATCH | `/auctions/:id` | seller | all fields optional -> `{ auction }` |
 | DELETE | `/auctions/:id` | seller / SUPER_ADMIN | soft delete -> `{ id }`. A SUPER_ADMIN may cancel any auction, including ones with bids (it is logged). After the cancel commits, `notifyCancelled` (best effort, never fails the cancel) sends `auction-cancelled` to every distinct bidder and every member with a HELD deposit (copy says the deposit is refunded automatically; the deposit job refunds cancelled auctions), plus the seller when an admin cancelled it. This is the admin cancel action. |
 | POST | `/auctions/:id/republish` | seller | `{ startTime, endTime }` -> `{ auction }` |
-| POST / GET | `/auctions/:id/bids` | BIDDER / public | place a (max) bid / list bids; see `bidding.md` |
-| POST | `/auctions/:id/buy-now` | BIDDER | Buy It Now; see `bidding.md` |
+| POST / GET | `/auctions/:id/bids` | MEMBER / public | place a (max) bid / list bids; see `bidding.md` |
+| POST | `/auctions/:id/buy-now` | MEMBER | Buy It Now; see `bidding.md` |
 
 Fixed paths (`home`, `categories`, `sitemap`, `mine`, `bulk`) are declared before `/:id`.
 
@@ -102,7 +102,7 @@ Stored `status` on create/republish: `LIVE` if `startTime <= now`, else `SCHEDUL
 | 400 | `INVALID_SHIPPING` | `shippingOptions` rules (see table) |
 | 400 | `BULK_INVALID` | any row of `POST /auctions/bulk` failed; `details.rows: [{ index, errors: [{ field, message }] }]`, nothing created |
 | 400 | `VALIDATION_ERROR` | Joi failure, over-long sanitised condition report, time window broken against stored times |
-| 403 | `FORBIDDEN` | role is not AUCTIONEER / SUPER_ADMIN on create / mine / write routes |
+| 403 | `FORBIDDEN` | role is not MEMBER / SUPER_ADMIN on create / mine / write routes |
 | 403 | `COMMISSION_UNPAID` | create while `unpaidCommissionPaise > 0` |
 | 403 | `PAYOUT_ACCOUNT_REQUIRED` | create when `checkout.mode = required` and the seller has no ACTIVE payout account (`checkout.md`) |
 | 404 | `AUCTION_NOT_FOUND` | missing; cancelled for non-privileged viewers; PATCH / republish by a non-owner (even SUPER_ADMIN); DELETE by a non-owner non-admin |
@@ -120,7 +120,7 @@ All the new listing fields (category, attributes, condition, report, estimates, 
 
 ## Bulk create
 
-`POST /auctions/bulk` (same auth chain as create: AUCTIONEER / SUPER_ADMIN, active member; plus `bulkLimiter`, 5 per hour per member, Postgres store `rl:bulk:`). Body `{ items: CreateAuctionInput[] (1..50) }`. The `COMMISSION_UNPAID` / `PAYOUT_ACCOUNT_REQUIRED` blocks are checked once for the member. Every item is then validated with the same `createAuctionSchema` plus all service rules (`prepareCreate`: category, attributes, prices, admin ceiling, reserve / buy-now, time window, estimate, report, shipping; image / video ownership is part of the Joi schema), collecting errors per row. Any failure -> 400 `BULK_INVALID` with `details.rows: [{ index, errors: [{ field, message }] }]` (`index` is the position in `items`) and nothing is created. Otherwise all rows are created in **one transaction** (deposit computed per row, status `LIVE` / `SCHEDULED` by start time), then saved-search matching runs best-effort per auction. Response 201 `{ items: AuctionCard[] }` (no reserve, unlike the single create).
+`POST /auctions/bulk` (same auth chain as create: MEMBER / SUPER_ADMIN, active member; plus `bulkLimiter`, 5 per hour per member, Postgres store `rl:bulk:`). Body `{ items: CreateAuctionInput[] (1..50) }`. The `COMMISSION_UNPAID` / `PAYOUT_ACCOUNT_REQUIRED` blocks are checked once for the member. Every item is then validated with the same `createAuctionSchema` plus all service rules (`prepareCreate`: category, attributes, prices, admin ceiling, reserve / buy-now, time window, estimate, report, shipping; image / video ownership is part of the Joi schema), collecting errors per row. Any failure -> 400 `BULK_INVALID` with `details.rows: [{ index, errors: [{ field, message }] }]` (`index` is the position in `items`) and nothing is created. Otherwise all rows are created in **one transaction** (deposit computed per row, status `LIVE` / `SCHEDULED` by start time), then saved-search matching runs best-effort per auction. Response 201 `{ items: AuctionCard[] }` (no reserve, unlike the single create).
 
 ## Sold archive
 
@@ -134,7 +134,7 @@ Rate limit: `auctionWriteLimiter` (10 / min per member) on create, patch, republ
 
 ## Demo data
 
-`npm run seed:demo` (run manually) creates `demo.seller@noblebid.local` (AUCTIONEER, random password printed once) and 12 auctions (6 live, 3 upcoming, 3 ended) with `https://picsum.photos/seed/noblebid-<n>/800/600` images. Idempotent on that email. These picsum URLs are not under our media base, so a PATCH that sends `images` for a demo auction fails the image check (other fields are fine).
+`npm run seed:demo` (run manually) creates `demo.seller@noblebid.local` (MEMBER, random password printed once) and 12 auctions (6 live, 3 upcoming, 3 ended) with `https://picsum.photos/seed/noblebid-<n>/800/600` images. Idempotent on that email. These picsum URLs are not under our media base, so a PATCH that sends `images` for a demo auction fails the image check (other fields are fine).
 
 ## Ending-soon reset
 

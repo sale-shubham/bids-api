@@ -1,5 +1,5 @@
 // NobleBid — Prisma schema.
-//  - Member = bidder, auctioneer or super admin. Login is email + password;
+//  - Member = member (buys and sells with one account) or super admin. Login is email + password;
 //    email OTP is used only to verify the email at signup and for forgot-password.
 //  - Money amounts are integer paise.
 //  - Idempotency keys on money paths prevent double credit/charge.
@@ -21,8 +21,7 @@ datasource db {
 // ----------------------------------------------------------------------------
 
 enum Role {
-  BIDDER
-  AUCTIONEER
+  MEMBER
   SUPER_ADMIN
 }
 
@@ -83,13 +82,13 @@ model Member {
   phone                 String?
   avatarUrl             String?
   address               String?
-  role                  Role      @default(BIDDER)
+  role                  Role      @default(MEMBER)
   isActive              Boolean   @default(true)
   emailVerifiedAt       DateTime?
   // Verified-seller badge (see members/verification.service.ts); admin revoke wins over the rule.
   verifiedAt            DateTime?
   verificationRevokedAt DateTime?
-  // Commission the auctioneer owes the platform owes the platform for sold auctions (paise).
+  // Commission the member owes the platform for sold auctions (paise).
   unpaidCommissionPaise BigInt    @default(0)
   // Bidder stats.
   auctionsWon           Int       @default(0)
@@ -146,7 +145,17 @@ model Member {
   credits          MemberCredit[]
   invoices         Invoice[]
 
+  roleBackup MemberRoleBackup?
+
   @@index([role])
+}
+
+// Roles before the single-MEMBER migration (20261117000000_single_member_role); kept so it can be undone.
+model MemberRoleBackup {
+  memberId  String   @id
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  role      String
+  createdAt DateTime @default(now())
 }
 
 // One row per logged-in device. The access/refresh JWTs carry this row's id

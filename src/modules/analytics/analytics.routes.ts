@@ -5,9 +5,9 @@ import { validate } from '@/core/middleware/validate';
 import { param } from '@/core/http/params';
 import { rangeQuerySchema } from './analytics.validation';
 
-// Mounted at /analytics — auctioneers (and super admins).
+// Mounted at /analytics — members (and super admins).
 const router = Router();
-router.use(authenticate, requireRole('AUCTIONEER', 'SUPER_ADMIN'), requireActiveMember);
+router.use(authenticate, requireRole('MEMBER', 'SUPER_ADMIN'), requireActiveMember);
 
 router.get(
   '/seller',

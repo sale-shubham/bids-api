@@ -13,7 +13,7 @@ Dates are Asia/Kolkata calendar days.
 
 `POST /auctions/:id/view` (`optionalAuthenticate`, `viewLimiter` = in-memory 120 per minute per IP, body `{}`) -> 204 always. `recordView` skips an unknown / deleted auction and the seller. `viewerKey` = sha256 of `m:<memberId>`, else `d:<dvid cookie>`, else `i:<ip>|<user-agent>`. One raw SQL statement: insert the `AuctionViewer` row `ON CONFLICT DO NOTHING`, then upsert the day's `AuctionStatDaily` with `views + 1` and `uniqueViewers + 1` only when the viewer row was new. The web app calls it once per auction page load (not part of `GET /auctions/:id`, which is cacheable).
 
-## Endpoints (AUCTIONEER or SUPER_ADMIN, active member)
+## Endpoints (MEMBER or SUPER_ADMIN, active member; every MEMBER can sell, so any member may open them)
 
 | Method | Path | Response |
 |---|---|---|

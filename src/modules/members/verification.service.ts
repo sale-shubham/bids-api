@@ -6,9 +6,9 @@ export type VerificationFacts = {
   verificationRevokedAt: Date | null;
 };
 
-/** Pure rule: AUCTIONEER + ACTIVE payout account + not revoked by an admin. */
+/** Pure rule: MEMBER + ACTIVE payout account + not revoked by an admin. */
 export function isSellerVerified(f: VerificationFacts): boolean {
-  return f.role === 'AUCTIONEER' && f.payoutStatus === 'ACTIVE' && !f.verificationRevokedAt;
+  return f.role === 'MEMBER' && f.payoutStatus === 'ACTIVE' && !f.verificationRevokedAt;
 }
 
 /** Recomputes Member.verifiedAt (keeps the original timestamp while still verified). Returns the new state. */

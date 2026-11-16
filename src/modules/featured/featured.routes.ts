@@ -7,7 +7,7 @@ import { featureCheckoutSchema } from './featured.validation';
 
 // Mounted inside the auctions router at /auctions/:id/feature
 export const auctionFeatureRouter = Router({ mergeParams: true });
-const seller = [authenticate, requireRole('AUCTIONEER'), requireActiveMember];
+const seller = [authenticate, requireRole('MEMBER'), requireActiveMember];
 
 auctionFeatureRouter.post(
   '/checkout',

@@ -27,7 +27,7 @@ export const AccountSuspended = () =>
 
 const hash = (password: string) => bcrypt.hash(password, BCRYPT_COST);
 
-export async function signup(input: { name: string; email: string; password: string; role: 'BIDDER' | 'AUCTIONEER'; referralCode?: string | null }) {
+export async function signup(input: { name: string; email: string; password: string; referralCode?: string | null }) {
   const email = input.email;
   const existing = await prisma.member.findUnique({ where: { email }, select: { id: true, emailVerifiedAt: true } });
   if (existing?.emailVerifiedAt) throw EmailTaken();
@@ -38,11 +38,11 @@ export async function signup(input: { name: string; email: string; password: str
     // Unverified signup being retried: take the latest details.
     await prisma.member.update({
       where: { id: existing.id },
-      data: { name: input.name, passwordHash, role: input.role },
+      data: { name: input.name, passwordHash },
     });
   } else {
     const created = await prisma.member.create({
-      data: { email, name: input.name, passwordHash, role: input.role, emailVerifiedAt: null },
+      data: { email, name: input.name, passwordHash, role: 'MEMBER', emailVerifiedAt: null },
       select: { id: true },
     });
     memberId = created?.id;
@@ -74,7 +74,7 @@ export async function verifySignup(email: string, code: string) {
       to: email,
       subject: 'Welcome to NobleBid',
       template: 'welcome',
-      data: { name: verified.name, role: verified.role },
+      data: { name: verified.name },
     })
     .catch((err) => logger.warn({ err, to: email }, 'welcome email failed'));
   return withMemberMoney(verified);

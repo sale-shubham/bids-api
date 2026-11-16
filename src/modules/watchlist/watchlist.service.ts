@@ -96,11 +96,21 @@ export async function runEndingSoon(now = new Date()): Promise<{ notified: numbe
         endTime: { gt: now, lte: new Date(now.getTime() + ENDING_SOON_WINDOW_MS) },
       },
     },
-    select: { memberId: true, auctionId: true, auction: { select: { endTime: true } } },
+    select: { memberId: true, auctionId: true, auction: { select: { endTime: true, sellerId: true } } },
     orderBy: { createdAt: 'asc' },
     take: ENDING_SOON_BATCH,
   });
+  let notified = 0;
   for (const r of rows) {
+    // One MEMBER role: a seller may watch their own auction, but is never alerted about it.
+    // Marked as handled so the row does not come back on every run.
+    if (r.auction.sellerId === r.memberId) {
+      await prisma.watchlist.updateMany({
+        where: { memberId: r.memberId, auctionId: r.auctionId, endingSoonNotifiedAt: null },
+        data: { endingSoonNotifiedAt: now },
+      });
+      continue;
+    }
     await enqueueNotification({
       type: 'ending-soon',
       memberId: r.memberId,
@@ -112,6 +122,7 @@ export async function runEndingSoon(now = new Date()): Promise<{ notified: numbe
       where: { memberId: r.memberId, auctionId: r.auctionId, endingSoonNotifiedAt: null },
       data: { endingSoonNotifiedAt: now },
     });
+    notified += 1;
   }
-  return { notified: rows.length };
+  return { notified };
 }

@@ -11,7 +11,7 @@ export const bidsRouter = Router();
 bidsRouter.get(
   '/mine',
   authenticate,
-  requireRole('BIDDER'),
+  requireRole('MEMBER'),
   requireActiveMember,
   validate(myBidsQuerySchema, 'query'),
   asyncHandler(ctrl.mine),
@@ -22,7 +22,7 @@ export const auctionBidsRouter = Router({ mergeParams: true });
 auctionBidsRouter.post(
   '/',
   authenticate,
-  requireRole('BIDDER'),
+  requireRole('MEMBER'),
   requireActiveMember,
   bidAuctionLimiter,
   bidMemberLimiter,
@@ -36,7 +36,7 @@ export const auctionBuyNowRouter = Router({ mergeParams: true });
 auctionBuyNowRouter.post(
   '/',
   authenticate,
-  requireRole('BIDDER'),
+  requireRole('MEMBER'),
   requireActiveMember,
   bidAuctionLimiter,
   bidMemberLimiter,

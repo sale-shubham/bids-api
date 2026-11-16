@@ -10,7 +10,7 @@ vi.mock('@/core/prisma/client', () => ({ prisma: { session: { findUnique } } }))
 
 const { authenticate, optionalAuthenticate, ACCESS_COOKIE } = await import('./auth');
 
-const token = jwt.sign({ sub: 'm1', role: 'BIDDER', sid: 's1' }, SECRET, { algorithm: 'HS256' });
+const token = jwt.sign({ sub: 'm1', role: 'MEMBER', sid: 's1' }, SECRET, { algorithm: 'HS256' });
 
 async function run(mw: typeof authenticate, cookies: Record<string, string>) {
   const req = { headers: {}, cookies } as unknown as Request;
@@ -34,7 +34,7 @@ describe('authenticate', () => {
     findUnique.mockResolvedValue({ memberId: 'm1' });
     const { req, next } = await run(authenticate, { [ACCESS_COOKIE]: token });
     expect(next).toHaveBeenCalledExactlyOnceWith();
-    expect(req.user).toEqual({ sub: 'm1', role: 'BIDDER', sid: 's1' });
+    expect(req.user).toEqual({ sub: 'm1', role: 'MEMBER', sid: 's1' });
   });
 });
 

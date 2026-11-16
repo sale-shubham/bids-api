@@ -35,7 +35,7 @@ vi.mock('@/core/prisma/client', () => ({
               !['CANCELLED', 'ENDED'].includes(au.status)
             );
           })
-          .map((r: WRow) => ({ ...r, auction: { endTime: state.auctions[r.auctionId].endTime } }));
+          .map((r: WRow) => ({ ...r, auction: { endTime: state.auctions[r.auctionId].endTime, sellerId: state.auctions[r.auctionId].sellerId } }));
       }),
       updateMany: vi.fn(async ({ where, data }: any) => {
         const hit = state.rows.filter(
@@ -58,6 +58,7 @@ const now = new Date('2026-11-14T10:00:00Z');
 const at = (ms: number) => new Date(now.getTime() + ms);
 const auction = (id: string, o: Record<string, unknown> = {}) => ({
   id,
+  sellerId: 'seller1',
   status: 'LIVE',
   deletedAt: null,
   startTime: at(-5 * H),
@@ -134,6 +135,15 @@ describe('runEndingSoon', () => {
       dedupeKey: `ending-soon:soon:m1:${state.auctions.soon.endTime.getTime()}`,
     });
     expect(state.rows.find((r: WRow) => r.auctionId === 'soon')!.endingSoonNotifiedAt).toEqual(now);
+  });
+
+  it('skips the own seller of the auction (marked handled, no notification)', async () => {
+    state.rows.push({ memberId: 'seller1', auctionId: 'soon', createdAt: now, endingSoonNotifiedAt: null });
+    expect(await svc.runEndingSoon(now)).toEqual({ notified: 1 });
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue.mock.calls[0][0]).toMatchObject({ memberId: 'm1' });
+    const own = state.rows.find((r: WRow) => r.memberId === 'seller1')!;
+    expect(own.endingSoonNotifiedAt).toEqual(now);
   });
 
   it('is deduped: a second run notifies nobody', async () => {

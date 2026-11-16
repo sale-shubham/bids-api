@@ -10,7 +10,7 @@ export const reviewsRouter = Router();
 reviewsRouter.post(
   '/:id/reply',
   authenticate,
-  requireRole('AUCTIONEER', 'SUPER_ADMIN'),
+  requireRole('MEMBER', 'SUPER_ADMIN'),
   requireActiveMember,
   validate(replySchema),
   asyncHandler(ctrl.reply),
@@ -21,7 +21,7 @@ export const auctionReviewRouter = Router({ mergeParams: true });
 auctionReviewRouter.post(
   '/',
   authenticate,
-  requireRole('BIDDER'),
+  requireRole('MEMBER'),
   requireActiveMember,
   validate(createReviewSchema),
   asyncHandler(ctrl.create),

@@ -22,7 +22,7 @@ const baseMember = {
   phone: null,
   avatarUrl: null,
   address: null,
-  role: 'BIDDER',
+  role: 'MEMBER',
   isActive: true,
   emailVerifiedAt: new Date('2026-01-01'),
   verifiedAt: null,
@@ -68,7 +68,7 @@ describe('POST /auth/login', () => {
   it('a token without a sid claim is not an access token', async () => {
     const jwt = (await import('jsonwebtoken')).default;
     const { env } = await import('@/core/config/env');
-    const token = jwt.sign({ sub: 'm1', role: 'BIDDER' }, env.jwt.accessSecret, { expiresIn: 300 });
+    const token = jwt.sign({ sub: 'm1', role: 'MEMBER' }, env.jwt.accessSecret, { expiresIn: 300 });
     const res = await request(await getApp()).get('/members/me').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(401);
   });
@@ -81,7 +81,7 @@ describe('POST /reports', () => {
     prismaMock.auction.findFirst.mockResolvedValue({ sellerId: 'seller1', title: 'Vintage Watch' });
     prismaMock.report.create.mockResolvedValue({ id: 'r1', status: 'OPEN' });
     prismaMock.member.findMany.mockResolvedValue([{ id: 'adm1' }, { id: 'adm2' }]);
-    const res = await post('/reports', body, await bearer('BIDDER'));
+    const res = await post('/reports', body, await bearer('MEMBER'));
     expect(res.status).toBe(201);
     expect(res.body.data).toEqual({ report: { id: 'r1', status: 'OPEN' } });
     expect(prismaMock.report.create).toHaveBeenCalledWith(
@@ -95,7 +95,7 @@ describe('POST /reports', () => {
 
   it('404 REPORT_TARGET_NOT_FOUND for a missing / deleted target', async () => {
     prismaMock.auction.findFirst.mockResolvedValue(null);
-    const res = await post('/reports', body, await bearer('BIDDER'));
+    const res = await post('/reports', body, await bearer('MEMBER'));
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('REPORT_TARGET_NOT_FOUND');
     expect(prismaMock.auction.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'a1', deletedAt: null } }));
@@ -109,7 +109,7 @@ describe('POST /reports', () => {
   ])('400 INVALID_REPORT when reporting %s', async (_n, target, fn, row) => {
     const [model, method] = fn.split('.');
     prismaMock[model][method].mockResolvedValue(row);
-    const res = await post('/reports', { ...body, ...target }, await bearer('BIDDER'));
+    const res = await post('/reports', { ...body, ...target }, await bearer('MEMBER'));
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('INVALID_REPORT');
     expect(prismaMock.report.create).not.toHaveBeenCalled();
@@ -118,7 +118,7 @@ describe('POST /reports', () => {
   it('409 ALREADY_REPORTED on the unique (reporter, target) violation', async () => {
     prismaMock.auction.findFirst.mockResolvedValue({ sellerId: 'seller1', title: 'T' });
     prismaMock.report.create.mockRejectedValue(Object.assign(new Error('dup'), { code: 'P2002' }));
-    const res = await post('/reports', body, await bearer('BIDDER'));
+    const res = await post('/reports', body, await bearer('MEMBER'));
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('ALREADY_REPORTED');
   });

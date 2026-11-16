@@ -3,9 +3,9 @@ import { asyncHandler } from '@/core/middleware/asyncHandler';
 import { authenticate, requireActiveMember, requireRole } from '@/core/middleware/auth';
 import { param } from '@/core/http/params';
 
-// Mounted at /second-chance-offers - the runner-up (BIDDER) answers offers the seller made.
+// Mounted at /second-chance-offers - the runner-up (a MEMBER) answers offers the seller made.
 const router = Router();
-const bidder = [authenticate, requireRole('BIDDER'), requireActiveMember];
+const bidder = [authenticate, requireRole('MEMBER'), requireActiveMember];
 
 router.get(
   '/mine',

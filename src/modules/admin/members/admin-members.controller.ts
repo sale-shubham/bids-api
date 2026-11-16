@@ -5,12 +5,12 @@ export async function list(req: Request, res: Response) {
   const { paginated } = await import('@/core/http/response');
   const { pageMeta } = await import('@/core/http/pagination');
   const svc = await import('./admin-members.service');
-  const { status, role, q, page, pageSize, sortBy, sortOrder } = req.query as any;
-  const { items, total, stats } = await svc.listMembers({ status, role, search: q, page, pageSize, sortBy, sortOrder });
+  const { status, seller, q, page, pageSize, sortBy, sortOrder } = req.query as any;
+  const { items, total, stats } = await svc.listMembers({ status, seller, search: q, page, pageSize, sortBy, sortOrder });
   return paginated(res, items, pageMeta(total, { page, pageSize }), { stats });
 }
 
-// PATCH /admin/members/:id { isActive?, role? } -> { member }
+// PATCH /admin/members/:id { isActive?, verified? } -> { member }
 export async function update(req: Request, res: Response) {
   const { ok } = await import('@/core/http/response');
   const svc = await import('./admin-members.service');

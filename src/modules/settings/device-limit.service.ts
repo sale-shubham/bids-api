@@ -6,7 +6,7 @@ import { MAX_DEVICES_PER_MEMBER } from '@/core/config/constants';
 // key/value table . Replaces the
 // flat MAX_DEVICES_PER_MEMBER constant as the *default* only — that constant
 // is now just the bootstrap value until a SUPER_ADMIN saves a config row.
-// `memberLimit` is universal — one value applied to every BIDDER/AUCTIONEER
+// `memberLimit` is universal — one value applied to every MEMBER
 // account, not a per-member override. `superAdminLimit` is separate so
 // SUPER_ADMIN accounts (which sign in from more places — ops laptop, phone,
 // etc.) can be given a different cap without changing the member-facing one.

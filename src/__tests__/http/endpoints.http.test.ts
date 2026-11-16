@@ -79,7 +79,7 @@ describe('POST /payments/verify', () => {
   it('validates the body after the guards', async () => {
     const res = await request(await getApp())
       .post('/payments/verify')
-      .set('Authorization', await bearer('AUCTIONEER'))
+      .set('Authorization', await bearer('MEMBER'))
       .send({});
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
@@ -90,7 +90,7 @@ describe('commissions', () => {
   it('GET /commissions/summary -> { unpaidPaise, dueCount, overdueCount } scoped to the seller', async () => {
     prismaMock.commission.aggregate.mockResolvedValue({ _sum: { amountPaise: 25_000 }, _count: { _all: 3 } });
     prismaMock.commission.count.mockResolvedValue(1);
-    const res = await request(await getApp()).get('/commissions/summary').set('Authorization', await bearer('AUCTIONEER', 'seller1'));
+    const res = await request(await getApp()).get('/commissions/summary').set('Authorization', await bearer('MEMBER', 'seller1'));
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: true, data: { unpaidPaise: 25_000, dueCount: 3, overdueCount: 1 } });
     expect(prismaMock.commission.aggregate).toHaveBeenCalledWith(
@@ -101,7 +101,7 @@ describe('commissions', () => {
   it('GET /commissions/summary is all zeros with no dues', async () => {
     prismaMock.commission.aggregate.mockResolvedValue({ _sum: { amountPaise: null }, _count: { _all: 0 } });
     prismaMock.commission.count.mockResolvedValue(0);
-    const res = await request(await getApp()).get('/commissions/summary').set('Authorization', await bearer('AUCTIONEER'));
+    const res = await request(await getApp()).get('/commissions/summary').set('Authorization', await bearer('MEMBER'));
     expect(res.body.data).toEqual({ unpaidPaise: 0, dueCount: 0, overdueCount: 0 });
   });
 
@@ -114,7 +114,7 @@ describe('commissions', () => {
       },
     ]);
     prismaMock.commission.count.mockResolvedValue(1);
-    const res = await request(await getApp()).get('/commissions/mine').set('Authorization', await bearer('AUCTIONEER'));
+    const res = await request(await getApp()).get('/commissions/mine').set('Authorization', await bearer('MEMBER'));
     expect(res.status).toBe(200);
     expect(res.body.meta).toEqual({ total: 1, page: 1, pageSize: 20, totalPages: 1 });
     expect(res.body.data[0]).toMatchObject({ id: 'c1', isOverdue: true, auction: { finalBidPaise: 100_000 } });
@@ -126,7 +126,7 @@ describe('commissions', () => {
       dueAt: NOW, paidAt: NOW, createdAt: NOW,
       auction: { id: 'a1', title: 'Telescope', images: [], currentBidPaise: 100_000, endedAt: NOW },
     });
-    const res = await request(await getApp()).get('/commissions/c1').set('Authorization', await bearer('AUCTIONEER', 'seller1'));
+    const res = await request(await getApp()).get('/commissions/c1').set('Authorization', await bearer('MEMBER', 'seller1'));
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ id: 'c1', status: 'PAID', isOverdue: false });
     expect(prismaMock.commission.findFirst).toHaveBeenCalledWith(
@@ -136,7 +136,7 @@ describe('commissions', () => {
 
   it("GET /commissions/:id -> 404 COMMISSION_NOT_FOUND for another seller's or unknown id", async () => {
     prismaMock.commission.findFirst.mockResolvedValue(null);
-    const res = await request(await getApp()).get('/commissions/nope').set('Authorization', await bearer('AUCTIONEER'));
+    const res = await request(await getApp()).get('/commissions/nope').set('Authorization', await bearer('MEMBER'));
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('COMMISSION_NOT_FOUND');
   });
@@ -144,7 +144,7 @@ describe('commissions', () => {
   it('POST /commissions/:id/checkout -> 404 COMMISSION_NOT_FOUND for another seller\'s / unknown id', async () => {
     prismaMock.commission.findUnique.mockResolvedValue(null);
     prismaMock.commission.findFirst.mockResolvedValue(null);
-    const res = await request(await getApp()).post('/commissions/nope/checkout').set('Authorization', await bearer('AUCTIONEER'));
+    const res = await request(await getApp()).post('/commissions/nope/checkout').set('Authorization', await bearer('MEMBER'));
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('COMMISSION_NOT_FOUND');
   });
@@ -168,7 +168,7 @@ describe('websocket tickets', () => {
 
   it('POST /ws/ticket binds the ticket to the authenticated member', async () => {
     prismaMock.wsTicket.create.mockImplementation(async ({ data }: { data: object }) => ({ id: 'tkt_2', ...data }));
-    const res = await request(await getApp()).post('/ws/ticket').set('Authorization', await bearer('BIDDER', 'bidder1'));
+    const res = await request(await getApp()).post('/ws/ticket').set('Authorization', await bearer('MEMBER', 'bidder1'));
     expect(res.status).toBe(200);
     expect(res.body.data.ticket).toBe('tkt_2');
     expect(prismaMock.wsTicket.create).toHaveBeenCalledWith({ data: expect.objectContaining({ memberId: 'bidder1' }) });
@@ -248,7 +248,7 @@ describe('member and watchlist reads', () => {
       auction: { id, status: 'LIVE', deletedAt: null, startTime: new Date(NOW.getTime() - 1000), endTime: new Date(NOW.getTime() + endsInMs) },
     });
     prismaMock.watchlist.findMany.mockResolvedValue([live('a2', 7_200_000), live('a1', 3_600_000)]);
-    const res = await request(await getApp()).get('/watchlist/ids').set('Authorization', await bearer('BIDDER'));
+    const res = await request(await getApp()).get('/watchlist/ids').set('Authorization', await bearer('MEMBER'));
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data).toEqual({ ids: ['a1', 'a2'], activeCount: 2 }); // soonest end first
@@ -256,7 +256,7 @@ describe('member and watchlist reads', () => {
 
   it('POST /watchlist/:id on a cancelled auction -> 404 AUCTION_NOT_FOUND', async () => {
     prismaMock.auction.findUnique.mockResolvedValue({ id: 'a1', status: 'CANCELLED', deletedAt: null });
-    const res = await request(await getApp()).post('/watchlist/a1').set('Authorization', await bearer('BIDDER'));
+    const res = await request(await getApp()).post('/watchlist/a1').set('Authorization', await bearer('MEMBER'));
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('AUCTION_NOT_FOUND');
   });
@@ -264,7 +264,7 @@ describe('member and watchlist reads', () => {
   it('POST /watchlist/:id -> { watching: true }', async () => {
     prismaMock.auction.findUnique.mockResolvedValue({ id: 'a1', status: 'LIVE', deletedAt: null });
     prismaMock.watchlist.upsert.mockResolvedValue({});
-    const res = await request(await getApp()).post('/watchlist/a1').set('Authorization', await bearer('BIDDER'));
+    const res = await request(await getApp()).post('/watchlist/a1').set('Authorization', await bearer('MEMBER'));
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ watching: true });
   });
@@ -280,8 +280,8 @@ describe('admin dashboard', () => {
       .mockResolvedValueOnce({ _sum: { amountPaise: null } });
     prismaMock.commission.findMany.mockResolvedValue([{ amountPaise: 500_000, paidAt: new Date('2026-03-02T05:00:00Z') }]);
     prismaMock.member.findMany.mockResolvedValue([
-      { role: 'BIDDER', createdAt: new Date('2026-03-01T05:00:00Z') },
-      { role: 'AUCTIONEER', createdAt: new Date('2026-02-01T05:00:00Z') },
+      { createdAt: new Date('2026-03-01T05:00:00Z') },
+      { createdAt: new Date('2026-02-01T05:00:00Z') },
     ]);
     prismaMock.auction.findMany.mockResolvedValue([]);
     prismaMock.sale.groupBy.mockResolvedValue([]);
@@ -290,7 +290,7 @@ describe('admin dashboard', () => {
     expect(res.status).toBe(200);
     const d = res.body.data;
     expect(d.totals).toEqual({
-      members: 10, bidders: 7, auctioneers: 3,
+      members: 10, buyers: 7, sellers: 3,
       liveAuctions: 4, upcomingAuctions: 2, endedAuctions: 9,
       bidsToday: 15, commissionPaidPaise: 500_000, commissionDuePaise: 0,
     });
@@ -298,7 +298,7 @@ describe('admin dashboard', () => {
     expect(d.revenueByMonth.at(-1)).toEqual({ month: '2026-03', paidPaise: 500_000 });
     expect(d.revenueByMonth[0].month).toBe('2025-04');
     expect(d.signupsByMonth).toHaveLength(12);
-    expect(d.signupsByMonth.at(-1)).toEqual({ month: '2026-03', bidders: 1, auctioneers: 0 });
+    expect(d.signupsByMonth.at(-1)).toEqual({ month: '2026-03', members: 1 });
     expect(d.recentAuctions).toEqual([]);
   });
 

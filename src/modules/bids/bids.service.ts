@@ -29,7 +29,7 @@ import {
 } from '@/modules/auctions/bidding.rules';
 import type { ListBidsQuery, MyBidsQuery } from './bids.validation';
 
-type Viewer = { sub: string; role: 'BIDDER' | 'AUCTIONEER' | 'SUPER_ADMIN' } | undefined;
+type Viewer = { sub: string; role: 'MEMBER' | 'SUPER_ADMIN' } | undefined;
 
 async function antiSnipingMinutes(): Promise<number> {
   const n = Number.parseInt((await getSetting('auction.antiSnipingMinutes')) ?? '', 10);

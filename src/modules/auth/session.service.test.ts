@@ -47,7 +47,7 @@ vi.mock('@/core/prisma/client', () => ({
 const { upsertDeviceSession } = await import('./session.service');
 
 const devicesOf = (memberId: string) => rows.filter((r) => r.memberId === memberId).map((r) => r.deviceId).sort();
-const login = (deviceId: string) => upsertDeviceSession('m1', 'BIDDER', deviceId, {});
+const login = (deviceId: string) => upsertDeviceSession('m1', 'MEMBER', deviceId, {});
 const seed = (...deviceIds: string[]) => {
   for (const deviceId of deviceIds) rows.push({ id: `s${++seq}`, memberId: 'm1', deviceId, createdAt: new Date(seq * 1000) });
 };

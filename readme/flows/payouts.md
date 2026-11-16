@@ -6,7 +6,7 @@ Code: `src/modules/payouts/` (`payouts.{routes,controller,service,validation}.ts
 
 `SellerPayoutAccount { id, sellerId @unique -> Member, razorpayAccountId @unique, productId?, status PayoutStatus (PENDING | NEEDS_CLARIFICATION | ACTIVE | SUSPENDED | REJECTED, default PENDING), statusReason?, legalName, businessType, bankLast4, ifsc, beneficiaryName, createdAt, updatedAt }`. **PAN and the full bank account number are never stored** (they go to Razorpay only); only the last 4 digits are kept.
 
-## Endpoints (AUCTIONEER, active member)
+## Endpoints (MEMBER, active member; SUPER_ADMIN gets 403)
 
 | Method | Path | Notes |
 |---|---|---|
@@ -21,7 +21,7 @@ Webhooks `product.route.activated` / `needs_clarification` / `under_review` (and
 
 ## Verified-seller badge
 
-A seller's badge depends on the payout account status being `ACTIVE` (the rule is: role AUCTIONEER, payout account `ACTIVE`, not revoked by an admin). `refreshSellerVerification(sellerId)` runs after `createAccount` and after every `product.route.*` webhook that updates a row, so activation grants the badge and SUSPENDED / REJECTED / NEEDS_CLARIFICATION removes it (`auth.md`, `payments.md`).
+A seller's badge depends on the payout account status being `ACTIVE` (the rule is: role MEMBER, payout account `ACTIVE`, not revoked by an admin). `refreshSellerVerification(sellerId)` runs after `createAccount` and after every `product.route.*` webhook that updates a row, so activation grants the badge and SUSPENDED / REJECTED / NEEDS_CLARIFICATION removes it (`auth.md`, `payments.md`).
 
 ## Stub mode
 

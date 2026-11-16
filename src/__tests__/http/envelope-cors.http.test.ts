@@ -60,7 +60,7 @@ describe('error envelope', () => {
       throw new Error('boom: secret-detail');
     });
     const { bearer } = await import('./harness');
-    const res = await request(await getApp()).get('/members/me').set('Authorization', await bearer('BIDDER'));
+    const res = await request(await getApp()).get('/members/me').set('Authorization', await bearer('MEMBER'));
     expect(res.status).toBe(500);
     expect(res.text).not.toContain('secret-detail');
   });

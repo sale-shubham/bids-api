@@ -177,10 +177,10 @@ describe('PDF', () => {
   it('owner: renders on every request and never touches storage or pdfKey', async () => {
     db.invoice.findUnique.mockResolvedValue({ ...inv, pdfKey: 'legacy/key.pdf' });
     db.commission.findUnique.mockResolvedValue({ auction: { title: 'Watch' } });
-    const r = await getInvoicePdf({ sub: 'owner', role: 'AUCTIONEER' }, 'inv1');
+    const r = await getInvoicePdf({ sub: 'owner', role: 'MEMBER' }, 'inv1');
     expect(r.number).toBe('NB/2026-27/000001');
     expect(r.pdf.subarray(0, 4).toString()).toBe('%PDF');
-    await getInvoicePdf({ sub: 'owner', role: 'AUCTIONEER' }, 'inv1');
+    await getInvoicePdf({ sub: 'owner', role: 'MEMBER' }, 'inv1');
     expect(db.commission.findUnique).toHaveBeenCalledTimes(2);
     expect(storage.putObject).not.toHaveBeenCalled();
     expect(storage.presignGet).not.toHaveBeenCalled();
@@ -188,9 +188,9 @@ describe('PDF', () => {
   });
   it('another member gets 404; SUPER_ADMIN may read; unknown id 404', async () => {
     db.invoice.findUnique.mockResolvedValue(inv);
-    await expect(getInvoicePdf({ sub: 'stranger', role: 'AUCTIONEER' }, 'inv1')).rejects.toMatchObject({ statusCode: 404, code: 'INVOICE_NOT_FOUND' });
+    await expect(getInvoicePdf({ sub: 'stranger', role: 'MEMBER' }, 'inv1')).rejects.toMatchObject({ statusCode: 404, code: 'INVOICE_NOT_FOUND' });
     await expect(getInvoicePdf({ sub: 'admin', role: 'SUPER_ADMIN' }, 'inv1')).resolves.toHaveProperty('pdf');
     db.invoice.findUnique.mockResolvedValue(null);
-    await expect(getInvoicePdf({ sub: 'owner', role: 'AUCTIONEER' }, 'nope')).rejects.toMatchObject({ statusCode: 404 });
+    await expect(getInvoicePdf({ sub: 'owner', role: 'MEMBER' }, 'nope')).rejects.toMatchObject({ statusCode: 404 });
   });
 });

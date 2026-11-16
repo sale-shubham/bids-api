@@ -4,6 +4,8 @@ Code: `src/modules/strikes/` (`strikes.{rules,service,validation}.ts`), `src/mod
 
 ## Strikes
 
+Strikes and suspension are account-wide (D17): with one MEMBER role, a suspended member can neither bid nor sell. Unpaid seller commission blocks listing only, never bidding.
+
 A winner who does not pay in time gets a strike. `Strike { id, memberId, saleId (unique), reason StrikeReason (UNPAID), createdAt, expiresAt (+12 months), removedAt?, removedById?, note? }`, `@@index([memberId, expiresAt])`. **Active** = `removedAt` null and `expiresAt > now`.
 
 When `runSalesMaintenance` cancels an AWAITING_PAYMENT sale past `payBy`, the cancel and the strike are written in ONE transaction (`createUnpaidStrike`), so a cancelled sale always has its strike and a repeated run does nothing. After commit (`applyStrikePolicy`, best effort), by the member's active count:
@@ -39,11 +41,11 @@ After a sale is CANCELLED for non-payment the seller may offer the item to the r
 
 | Method | Path | Who | Notes |
 |---|---|---|---|
-| POST | `/sales/:id/second-chance` | the seller (AUCTIONEER) | sale must be CANCELLED -> 201 `{ offer }`. 404 `SALE_NOT_FOUND`, 409 `SALE_INVALID_STATE` (not cancelled, or the auction already has an open sale), 409 `OFFER_EXISTS`, 409 `NO_RUNNER_UP` |
-| GET | `/second-chance-offers/mine` | BIDDER | `{ items: OfferDTO[] }`, PENDING first |
-| GET | `/second-chance-offers/:id` | the offered BIDDER | `{ offer }`; 404 `OFFER_NOT_FOUND` for anyone else |
-| POST | `/second-chance-offers/:id/accept` | the offered BIDDER | `{ offer, saleId }`. 409 `OFFER_NOT_PENDING`, 409 `OFFER_EXPIRED`, 409 `PAYOUT_ACCOUNT_INACTIVE` |
-| POST | `/second-chance-offers/:id/decline` | the offered BIDDER | `{ offer }`; 409 `OFFER_NOT_PENDING` |
+| POST | `/sales/:id/second-chance` | the seller (MEMBER) | sale must be CANCELLED -> 201 `{ offer }`. 404 `SALE_NOT_FOUND`, 409 `SALE_INVALID_STATE` (not cancelled, or the auction already has an open sale), 409 `OFFER_EXISTS`, 409 `NO_RUNNER_UP` |
+| GET | `/second-chance-offers/mine` | MEMBER | `{ items: OfferDTO[] }`, PENDING first |
+| GET | `/second-chance-offers/:id` | the offered MEMBER | `{ offer }`; 404 `OFFER_NOT_FOUND` for anyone else |
+| POST | `/second-chance-offers/:id/accept` | the offered MEMBER | `{ offer, saleId }`. 409 `OFFER_NOT_PENDING`, 409 `OFFER_EXPIRED`, 409 `PAYOUT_ACCOUNT_INACTIVE` |
+| POST | `/second-chance-offers/:id/decline` | the offered MEMBER | `{ offer }`; 409 `OFFER_NOT_PENDING` |
 
 - **Runner-up** (`findRunnerUp`, `pickRunnerUp`): per distinct bidder who is not a buyer of any sale on the auction and is an active member, their `MaxBid.maxAmountPaise` (fallback: their highest `Bid` row); the highest wins. The offer amount is that max. `expiresAt = now + 48 h`. Notification `second-chance-offer` (bidder, url `/purchases/offers/<offerId>`).
 - **Accept**: one transaction creates the new Sale (AWAITING_PAYMENT, `payBy` +3 days, commission at the current `commission.rateBps`, amount = the offer), marks the offer ACCEPTED (guarded on PENDING and not expired) with `newSaleId`, sets `Auction.winnerId` to the bidder and moves the `auctionsWon` / `moneySpentPaise` counters from the cancelled buyer to the bidder. The seller needs an ACTIVE payout account (checkout mode), else 409 `PAYOUT_ACCOUNT_INACTIVE`. Notification `second-chance-accepted` to the seller. The buyer then pays through the normal sale checkout (`checkout.md`).

@@ -6,10 +6,10 @@ Code: `src/modules/bids/bids.{routes,controller,service,validation}.ts`, pure ru
 
 | Method | Path | Who | Notes |
 |---|---|---|---|
-| POST | `/auctions/:id/bids` | BIDDER only (others 403 `FORBIDDEN`) | body `{ maxAmountPaise: int 1..1_000_000_000_000 }`; `amountPaise` is accepted as a deprecated alias (the API deploys before the app), at least one is required, `max = maxAmountPaise ?? amountPaise`. 400 `PRICE_TOO_HIGH` (`details: { maxPaise }`) above the admin ceiling `auction.maxPricePaise`, checked before the transaction. 201 `{ auction: AuctionDetail, bid: BidDTO \| null, serverTime, outbidByProxy: boolean }` (`bid` = the requester's own new row, null when none was inserted) |
-| POST | `/auctions/:id/buy-now` | BIDDER only | no body. 201 `{ auction: AuctionDetail, serverTime }`. Same middleware chain as the bid route |
+| POST | `/auctions/:id/bids` | MEMBER only (others 403 `FORBIDDEN`) | body `{ maxAmountPaise: int 1..1_000_000_000_000 }`; `amountPaise` is accepted as a deprecated alias (the API deploys before the app), at least one is required, `max = maxAmountPaise ?? amountPaise`. 400 `PRICE_TOO_HIGH` (`details: { maxPaise }`) above the admin ceiling `auction.maxPricePaise`, checked before the transaction. 201 `{ auction: AuctionDetail, bid: BidDTO \| null, serverTime, outbidByProxy: boolean }` (`bid` = the requester's own new row, null when none was inserted) |
+| POST | `/auctions/:id/buy-now` | MEMBER only | no body. 201 `{ auction: AuctionDetail, serverTime }`. Same middleware chain as the bid route |
 | GET | `/auctions/:id/bids` | public, optional auth | `paginated(BidDTO[])`, newest first; cancelled/deleted -> 404 unless seller / admin |
-| GET | `/bids/mine` | BIDDER | `tab=winning\|outbid\|won\|lost` (default winning) + `page`/`pageSize` -> `paginated({ auction: AuctionCard, myHighestBidPaise, myBidCount, myMaxBidPaise: number\|null, lastBidAt, state, canReview: boolean, saleId: string\|null, saleStatus: string\|null }[])` |
+| GET | `/bids/mine` | MEMBER | `tab=winning\|outbid\|won\|lost` (default winning) + `page`/`pageSize` -> `paginated({ auction: AuctionCard, myHighestBidPaise, myBidCount, myMaxBidPaise: number\|null, lastBidAt, state, canReview: boolean, saleId: string\|null, saleStatus: string\|null }[])` |
 
 `BidDTO = { id, amountPaise, kind: 'MANUAL'|'AUTO'|'BUY_NOW', createdAt, bidderLabel, isMe }`. `bidderLabel` = first char + `***` + last char (`R***h`); 1-2 char names -> first char + `***`. `isMe` = requester is that bidder. `AUTO` rows are the proxy raising someone's price on their behalf.
 

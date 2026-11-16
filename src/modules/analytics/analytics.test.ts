@@ -141,7 +141,7 @@ describe('auctionAnalytics', () => {
   });
 
   it('owner gets totals and a daily series', async () => {
-    const res = await auctionAnalytics('a1', { id: 's1', role: 'AUCTIONEER' }, 7, NOW);
+    const res = await auctionAnalytics('a1', { id: 's1', role: 'MEMBER' }, 7, NOW);
     expect(res.auction).toEqual({ id: 'a1', title: 'One', status: 'LIVE' });
     expect(res.totals).toEqual({ views: 5, uniqueViewers: 3, watchers: 2, bids: 4, bidders: 2 });
     expect(res.daily.at(-1)).toEqual({ date: '2026-11-17', views: 5, uniqueViewers: 3, bids: 4 });
@@ -153,9 +153,9 @@ describe('auctionAnalytics', () => {
   });
 
   it('another seller, or a missing auction, is a 404', async () => {
-    await expect(auctionAnalytics('a1', { id: 'other', role: 'AUCTIONEER' }, 7, NOW)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(auctionAnalytics('a1', { id: 'other', role: 'MEMBER' }, 7, NOW)).rejects.toMatchObject({ statusCode: 404 });
     db.auction.findUnique.mockResolvedValue(null);
-    await expect(auctionAnalytics('a1', { id: 's1', role: 'AUCTIONEER' }, 7, NOW)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(auctionAnalytics('a1', { id: 's1', role: 'MEMBER' }, 7, NOW)).rejects.toMatchObject({ statusCode: 404 });
   });
 });
 

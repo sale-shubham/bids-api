@@ -10,7 +10,7 @@ Code: `src/modules/follows/follows.{routes,service,validation}.ts` (mounted at `
 
 | Method | Path | Guard | Notes |
 |---|---|---|---|
-| POST | `/sellers/:id/follow` | `authenticate`, `requireActiveMember` | -> `{ following: true, followerCount }`; idempotent. 400 `INVALID_FOLLOW` (yourself), 404 `SELLER_NOT_FOUND` (target is not an active AUCTIONEER) |
+| POST | `/sellers/:id/follow` | `authenticate`, `requireActiveMember` | -> `{ following: true, followerCount }`; idempotent. 400 `INVALID_FOLLOW` (yourself), 404 `SELLER_NOT_FOUND` (target is not an active MEMBER who has listed at least one auction, `listedCount > 0`; D17). The public profile carries `listedCount` so the app can hide the follow button |
 | DELETE | `/sellers/:id/follow` | same | -> `{ following: false, followerCount }`; idempotent, same error rules |
 | GET | `/members/me/following` | same | `?page&pageSize` (max 100) -> `paginated({ id, name, avatarUrl, verified, ratingAvg, ratingCount, activeAuctions, followedAt }[])`, newest follow first, inactive sellers hidden; `activeAuctions` = live auctions |
 | GET | `/members/:id/public` | `optionalAuthenticate` | gains `followerCount` and `isFollowing` (false when anonymous) |

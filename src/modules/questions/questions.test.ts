@@ -54,10 +54,10 @@ describe('visibility matrix', () => {
     expect(visibilityWhere(undefined, 's1')).toEqual({ OR: [{ answer: { not: null } }] });
   });
   it('asker: answered plus their own', () => {
-    expect(visibilityWhere({ sub: 'b1', role: 'BIDDER' }, 's1')).toEqual({ OR: [{ answer: { not: null } }, { askerId: 'b1' }] });
+    expect(visibilityWhere({ sub: 'b1', role: 'MEMBER' }, 's1')).toEqual({ OR: [{ answer: { not: null } }, { askerId: 'b1' }] });
   });
   it('seller and SUPER_ADMIN: everything', () => {
-    expect(visibilityWhere({ sub: 's1', role: 'AUCTIONEER' }, 's1')).toEqual({});
+    expect(visibilityWhere({ sub: 's1', role: 'MEMBER' }, 's1')).toEqual({});
     expect(visibilityWhere({ sub: 'adm', role: 'SUPER_ADMIN' }, 's1')).toEqual({});
   });
   it('listQuestions never loads hidden rows, newest first, max 100', async () => {
@@ -72,7 +72,7 @@ describe('visibility matrix', () => {
     expect(await code(listQuestions('a1', undefined, now))).toBe('404:AUCTION_NOT_FOUND');
     db.auction.findUnique.mockResolvedValue(auction({ status: 'CANCELLED' }));
     expect(await code(listQuestions('a1', undefined, now))).toBe('404:AUCTION_NOT_FOUND');
-    expect(await code(listQuestions('a1', { sub: 's1', role: 'AUCTIONEER' }, now))).toBe('ok');
+    expect(await code(listQuestions('a1', { sub: 's1', role: 'MEMBER' }, now))).toBe('ok');
   });
   it('DTO masks the asker and flags isMine', () => {
     expect(toQuestionDTO(qRow() as never, 'b1')).toMatchObject({ askerLabel: 'B***l', isMine: true });
@@ -152,13 +152,13 @@ describe('hideQuestion', () => {
     db.auctionQuestion.updateMany.mockResolvedValue({ count: 1 });
   });
   it('seller or SUPER_ADMIN, idempotent', async () => {
-    expect(await code(hideQuestion({ sub: 'x', role: 'AUCTIONEER' }, 'q1', now))).toBe('403:FORBIDDEN');
-    expect(await hideQuestion({ sub: 's1', role: 'AUCTIONEER' }, 'q1', now)).toEqual({ ok: true });
+    expect(await code(hideQuestion({ sub: 'x', role: 'MEMBER' }, 'q1', now))).toBe('403:FORBIDDEN');
+    expect(await hideQuestion({ sub: 's1', role: 'MEMBER' }, 'q1', now)).toEqual({ ok: true });
     expect(await hideQuestion({ sub: 'adm', role: 'SUPER_ADMIN' }, 'q1', now)).toEqual({ ok: true });
     expect(db.auctionQuestion.updateMany.mock.calls[0][0]).toEqual({ where: { id: 'q1', hiddenAt: null }, data: { hiddenAt: now } });
   });
   it('404 for unknown', async () => {
     db.auctionQuestion.findUnique.mockResolvedValue(null);
-    expect(await code(hideQuestion({ sub: 's1', role: 'AUCTIONEER' }, 'q1', now))).toBe('404:QUESTION_NOT_FOUND');
+    expect(await code(hideQuestion({ sub: 's1', role: 'MEMBER' }, 'q1', now))).toBe('404:QUESTION_NOT_FOUND');
   });
 });

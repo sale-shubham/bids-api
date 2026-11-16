@@ -39,11 +39,11 @@ Every transition is a guarded `updateMany` (`WHERE status IN (...)`), so concurr
 |---|---|---|---|
 | GET | `/sales/mine?role=buyer\|seller&status=&page&limit` | any active member | paginated `SaleDTO[]` (default `role=buyer`; `limit` default 20 max 100, `pageSize` accepted as an alias) |
 | GET | `/sales/:id` | buyer, seller, SUPER_ADMIN | `SaleDTO` |
-| POST | `/sales/:id/checkout` | buyer (BIDDER) | optional body `{ delivery?: 'COURIER'\|'PICKUP' }` (see Delivery choice). Same payload as commissions: `{ orderId, amountPaise, currency: 'INR', keyId, description, prefill }`. 400 `DELIVERY_CHOICE_REQUIRED`, 409 `SALE_NOT_PAYABLE` (not AWAITING_PAYMENT or past `payBy`), 409 `PAYOUT_ACCOUNT_INACTIVE` |
-| POST | `/sales/:id/ship` | seller (AUCTIONEER) | `{ method: 'COURIER'\|'PICKUP', courier? <= 60 (required for COURIER), trackingNo? <= 60 }`; PAID -> SHIPPED; notifies the buyer |
+| POST | `/sales/:id/checkout` | buyer (MEMBER) | optional body `{ delivery?: 'COURIER'\|'PICKUP' }` (see Delivery choice). Same payload as commissions: `{ orderId, amountPaise, currency: 'INR', keyId, description, prefill }`. 400 `DELIVERY_CHOICE_REQUIRED`, 409 `SALE_NOT_PAYABLE` (not AWAITING_PAYMENT or past `payBy`), 409 `PAYOUT_ACCOUNT_INACTIVE` |
+| POST | `/sales/:id/ship` | seller (MEMBER) | `{ method: 'COURIER'\|'PICKUP', courier? <= 60 (required for COURIER), trackingNo? <= 60 }`; PAID -> SHIPPED; notifies the buyer |
 | POST | `/sales/:id/confirm` | buyer | PAID\|SHIPPED -> DELIVERED, then release -> RELEASED. If the release call fails the sale stays DELIVERED (the job retries); the response is still 200 with the current state |
 | POST | `/sales/:id/dispute` | buyer | `{ reason: 10..1000 }`; PAID\|SHIPPED\|DELIVERED -> DISPUTED; notifies the seller and every active SUPER_ADMIN |
-| POST | `/sales/:id/second-chance` | seller (AUCTIONEER) | offer a CANCELLED sale to the runner-up -> `{ offer }`; see `strikes.md` |
+| POST | `/sales/:id/second-chance` | seller (MEMBER) | offer a CANCELLED sale to the runner-up -> `{ offer }`; see `strikes.md` |
 | POST | `/payments/verify` | order owner | now `{ referenceType: 'COMMISSION', commission }`, `{ referenceType: 'SALE', sale }`, `{ referenceType: 'DEPOSIT', deposit }` (`deposits.md`) or `{ referenceType: 'FEATURE', purchase }` (`featured.md`) |
 | GET | `/admin/sales?status=&q=&page&limit` | SUPER_ADMIN | paginated `SaleDTO` (role ADMIN) with buyer / seller emails; `q` matches id, auction title, buyer / seller name or email |
 | POST | `/admin/sales/:id/release` | SUPER_ADMIN | DISPUTED\|DELIVERED -> RELEASED (`resolution = RELEASED_BY_ADMIN`, `resolvedAt` when it was disputed); 502 `RELEASE_FAILED` when the gateway call fails |

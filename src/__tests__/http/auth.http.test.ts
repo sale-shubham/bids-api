@@ -16,10 +16,10 @@ vi.mock('@/modules/auth/session.service', async (orig) => ({
 }));
 vi.mock('@/modules/members/members.service', async (orig) => ({
   ...(await orig<object>()),
-  getMemberDto: vi.fn(async (id: string) => ({ id, name: 'Asha', role: 'BIDDER', deviceLimit: 2 })),
+  getMemberDto: vi.fn(async (id: string) => ({ id, name: 'Asha', role: 'MEMBER', deviceLimit: 2 })),
 }));
 
-const member = { id: 'm1', role: 'BIDDER' as const };
+const member = { id: 'm1', role: 'MEMBER' as const };
 const cookies = (res: request.Response): string[] => [res.headers['set-cookie'] ?? []].flat();
 const cookie = (res: request.Response, name: string) => cookies(res).find((c) => c.startsWith(`${name}=`));
 
@@ -33,12 +33,30 @@ describe('signup -> verify -> login', () => {
     svc.signup.mockResolvedValue({ resendAfterSec: 30 });
     const res = await request(await getApp())
       .post('/auth/signup')
-      .send({ name: 'Asha', email: 'ASHA@Example.com ', password: 'abcdefg1', role: 'BIDDER' });
+      .send({ name: 'Asha', email: 'ASHA@Example.com ', password: 'abcdefg1', role: 'MEMBER' });
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ success: true, data: { email: 'asha@example.com', resendAfterSec: 30 } });
-    // The validated (trimmed + lower-cased) body reaches the service.
-    expect(svc.signup).toHaveBeenCalledWith(expect.objectContaining({ email: 'asha@example.com', role: 'BIDDER' }));
+    // The validated (trimmed + lower-cased) body reaches the service; the stale `role` of an old client is stripped.
+    expect(svc.signup).toHaveBeenCalledWith({ name: 'Asha', email: 'asha@example.com', password: 'abcdefg1' });
     expect(cookie(res, 'nb_at')).toBeUndefined();
+  });
+
+  it('POST /auth/signup works without a role (the current client sends none)', async () => {
+    svc.signup.mockResolvedValue({ resendAfterSec: 30 });
+    const res = await request(await getApp())
+      .post('/auth/signup')
+      .send({ name: 'Asha', email: 'asha@example.com', password: 'abcdefg1' });
+    expect(res.status).toBe(201);
+    expect(svc.signup).toHaveBeenLastCalledWith({ name: 'Asha', email: 'asha@example.com', password: 'abcdefg1' });
+  });
+
+  it('POST /auth/signup with role SUPER_ADMIN cannot escalate: the field is stripped', async () => {
+    svc.signup.mockResolvedValue({ resendAfterSec: 30 });
+    const res = await request(await getApp())
+      .post('/auth/signup')
+      .send({ name: 'Asha', email: 'asha@example.com', password: 'abcdefg1', role: 'SUPER_ADMIN' });
+    expect(res.status).toBe(201);
+    expect(svc.signup.mock.calls.at(-1)![0]).not.toHaveProperty('role');
   });
 
   it('POST /auth/signup maps EMAIL_TAKEN to 409', async () => {
@@ -46,7 +64,7 @@ describe('signup -> verify -> login', () => {
     svc.signup.mockRejectedValue(EmailTaken());
     const res = await request(await getApp())
       .post('/auth/signup')
-      .send({ name: 'Asha', email: 'asha@example.com', password: 'abcdefg1', role: 'BIDDER' });
+      .send({ name: 'Asha', email: 'asha@example.com', password: 'abcdefg1', role: 'MEMBER' });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('EMAIL_TAKEN');
   });
@@ -56,7 +74,7 @@ describe('signup -> verify -> login', () => {
     const res = await request(await getApp()).post('/auth/signup/verify').send({ email: 'asha@example.com', code: '123456' });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.member).toMatchObject({ id: 'm1', role: 'BIDDER' });
+    expect(res.body.data.member).toMatchObject({ id: 'm1', role: 'MEMBER' });
 
     const at = cookie(res, 'nb_at')!;
     const rt = cookie(res, 'nb_rt')!;

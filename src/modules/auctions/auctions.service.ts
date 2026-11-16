@@ -36,7 +36,7 @@ const DEFAULT_MIN_INCREMENT_PAISE = 10_000;
 const HOME_LIMIT = 8;
 const SIMILAR_LIMIT = 6;
 
-type Actor = { sub: string; role: 'BIDDER' | 'AUCTIONEER' | 'SUPER_ADMIN' };
+type Actor = { sub: string; role: 'MEMBER' | 'SUPER_ADMIN' };
 
 export const auctionNotFound = () => new AppError(404, 'AUCTION_NOT_FOUND', 'Auction not found');
 const hasBids = () => new AppError(409, 'AUCTION_HAS_BIDS', 'This auction already has bids');

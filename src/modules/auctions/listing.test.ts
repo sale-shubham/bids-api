@@ -175,7 +175,7 @@ describe('estimates', () => {
   it('patch combines with the stored estimate and can clear both', async () => {
     db.auction.findUnique.mockResolvedValue(row());
     db.auction.updateMany.mockResolvedValue({ count: 1 });
-    const seller = { sub: 'seller', role: 'AUCTIONEER' as const };
+    const seller = { sub: 'seller', role: 'MEMBER' as const };
     expect(await codeOnly(svc.updateAuction('a1', seller, { estimateLowPaise: 250_000 }, now))).toBe('400:INVALID_ESTIMATE');
     expect(await codeOnly(svc.updateAuction('a1', seller, { estimateLowPaise: null }, now))).toBe('400:INVALID_ESTIMATE');
     expect(await codeOnly(svc.updateAuction('a1', seller, { estimateLowPaise: null, estimateHighPaise: null }, now))).toBe('ok');
@@ -235,7 +235,7 @@ describe('shipping options', () => {
   it('patch can clear it with null', async () => {
     db.auction.findUnique.mockResolvedValue(row());
     db.auction.updateMany.mockResolvedValue({ count: 1 });
-    await svc.updateAuction('a1', { sub: 'seller', role: 'AUCTIONEER' }, { shippingOptions: null }, now);
+    await svc.updateAuction('a1', { sub: 'seller', role: 'MEMBER' }, { shippingOptions: null }, now);
     expect(db.auction.updateMany.mock.calls[0][0].data.shippingOptions).toBe(Prisma.DbNull);
   });
 });
@@ -273,7 +273,7 @@ describe('create / update with categories and attributes', () => {
   it('patch: attributes are validated against the stored category; a category change re-validates and rewrites the name', async () => {
     db.auction.findUnique.mockResolvedValue(row());
     db.auction.updateMany.mockResolvedValue({ count: 1 });
-    const seller = { sub: 'seller', role: 'AUCTIONEER' as const };
+    const seller = { sub: 'seller', role: 'MEMBER' as const };
     expect(await codeOnly(svc.updateAuction('a1', seller, { attributes: { color: 'black' } }, now))).toBe('400:INVALID_ATTRIBUTES');
     await svc.updateAuction('a1', seller, { attributes: { brand: 'Nikon' } }, now);
     expect(db.auction.updateMany.mock.calls[0][0].data).toMatchObject({ attributes: { brand: 'Nikon' } });
@@ -282,7 +282,7 @@ describe('create / update with categories and attributes', () => {
   });
   it('video and report are editable only while there are no bids', async () => {
     db.auction.findUnique.mockResolvedValue(row({ bidCount: 1 }));
-    const seller = { sub: 'seller', role: 'AUCTIONEER' as const };
+    const seller = { sub: 'seller', role: 'MEMBER' as const };
     expect(await codeOnly(svc.updateAuction('a1', seller, { conditionReport: '<p>x</p>', videoUrl: null }, now))).toBe('409:AUCTION_HAS_BIDS');
   });
 });

@@ -25,6 +25,10 @@ export async function createReview(
     orderBy: { createdAt: 'desc' },
     select: { status: true, deliveredAt: true, releasedAt: true },
   });
+  // Explicit: with one MEMBER role a seller is also a buyer, so never let them review their own auction.
+  if (auction.sellerId === memberId) {
+    throw new AppError(403, 'REVIEW_NOT_ALLOWED', 'You cannot review your own auction');
+  }
   if (!isReviewWindowOpen(auction, memberId, now, sale)) {
     throw new AppError(403, 'REVIEW_NOT_ALLOWED', 'Only the winner of an ended auction can review the seller, within 60 days (after delivery when paid through checkout)');
   }

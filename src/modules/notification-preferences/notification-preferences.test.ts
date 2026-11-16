@@ -41,7 +41,7 @@ describe('catalogue', () => {
 
 describe('GET preferences', () => {
   it('returns defaults for a missing row, with email locks and no WhatsApp fields', async () => {
-    const res = await getPreferences('m1', 'BIDDER');
+    const res = await getPreferences('m1', 'MEMBER');
     const outbid = res.items.find((i) => i.type === 'outbid');
     expect(outbid).toEqual({ type: 'outbid', label: expect.any(String), group: 'Bidding', email: true, push: true, emailLocked: false });
     expect(res.items.find((i) => i.type === 'sale-paid')).toMatchObject({ emailLocked: true });
@@ -49,14 +49,14 @@ describe('GET preferences', () => {
   });
 
   it('hides admin-only types from non-admins and shows them to SUPER_ADMIN', async () => {
-    expect((await getPreferences('m1', 'AUCTIONEER')).items.map((i) => i.type)).not.toContain('shill-flag');
+    expect((await getPreferences('m1', 'MEMBER')).items.map((i) => i.type)).not.toContain('shill-flag');
     const admin = (await getPreferences('a1', 'SUPER_ADMIN')).items.map((i) => i.type);
     expect(admin).toEqual(expect.arrayContaining(['shill-flag', 'report-filed']));
   });
 
   it('applies stored rows', async () => {
     db.notificationPreference.findMany.mockResolvedValue([{ type: 'outbid', email: false, push: false }]);
-    const res = await getPreferences('m1', 'BIDDER');
+    const res = await getPreferences('m1', 'MEMBER');
     expect(res.items.find((i) => i.type === 'outbid')).toMatchObject({ email: false, push: false });
   });
 });
@@ -72,7 +72,7 @@ describe('PUT preferences', () => {
   });
 
   it('ignores email = false on a mandatory type', async () => {
-    await updatePreferences('m1', 'BIDDER', [
+    await updatePreferences('m1', 'MEMBER', [
       { type: 'sale-paid', email: false, push: false },
       { type: 'outbid', email: false, push: true },
     ]);
@@ -83,7 +83,7 @@ describe('PUT preferences', () => {
   });
 
   it('an admin-only type from a non-admin is a 400', async () => {
-    expect(await code(updatePreferences('m1', 'BIDDER', [{ type: 'shill-flag', email: true, push: true }]))).toBe('400:BAD_REQUEST');
+    expect(await code(updatePreferences('m1', 'MEMBER', [{ type: 'shill-flag', email: true, push: true }]))).toBe('400:BAD_REQUEST');
     expect(db.notificationPreference.upsert).not.toHaveBeenCalled();
   });
 });

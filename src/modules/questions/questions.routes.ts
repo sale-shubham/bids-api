@@ -8,7 +8,7 @@ import { answerQuestionSchema, askQuestionSchema } from './questions.validation'
 
 // Mounted at /questions  (POST /questions/:id/answer, POST /questions/:id/hide)
 export const questionsRouter = Router();
-const seller = [authenticate, requireRole('AUCTIONEER', 'SUPER_ADMIN'), requireActiveMember];
+const seller = [authenticate, requireRole('MEMBER', 'SUPER_ADMIN'), requireActiveMember];
 questionsRouter.post('/:id/answer', ...seller, validate(answerQuestionSchema), asyncHandler(ctrl.answer));
 questionsRouter.post('/:id/hide', ...seller, asyncHandler(ctrl.hide));
 
@@ -18,7 +18,7 @@ auctionQuestionsRouter.get('/', optionalAuthenticate, asyncHandler(ctrl.list));
 auctionQuestionsRouter.post(
   '/',
   authenticate,
-  requireRole('BIDDER'),
+  requireRole('MEMBER'),
   requireActiveMember,
   qaLimiter,
   validate(askQuestionSchema),

@@ -34,7 +34,7 @@ describe('getLeaderboard', () => {
   it('bidders only, zero activity excluded, ordering follows ?by', async () => {
     await getLeaderboard('spent', 10);
     let args = db.member.findMany.mock.calls[0][0];
-    expect(args.where).toMatchObject({ role: 'BIDDER', isActive: true });
+    expect(args.where).toMatchObject({ role: 'MEMBER', isActive: true });
     expect(args.where.OR).toEqual([{ auctionsWon: { gt: 0 } }, { moneySpentPaise: { gt: 0 } }]);
     expect(args.orderBy[0]).toEqual({ moneySpentPaise: 'desc' });
     expect(args.take).toBe(10);

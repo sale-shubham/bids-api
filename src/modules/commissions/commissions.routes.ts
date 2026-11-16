@@ -6,7 +6,7 @@ import * as ctrl from './commissions.controller';
 import { checkoutBodySchema, mineQuerySchema } from './commissions.validation';
 
 const router = Router();
-const seller = [authenticate, requireRole('AUCTIONEER', 'SUPER_ADMIN'), requireActiveMember];
+const seller = [authenticate, requireRole('MEMBER', 'SUPER_ADMIN'), requireActiveMember];
 
 router.get('/mine', ...seller, validate(mineQuerySchema, 'query'), asyncHandler(ctrl.mine));
 router.get('/summary', ...seller, asyncHandler(ctrl.summary));

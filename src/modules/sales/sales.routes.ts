@@ -7,8 +7,8 @@ import { checkoutSchema, disputeSchema, mineQuerySchema, shipSchema } from './sa
 
 const router = Router();
 const member = [authenticate, requireActiveMember];
-const buyer = [authenticate, requireRole('BIDDER'), requireActiveMember];
-const seller = [authenticate, requireRole('AUCTIONEER'), requireActiveMember];
+const buyer = [authenticate, requireRole('MEMBER'), requireActiveMember];
+const seller = [authenticate, requireRole('MEMBER'), requireActiveMember];
 
 router.get('/mine', ...member, validate(mineQuerySchema, 'query'), asyncHandler(ctrl.mine));
 router.get('/:id', ...member, asyncHandler(ctrl.getOne));

@@ -132,7 +132,7 @@ describe('SaleDTO', () => {
     expect((await svc.getSaleDTO('sale1', { id: 'b1' })).role).toBe('BUYER');
     expect((await svc.getSaleDTO('sale1', { id: 's1' })).role).toBe('SELLER');
     expect((await svc.getSaleDTO('sale1', { id: 'x', role: 'SUPER_ADMIN' })).role).toBe('ADMIN');
-    expect(await code(svc.getSaleDTO('sale1', { id: 'x', role: 'BIDDER' }))).toBe('404:SALE_NOT_FOUND');
+    expect(await code(svc.getSaleDTO('sale1', { id: 'x', role: 'MEMBER' }))).toBe('404:SALE_NOT_FOUND');
     db.sale.findUnique.mockResolvedValue(null);
     expect(await code(svc.getSaleDTO('nope', { id: 'b1' }))).toBe('404:SALE_NOT_FOUND');
   });

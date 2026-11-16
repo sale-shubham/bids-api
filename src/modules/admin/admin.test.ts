@@ -20,15 +20,15 @@ import { getDashboard, lastMonths, revenueSeries, signupSeries } from './dashboa
 beforeEach(() => vi.clearAllMocks());
 
 describe('admin members hide super admins', () => {
-  it('listMembers always excludes SUPER_ADMIN, even with role / status / search filters', async () => {
+  it('listMembers always excludes SUPER_ADMIN, even with seller / status / search filters', async () => {
     db.member.findMany.mockResolvedValue([]);
     db.member.count.mockResolvedValue(0);
     await listMembers({ page: 1, pageSize: 20 });
-    await listMembers({ page: 1, pageSize: 20, role: 'BIDDER', status: 'active', search: 'admin' });
+    await listMembers({ page: 1, pageSize: 20, seller: true, status: 'active', search: 'admin' });
     const wheres = db.member.findMany.mock.calls.map((c) => c[0].where);
     expect(wheres).toHaveLength(2);
     for (const w of wheres) expect(w.AND).toEqual([{ role: { not: 'SUPER_ADMIN' } }]);
-    expect(wheres[1].role).toBe('BIDDER');
+    expect(wheres[1].auctionsSelling).toEqual({ some: {} });
   });
 
   it('stats tabs exclude SUPER_ADMIN', async () => {
@@ -37,29 +37,57 @@ describe('admin members hide super admins', () => {
     for (const c of db.member.count.mock.calls) expect(c[0].where.role).toEqual({ not: 'SUPER_ADMIN' });
   });
 
-  it('list role filter accepts BIDDER / AUCTIONEER only', () => {
-    expect(listMembersQuery.validate({ role: 'BIDDER' }).error).toBeUndefined();
-    expect(listMembersQuery.validate({ role: 'AUCTIONEER' }).error).toBeUndefined();
-    expect(listMembersQuery.validate({ role: 'SUPER_ADMIN' }).error).toBeDefined();
+  it('seller filter: true / false list members who listed / never listed an auction', async () => {
+    db.member.findMany.mockResolvedValue([]);
+    db.member.count.mockResolvedValue(0);
+    await listMembers({ page: 1, pageSize: 20, seller: true });
+    await listMembers({ page: 1, pageSize: 20, seller: false });
+    await listMembers({ page: 1, pageSize: 20 });
+    const wheres = db.member.findMany.mock.calls.map((c) => c[0].where);
+    expect(wheres[0].auctionsSelling).toEqual({ some: {} });
+    expect(wheres[1].auctionsSelling).toEqual({ none: {} });
+    expect(wheres[2].auctionsSelling).toBeUndefined();
+  });
+
+  it('list query takes seller=true|false; the role filter and sortBy=role are gone', () => {
+    expect(listMembersQuery.validate({ seller: 'true' }).value.seller).toBe(true);
+    expect(listMembersQuery.validate({ seller: 'false' }).value.seller).toBe(false);
+    expect(listMembersQuery.validate({ seller: 'maybe' }).error).toBeDefined();
+    expect(listMembersQuery.validate({ sortBy: 'role' }).error).toBeDefined();
+    expect(listMembersQuery.validate({ sortBy: 'createdAt' }).error).toBeUndefined();
+  });
+
+  it('each row carries auctionsListed from the auction count', async () => {
+    db.member.findMany.mockResolvedValue([
+      { id: 'm1', role: 'MEMBER', unpaidCommissionPaise: 0n, moneySpentPaise: 0n, verifiedAt: null, payoutAccount: null, _count: { strikes: 1, auctionsSelling: 3 } },
+    ]);
+    db.member.count.mockResolvedValue(1);
+    const { items } = await listMembers({ page: 1, pageSize: 20 });
+    expect(items[0].auctionsListed).toBe(3);
+    expect(items[0].activeStrikes).toBe(1);
+    const select = db.member.findMany.mock.calls[0][0].select;
+    expect(select._count.select.auctionsSelling).toBe(true);
   });
 
   it('updateMember 404s on a SUPER_ADMIN target; the self guard still wins', async () => {
     db.member.findUnique.mockResolvedValue({ id: 'sa', role: 'SUPER_ADMIN' });
     await expect(updateMember('sa', 'me', { isActive: false })).rejects.toMatchObject({ statusCode: 404 });
-    await expect(updateMember('me', 'me', { role: 'BIDDER' })).rejects.toMatchObject({ code: 'CANNOT_MODIFY_SELF' });
+    await expect(updateMember('me', 'me', { isActive: false })).rejects.toMatchObject({ code: 'CANNOT_MODIFY_SELF' });
     expect(db.member.update).not.toHaveBeenCalled();
   });
 
-  it('role change accepts BIDDER / AUCTIONEER only; SUPER_ADMIN is rejected by validation', () => {
-    expect(updateMemberBody.validate({ role: 'BIDDER' }).error).toBeUndefined();
-    expect(updateMemberBody.validate({ role: 'AUCTIONEER' }).error).toBeUndefined();
-    expect(updateMemberBody.validate({ role: 'SUPER_ADMIN' }).error).toBeDefined();
+  it('PATCH body takes isActive and verified only; role is stripped and, alone, is an empty update', () => {
+    expect(updateMemberBody.validate({ isActive: false }).error).toBeUndefined();
+    expect(updateMemberBody.validate({ verified: true }).error).toBeUndefined();
+    const stale = updateMemberBody.validate({ isActive: true, role: 'SUPER_ADMIN' }, { stripUnknown: true });
+    expect(stale.value).toEqual({ isActive: true });
+    expect(updateMemberBody.validate({ role: 'MEMBER' }, { stripUnknown: true }).error).toBeDefined();
   });
 
   it('assertManageable 404s for SUPER_ADMIN, passes for others and unknown ids', async () => {
     db.member.findUnique.mockResolvedValue({ role: 'SUPER_ADMIN' });
     await expect(assertManageable('sa')).rejects.toMatchObject({ statusCode: 404 });
-    db.member.findUnique.mockResolvedValue({ role: 'BIDDER' });
+    db.member.findUnique.mockResolvedValue({ role: 'MEMBER' });
     await expect(assertManageable('b')).resolves.toBeUndefined();
     db.member.findUnique.mockResolvedValue(null);
     await expect(assertManageable('nope')).resolves.toBeUndefined();
@@ -67,8 +95,7 @@ describe('admin members hide super admins', () => {
 });
 
 describe('admin member self-protection', () => {
-  it('409 CANNOT_MODIFY_SELF when changing own role or deactivating self', async () => {
-    await expect(updateMember('me', 'me', { role: 'BIDDER' })).rejects.toMatchObject({ statusCode: 409, code: 'CANNOT_MODIFY_SELF' });
+  it('409 CANNOT_MODIFY_SELF when deactivating self', async () => {
     await expect(updateMember('me', 'me', { isActive: false })).rejects.toMatchObject({ code: 'CANNOT_MODIFY_SELF' });
     expect(db.member.update).not.toHaveBeenCalled();
   });
@@ -103,8 +130,8 @@ describe('admin member self-protection', () => {
 
   it('PATCH body needs at least one valid field', () => {
     expect(updateMemberBody.validate({}).error).toBeDefined();
-    expect(updateMemberBody.validate({ role: 'ROOT' }).error).toBeDefined();
-    expect(updateMemberBody.validate({ isActive: true, role: 'AUCTIONEER' }).error).toBeUndefined();
+    expect(updateMemberBody.validate({ isActive: 'x' }).error).toBeDefined();
+    expect(updateMemberBody.validate({ isActive: true, verified: false }).error).toBeUndefined();
   });
 });
 
@@ -133,15 +160,15 @@ describe('dashboard zero-fill', () => {
 
     const sign = signupSeries(
       [
-        { role: 'BIDDER', createdAt: new Date('2026-11-01T00:00:00Z') },
-        { role: 'AUCTIONEER', createdAt: new Date('2026-11-02T00:00:00Z') },
-        { role: 'BIDDER', createdAt: new Date('2026-11-03T00:00:00Z') },
+        { createdAt: new Date('2026-11-01T00:00:00Z') },
+        { createdAt: new Date('2026-11-02T00:00:00Z') },
+        { createdAt: new Date('2026-11-03T00:00:00Z') },
       ],
       now,
     );
     expect(sign).toHaveLength(12);
-    expect(sign[11]).toEqual({ month: '2026-11', bidders: 2, auctioneers: 1 });
-    expect(sign[0]).toEqual({ month: '2025-12', bidders: 0, auctioneers: 0 });
+    expect(sign[11]).toEqual({ month: '2026-11', members: 3 });
+    expect(sign[0]).toEqual({ month: '2025-12', members: 0 });
   });
 
   it('getDashboard converts bigint _sum / rows to numbers', async () => {
@@ -168,7 +195,7 @@ describe('dashboard zero-fill', () => {
     expect(() => JSON.stringify(d)).not.toThrow();
   });
 
-  it('getDashboard members total excludes SUPER_ADMIN', async () => {
+  it('getDashboard counts MEMBERs; buyers placed a bid, sellers listed an auction', async () => {
     db.member.count.mockResolvedValue(0);
     db.auction.count.mockResolvedValue(0);
     db.bid.count.mockResolvedValue(0);
@@ -178,7 +205,9 @@ describe('dashboard zero-fill', () => {
     db.auction.findMany.mockResolvedValue([]);
     await getDashboard(now);
     const wheres = db.member.count.mock.calls.map((c) => c[0]?.where);
-    expect(wheres).toContainEqual({ role: { not: 'SUPER_ADMIN' } });
+    expect(wheres).toContainEqual({ role: 'MEMBER' });
+    expect(wheres).toContainEqual({ role: 'MEMBER', bids: { some: {} } });
+    expect(wheres).toContainEqual({ role: 'MEMBER', auctionsSelling: { some: {} } });
     expect(wheres).not.toContain(undefined);
   });
 
@@ -194,8 +223,8 @@ describe('dashboard zero-fill', () => {
     expect(Object.values(d.totals).every((v) => v === 0)).toBe(true);
     expect(Object.keys(d.totals)).toEqual([
       'members',
-      'bidders',
-      'auctioneers',
+      'buyers',
+      'sellers',
       'liveAuctions',
       'upcomingAuctions',
       'endedAuctions',

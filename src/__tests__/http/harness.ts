@@ -116,7 +116,7 @@ export async function getApp(): Promise<Express> {
   return app;
 }
 
-type Role = 'BIDDER' | 'AUCTIONEER' | 'SUPER_ADMIN';
+type Role = 'MEMBER' | 'SUPER_ADMIN';
 
 /** A real access token (real token service + test secret) for member `id`. */
 export async function tokenFor(role: Role, id = 'm1'): Promise<string> {

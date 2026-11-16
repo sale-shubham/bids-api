@@ -58,7 +58,7 @@ describe('email templates', () => {
     expect(signup.text).toContain('verify your email');
   });
   it('welcome renders', async () => {
-    const w = await renderEmail('welcome', { name: 'Asha', role: 'BIDDER' });
+    const w = await renderEmail('welcome', { name: 'Asha' });
     expect(w.html).toContain('Asha');
     expect(w.text).toContain('Asha');
   });

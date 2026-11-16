@@ -37,9 +37,9 @@ The browser callback and the webhook race on purpose: whichever arrives first se
 
 | Method | Path | Auth | Response |
 |---|---|---|---|
-| GET | `/commissions/mine?status=due\|paid\|waived\|all&page&pageSize` | AUCTIONEER / SUPER_ADMIN | paginated `CommissionDTO[]` (default `due`, ordered by `dueAt` asc; other filters newest first) |
-| GET | `/commissions/summary` | AUCTIONEER / SUPER_ADMIN | `{ unpaidPaise, dueCount, overdueCount }` |
-| GET | `/commissions/:id` | owner (AUCTIONEER / SUPER_ADMIN) | `CommissionDTO`; 404 `COMMISSION_NOT_FOUND` if missing or not the caller's (the app polls this while Razorpay Checkout is open) |
+| GET | `/commissions/mine?status=due\|paid\|waived\|all&page&pageSize` | MEMBER / SUPER_ADMIN | paginated `CommissionDTO[]` (default `due`, ordered by `dueAt` asc; other filters newest first) |
+| GET | `/commissions/summary` | MEMBER / SUPER_ADMIN | `{ unpaidPaise, dueCount, overdueCount }` |
+| GET | `/commissions/:id` | owner (MEMBER / SUPER_ADMIN) | `CommissionDTO`; 404 `COMMISSION_NOT_FOUND` if missing or not the caller's (the app polls this while Razorpay Checkout is open) |
 | POST | `/commissions/:id/checkout` | owner | `{ orderId, amountPaise, currency: 'INR', keyId, description, prefill: { name, email, contact } }` |
 | POST | `/payments/verify` | any authenticated member who owns the order | `{ referenceType: 'COMMISSION', commission: CommissionDTO }` for a sale order `{ referenceType: 'SALE', sale: SaleDTO }`, or for a bid deposit `{ referenceType: 'DEPOSIT', deposit: DepositDTO }` |
 | POST | `/payments/webhook` | none (Razorpay, `X-Razorpay-Signature`) | `{ processed: true }` or `{ skipped: true }` |

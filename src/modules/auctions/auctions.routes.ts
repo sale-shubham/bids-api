@@ -21,7 +21,7 @@ import {
 } from './auctions.validation';
 
 const router = Router();
-const seller = [authenticate, requireRole('AUCTIONEER', 'SUPER_ADMIN'), requireActiveMember];
+const seller = [authenticate, requireRole('MEMBER', 'SUPER_ADMIN'), requireActiveMember];
 
 // Fixed paths first so "home" / "categories" / "mine" are never read as an :id.
 router.get('/', validate(listQuerySchema, 'query'), asyncHandler(ctrl.list));

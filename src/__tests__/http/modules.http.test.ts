@@ -32,7 +32,7 @@ describe('uploads', () => {
   const body = { folder: 'auctions', contentType: 'image/webp', size: 2048 };
 
   it('POST /uploads/presign -> { uploadUrl, key, url } with a server-generated key', async () => {
-    const res = await request(await getApp()).post('/uploads/presign').set('Authorization', await bearer('AUCTIONEER')).send(body);
+    const res = await request(await getApp()).post('/uploads/presign').set('Authorization', await bearer('MEMBER')).send(body);
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({
       uploadUrl: 'https://s3.test/signed-put',
@@ -44,7 +44,7 @@ describe('uploads', () => {
 
   it('storage failure -> 503 SERVICE_UNAVAILABLE without the provider error', async () => {
     doubles.presignPut.mockRejectedValue(new Error('AccessDenied arn:aws:iam::123:role/x'));
-    const res = await request(await getApp()).post('/uploads/presign').set('Authorization', await bearer('BIDDER')).send(body);
+    const res = await request(await getApp()).post('/uploads/presign').set('Authorization', await bearer('MEMBER')).send(body);
     expect(res.status).toBe(503);
     expect(res.body.error.code).toBe('SERVICE_UNAVAILABLE');
     expect(res.text).not.toContain('arn:aws');
@@ -62,7 +62,7 @@ describe('push', () => {
     doubles.push.subscribe.mockResolvedValue({ subscribed: true });
     doubles.push.unsubscribe.mockResolvedValue({ unsubscribed: true });
     const app = await getApp();
-    const auth = await bearer('BIDDER');
+    const auth = await bearer('MEMBER');
     const sub = { endpoint: 'https://push.example.com/abc', keys: { p256dh: 'k', auth: 'a' } };
     const created = await request(app).post('/push/subscribe').set('Authorization', auth).set('User-Agent', 'vitest-agent').send(sub);
     expect(created.status).toBe(201);
@@ -73,13 +73,13 @@ describe('push', () => {
 });
 
 describe('members', () => {
-  const profile = { id: 'm1', name: 'Asha', email: 'a@example.com', role: 'BIDDER', isActive: true, unpaidCommissionPaise: 0n, moneySpentPaise: 0n };
+  const profile = { id: 'm1', name: 'Asha', email: 'a@example.com', role: 'MEMBER', isActive: true, unpaidCommissionPaise: 0n, moneySpentPaise: 0n };
 
   it('GET /members/me -> { member } incl. deviceLimit, never the password hash', async () => {
     prismaMock.member.findFirst.mockResolvedValue(profile);
     prismaMock.member.findUnique.mockResolvedValue(profile);
     prismaMock.appSetting.findUnique.mockResolvedValue(null);
-    const res = await request(await getApp()).get('/members/me').set('Authorization', await bearer('BIDDER'));
+    const res = await request(await getApp()).get('/members/me').set('Authorization', await bearer('MEMBER'));
     expect(res.status).toBe(200);
     expect(res.body.data.member).toMatchObject({ id: 'm1', name: 'Asha' });
     expect(res.body.data.member).toHaveProperty('deviceLimit');
@@ -89,7 +89,7 @@ describe('members', () => {
   it('PATCH /members/me rejects an avatar that is not an uploaded platform image', async () => {
     const res = await request(await getApp())
       .patch('/members/me')
-      .set('Authorization', await bearer('BIDDER'))
+      .set('Authorization', await bearer('MEMBER'))
       .send({ avatarUrl: 'https://evil.example.com/a.png' });
     expect(res.status).toBe(400);
     expect(prismaMock.member.update).not.toHaveBeenCalled();
@@ -109,7 +109,7 @@ describe('notifications', () => {
     prismaMock.notification.count.mockResolvedValue(4);
     prismaMock.notification.updateMany.mockResolvedValue({ count: 4 });
     const app = await getApp();
-    const auth = await bearer('BIDDER');
+    const auth = await bearer('MEMBER');
     const unread = await request(app).get('/notifications/unread-count').set('Authorization', auth);
     expect(unread.status).toBe(200);
     expect(unread.body.success).toBe(true);
@@ -120,7 +120,7 @@ describe('notifications', () => {
   it('GET /notifications -> paged envelope with meta', async () => {
     prismaMock.notification.findMany.mockResolvedValue([]);
     prismaMock.notification.count.mockResolvedValue(0);
-    const res = await request(await getApp()).get('/notifications?pageSize=10').set('Authorization', await bearer('BIDDER'));
+    const res = await request(await getApp()).get('/notifications?pageSize=10').set('Authorization', await bearer('MEMBER'));
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual([]);
     expect(res.body.meta).toMatchObject({ page: 1, pageSize: 10 });

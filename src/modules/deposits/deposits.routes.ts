@@ -9,7 +9,7 @@ export const auctionDepositRouter = Router({ mergeParams: true });
 auctionDepositRouter.post(
   '/checkout',
   authenticate,
-  requireRole('BIDDER'),
+  requireRole('MEMBER'),
   requireActiveMember,
   asyncHandler(async (req, res) => {
     const { ok } = await import('@/core/http/response');

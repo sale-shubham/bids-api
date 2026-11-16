@@ -101,7 +101,7 @@ describe('POST /auctions/bulk', () => {
     endTime: iso(3 * HOUR),
   };
   const post = async (items: unknown[]) =>
-    request(await getApp()).post('/auctions/bulk').set('Authorization', await bearer('AUCTIONEER', 'seller1')).send({ items });
+    request(await getApp()).post('/auctions/bulk').set('Authorization', await bearer('MEMBER', 'seller1')).send({ items });
 
   beforeEach(() => {
     prismaMock.member.findUnique.mockResolvedValue({ id: 'seller1', isActive: true, unpaidCommissionPaise: 0n });
@@ -145,7 +145,7 @@ describe('POST /sales/:id/checkout delivery choice', () => {
     });
     prismaMock.sellerPayoutAccount.findUnique.mockResolvedValue({ status: 'ACTIVE', razorpayAccountId: 'acc_1' });
     prismaMock.member.findUnique.mockResolvedValue({ id: 'm1', isActive: true, name: 'B', email: 'b@x.test', phone: null });
-    const res = await request(await getApp()).post('/sales/s1/checkout').set('Authorization', await bearer('BIDDER', 'm1')).send();
+    const res = await request(await getApp()).post('/sales/s1/checkout').set('Authorization', await bearer('MEMBER', 'm1')).send();
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('DELIVERY_CHOICE_REQUIRED');
   });
