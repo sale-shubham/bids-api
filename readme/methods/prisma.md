@@ -109,7 +109,36 @@ It is **idempotent** and never overwrites admin-edited data:
 2. **Legal pages** — for each entry of `LEGAL_SEED` in `prisma/legal-seed-content.ts` (`terms-conditions`, `privacy-policy`, `refund-policy`), creates `page:<slug>` (HTML) and `page-title:<slug>` in `AppSetting` only when missing. The copy is draft text kept in git for review; the admin edits it afterwards at `/admin/settings`. See `readme/flows/legal-pages.md`.
 3. **Super Admin** — created only when both `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` are set (password hashed with bcrypt cost 12, email marked verified). An existing member with that email is left unchanged. Remove `SEED_ADMIN_PASSWORD` from the environment after the first seed.
 
-`prisma/seed-demo.ts` — run manually with `npm run seed:demo`. Creates one demo AUCTIONEER (`demo.seller@noblebid.local`) and about 12 auctions spread over live, upcoming and ended, in the existing root categories (run the main seed first). Idempotent: if the demo seller already exists it does nothing.
+### Demo data (`seed:demo` / `seed:demo:clean`)
+
+`prisma/seed-demo.ts` (`npm run seed:demo`) fills the database with a full demo data set so every feature can be tested by hand; `prisma/seed-demo-clean.ts` (`npm run seed:demo:clean`) removes exactly that data. Both use `DIRECT_URL` (fallback `DATABASE_URL`) and share `prisma/demo-shared.ts` (client + the cleaner). Run `npm run prisma:seed` first (categories and settings are only read, never changed; `AppSetting`, `Category` and the Super Admin are never touched).
+
+- **Marking:** every demo member has an email ending `@demo.noblebid.test`; every other demo row hangs off a demo member or a demo auction. The cleaner deletes in foreign-key order (rows that reference demo members / auctions, then the demo auctions, then the demo members) inside one transaction and restores `InvoiceCounter` to the highest invoice number still issued.
+- **Re-runnable:** `seed:demo` runs the same cleaner first, in the same transaction as the inserts, so running it twice gives the same result and a failed run leaves nothing half-written.
+- **Password for every demo account:** `Demo@12345` (bcrypt cost 12, emails verified, active). Logins are `bidder01` ... `bidder21` and `seller01` ... `seller09` at `@demo.noblebid.test`. The replaced old demo seller `demo.seller@noblebid.local` is not touched.
+- **Data:** ~30 members, 36 auctions (live, scheduled, ended sold, reserve not met, no bids, cancelled, Buy It Now), bids and max bids produced with the app's own `resolveMaxBid`, sales in every status with `SALE` payment orders, commissions, strikes, second-chance offers, deposits, reviews, Q&A, reports, shill signals, follows, saved searches, daily stats, featured purchases, referrals, credits and invoices numbered through the real `NB/<FY>/<seq>` series. Invoice `pdfKey` stays null: the PDF is rendered on demand on the first download and needs the storage provider (S3) to be configured.
+- **Images** use `https://picsum.photos/...` like the old demo seed: add `https://picsum.photos` to `NEXT_PUBLIC_IMAGE_ORIGINS` in the app so `next/image` accepts them.
+- **Never run against real user data:** it is meant for the dev database only.
+
+| Account | Use it to test |
+|---|---|
+| `seller01` Rajesh Kumar Antiques | verified, GSTIN seller with live, scheduled, sold and cancelled lots, a sale awaiting payment, a featured listing bought with credits, a hidden review, referral credits |
+| `seller02` Lakshmi Textiles | live lot ending in 40 minutes (3 reports, high priority), Buy It Now sale (PAID), reserve not met |
+| `seller03` Gurpreet Singh | featured lot with a deposit, SHIPPED sale with tracking, second-chance accepted and paid |
+| `seller04` Suresh Motors | featured vehicle with deposit, DELIVERED sale with a reviewed reply, analytics charts (14 days) |
+| `seller05` Anita Crafts | RELEASED sale with reply, REFUNDED sale, reserve not met |
+| `seller06` Mohan Electronics | DISPUTED sale, live laptop with deposits, credits used for a featured listing |
+| `seller07` Deepak Vintage House | payout account PENDING, commissions DUE (one overdue), featured purchase PENDING |
+| `seller08` Farhan Traders | payout account REJECTED, PAID and WAIVED commissions, verification revoked |
+| `seller09` Neha Bazaar | suspended seller (cannot log in), cancelled lot |
+| `bidder01` Aarav Sharma | winner with a sale AWAITING_PAYMENT, referrer with credits, leader on a reserve-met camera |
+| `bidder03` / `bidder09` | Buy It Now winner with a PAID sale / winner of two DELIVERED and RELEASED sales |
+| `bidder17` | one strike that was removed by an admin |
+| `bidder18` | 2 active strikes (deposits required), leader of the live laptop with a held deposit |
+| `bidder05` / `bidder06` | second-chance sale awaiting payment / second-chance sale already paid |
+| `bidder19` | 1 active strike (`bidder03` holds the PENDING second-chance offer for that lot) |
+| `bidder20` | 3 strikes, suspended (cannot log in), forfeited deposits |
+| `bidder02`, `bidder05`, `bidder10` | referral rewards, credit ledger (+ and -), second-chance offers |
 
 **⚠️ `npm run prisma:migrate:reset` runs `prisma migrate reset --force`** — it drops the database, re-applies every migration and then runs `prisma/seed.ts`. Never run it against a database whose data you want to keep.
 
@@ -125,4 +154,4 @@ Log in as the seeded Super Admin with `POST /auth/login` (email + password). New
 `errorHandler.ts` handles P2002 → 409 automatically. Two services catch P2002 themselves because a duplicate there is expected: `notify.service.ts` (a concurrent insert of the same `Notification.dedupeKey` counts as `'duplicate'`) and `payments.service.ts` (a concurrent `WebhookEvent` insert for an already-recorded delivery). `findUniqueOrThrow` is only used inside transactions right after the row was locked or updated, where a miss cannot happen.
 
 ---
-*Last updated: 2026-11-15 (rewritten against the NobleBid schema and seed scripts: model list, concurrency patterns, idempotent `seed.ts` + `seed-demo.ts`, email + password login, P2002 / P2025 handling)*
+*Last updated: 2026-11-16 (full demo data set: `seed:demo` / `seed:demo:clean`; earlier: rewritten against the NobleBid schema and seed scripts: model list, concurrency patterns, idempotent `seed.ts` + `seed-demo.ts`, email + password login, P2002 / P2025 handling)*

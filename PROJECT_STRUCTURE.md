@@ -6,7 +6,7 @@ bids-api/
 ├── serverless.yml            # service bids-api: HTTP API, WebSocket API, S3 (+ CloudFront when ENABLE_CDN=true), NotifyQueue/NotifyDLQ, closeAuctions (1 min) + endingSoon (15 min) + commissionReminder (1 day) + salesMaintenance (1 hour) + riskScan (1 day) + retentionPurge (1 day) + notifyWorker (SQS), alarms
 ├── prisma/schema.prisma      # Member, Session, OtpChallenge, Auction, Bid, MaxBid, Watchlist, Commission,
 │                             #   WsConnection, WsTicket, PushSubscription, RateLimitBucket, PaymentOrder,
-│                             #   WebhookEvent, Notification, AppSetting (+ migrations/, seed.ts, seed-demo.ts)
+│                             #   WebhookEvent, Notification, AppSetting (+ migrations/, seed.ts, seed-demo.ts, seed-demo-clean.ts, demo-shared.ts)
 ├── prisma.config.ts          # Prisma CLI config (DIRECT_URL)
 ├── scripts/build-lambda.mjs  # esbuild bundle (CI only)
 ├── scripts/run-close.ts      # npm run job:close, one-off auction close run

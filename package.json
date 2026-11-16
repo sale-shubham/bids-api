@@ -16,6 +16,7 @@
     "prisma:migrate:reset": "prisma migrate reset --force",
     "prisma:seed": "tsx prisma/seed.ts",
     "seed:demo": "tsx prisma/seed-demo.ts",
+    "seed:demo:clean": "tsx prisma/seed-demo-clean.ts",
     "job:close": "tsx scripts/run-close.ts",
     "job:sales": "tsx scripts/run-sales.ts",
     "job:risk": "tsx scripts/run-risk.ts",

@@ -119,7 +119,7 @@ passed to `gh` on stdin, never on the command line or in output. Empty values ar
    `npx web-push generate-vapid-keys` (once).
 3. Fill `deploy/dev.env`, run `env:sync` (see above).
 4. Push to `dev` (or Actions > Run workflow on `dev`). Read the API/WS/media URLs in the job summary.
-5. Seed the Super Admin once: `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` + `npm run prisma:seed` against the DB.
+5. Seed the Super Admin once: `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` + `npm run prisma:seed` against the DB. Optional, dev stage only: `npm run seed:demo` loads demo members, auctions and every kind of related data (password `Demo@12345`), `npm run seed:demo:clean` removes it again; see `readme/methods/prisma.md` (Demo data).
 6. Point the app (`NEXT_PUBLIC_API_URL` or the Next.js rewrite target `API_PROXY_TARGET`) at `HttpApiUrl`. The app
    needs no WebSocket setting: the ticket endpoint returns the `WebSocketUrl` to connect to.
 
